@@ -1,0 +1,112 @@
+# AI Service
+
+AIRAUTOMATICA uses a single AI service abstraction with mode-based implementations. Mission logic consumes only normalized `AiResult`—it does not depend on which mode produced it.
+
+## Why One AI Service
+
+- **Simpler**: One interface (`AiService.infer`), one result contract (`AiResult`).
+- **Mode-based**: `mock`, `lmstudio`, `aihat`—no always-on reasoning + perception layers.
+- **Flight target**: Matek/ArduPilot = flight control; AI HAT = onboard perception; mission logic = rules. No LLM reasoning onboard in phase 1.
+
+## Modes
+
+| Mode | Purpose | Environment |
+|------|---------|-------------|
+| **mock** | Deterministic fake results for tests and early development. No network or hardware. | macOS, Raspberry Pi |
+| **lmstudio** | Local inference via [LM Studio](https://lmstudio.ai/) HTTP API. Simulates AI HAT-like outputs for macOS development. | macOS |
+| **aihat** | Raspberry Pi AI HAT+ onboard perception. Vision/detection only—not LLM reasoning. | Raspberry Pi 5 |
+
+## Configuration
+
+```bash
+# Mode selection (default: mock). AI_BACKEND supported for legacy.
+export AI_MODE=mock|lmstudio|aihat
+
+# LM Studio (when AI_MODE=lmstudio)
+export LM_STUDIO_BASE_URL=http://localhost:1234
+export LM_STUDIO_MODEL=local-model
+export LM_STUDIO_TIMEOUT=30
+
+# Mission logic filtering (all modes): min confidence to persist; duplicate window (sec)
+export AI_MIN_CONFIDENCE=0.5
+export AI_DUPLICATE_WINDOW_SEC=30
+
+# AI HAT (when AI_MODE=aihat)
+export AIHAT_MODEL_NAME=default
+# AIHAT_DEVICE: placeholder. Real AI HAT+ uses HailoRT device discovery; no path needed.
+export AIHAT_DEVICE=auto
+```
+
+## Local Development (macOS)
+
+1. **Mock mode** (default): No setup. AI results are deterministic fakes.
+   ```bash
+   AI_MODE=mock python -m airautomatica.main
+   ```
+
+2. **LM Studio mode**: Install [LM Studio](https://lmstudio.ai/), load a model, start the local server. LM Studio simulates AI outputs at the contract level—useful for testing mission logic without hardware.
+   ```bash
+   AI_MODE=lmstudio LM_STUDIO_MODEL=your-model python -m airautomatica.main
+   ```
+
+## What AI HAT Mode Really Means
+
+AI HAT mode = **onboard vision perception** on Raspberry Pi 5 + AI HAT+.
+
+- **Hardware**: Hailo-8/8L NPU on PCIe. Object detection, segmentation, pose.
+- **Not**: An LLM, a drop-in for LM Studio, or general "AI reasoning."
+- **Input**: Camera frames (rpicam). **Output**: Detections (label, confidence, bbox).
+- **In this project**: Mission logic gets AiResult; applies rules. Non-flight-critical.
+- **LM Studio**: Simulates the AiResult *contract* on macOS. Same JSON shape, different engine.
+
+## AI HAT Mode: Onboard Perception
+
+In flight, AI HAT mode provides **onboard perception** (vision, object detection), not LLM reasoning. The mission logic interprets `AiResult` and applies action rules. Phase 1 does not run an LLM onboard.
+
+To switch from LM Studio (macOS) to AI HAT (Raspberry Pi 5):
+
+1. Set `AI_MODE=aihat` and configure `AIHAT_MODEL_NAME`, `AIHAT_DEVICE`.
+2. Complete the `AiHatAiService` implementation using Hailo SDK or Pi AI Kit.
+3. No refactoring of mission logic—only service implementation and config.
+
+## AI Result Contract
+
+All modes produce the same normalized `AiResult`. Mission logic is backend-agnostic and consumes only this contract.
+
+| Field | Type | Required | Description | Normalization |
+|-------|------|----------|-------------|---------------|
+| `label` | str | yes | Detection/inference label | Non-empty; default `"unknown"` |
+| `confidence` | float | yes | 0.0–1.0 | Clamped to [0, 1] |
+| `summary` | str | yes | Human-readable summary | Default `""` |
+| `source_backend` | str | yes | `mock`, `lmstudio`, or `aihat` | Set by service |
+| `timestamp` | datetime | yes | When produced | UTC |
+| `bbox` | tuple \| None | no | (x, y, w, h) for detections | 4 floats or None |
+| `action` | str \| None | no | Optional suggested action | None if empty |
+| `metadata` | dict \| None | no | Allowed keys only; see below | — |
+
+### Metadata Guidelines
+
+`metadata` is for debugging and backend-specific extras—not a junk drawer. Only these keys are allowed:
+
+| Key | Backend | When |
+|-----|---------|------|
+| `error` | lmstudio | True when inference failed |
+| `parse_error` | lmstudio | `"json"` or `"content"` when parsing failed |
+| `error_type` | lmstudio | `"timeout"`, `"http"`, or `"network"` |
+| `raw_length` | lmstudio | Length of raw LLM response |
+| `call_count` | mock | Incrementing call index |
+| `mode` | mock | Aircraft mode from state |
+| `model_name` | aihat | Model name from config |
+| `device` | aihat | Device config from env (placeholder; HailoRT auto-discovers) |
+| `todo` | aihat | Scaffold placeholder |
+
+## TODO: AI HAT Implementation
+
+The `AiHatAiService` scaffold exists but returns a placeholder. To complete:
+
+- Integrate with Raspberry Pi AI HAT+ via `hailo-all` / HailoRT Python API
+- Add camera input (rpicam, picamera2); real inference needs frames, not just state
+- Load HEF model from Hailo Model Zoo (see `AIHAT_MODEL_NAME`)
+- HailoRT auto-discovers PCIe device; no device path needed
+- Map raw detection output to normalized `AiResult` (label, confidence, bbox, etc.)
+- See hailo-rpi5-examples on GitHub for reference

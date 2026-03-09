@@ -1,0 +1,178 @@
+"""MAVLink message normalization layer for ArduPilot Plane (Matek F405-WING).
+
+Field units and sentinels per mavlink.io common dialect:
+- GLOBAL_POSITION_INT (id 33): lat/lon degE7, relative_alt mm, hdg cdeg (65535=invalid)
+- ATTITUDE (id 30): roll/pitch/yaw rad
+- SYS_STATUS (id 1): voltage_battery mV (65535=invalid), current_battery cA (-1=invalid)
+- VFR_HUD (id 74): heading deg, groundspeed/airspeed m/s
+"""
+
+import time
+from datetime import datetime, timezone
+from typing import Any
+
+from airautomatica.models.state import AircraftState, TelemetryStatus
+
+# MAVLink sentinel values
+UINT16_MAX = 65535
+SYS_STATUS_CURRENT_INVALID = -1
+
+# ArduPilot Plane (APM) flight mode mapping. Source: pymavlink mavutil mode_mapping_apm
+MODE_MAPPING_APM: dict[int, str] = {
+    0: "MANUAL",
+    1: "CIRCLE",
+    2: "STABILIZE",
+    3: "TRAINING",
+    4: "ACRO",
+    5: "FBWA",
+    6: "FBWB",
+    7: "CRUISE",
+    8: "AUTOTUNE",
+    10: "AUTO",
+    11: "RTL",
+    12: "LOITER",
+    13: "TAKEOFF",
+    14: "AVOID_ADSB",
+    15: "GUIDED",
+    16: "INITIALISING",
+    17: "QSTABILIZE",
+    18: "QHOVER",
+    19: "QLOITER",
+    20: "QLAND",
+    21: "QRTL",
+    22: "QAUTOTUNE",
+    23: "QACRO",
+    24: "THERMAL",
+    25: "LOITERALTQLAND",
+    26: "AUTOLAND",
+}
+
+
+def _nan() -> float:
+    """Return NaN for unknown numeric values."""
+    return float("nan")
+
+
+class MavlinkNormalizer:
+    """Normalizes MAVLink messages into AircraftState. Accumulates state across messages."""
+
+    def __init__(self, heartbeat_timeout_sec: float = 3.0) -> None:
+        self._heartbeat_timeout = heartbeat_timeout_sec
+        self._heartbeat_count = 0
+        self._last_heartbeat_time: float | None = None
+        self._last_heartbeat_at: datetime | None = None
+        self._accum: dict[str, Any] = {
+            "mode": "UNKNOWN",
+            "lat": _nan(),
+            "lon": _nan(),
+            "rel_alt_m": _nan(),
+            "heading_deg": _nan(),
+            "roll_rad": _nan(),
+            "pitch_rad": _nan(),
+            "yaw_rad": _nan(),
+            "voltage_v": _nan(),
+            "current_a": _nan(),
+            "groundspeed_m_s": _nan(),
+            "airspeed_m_s": _nan(),
+        }
+
+    def apply(self, msg: Any) -> None:
+        """Apply message to accumulated state. Dispatches by msg.get_type()."""
+        msg_type = msg.get_type()
+        if msg_type == "HEARTBEAT":
+            self._apply_heartbeat(msg)
+        elif msg_type == "GLOBAL_POSITION_INT":
+            self._apply_global_position_int(msg)
+        elif msg_type == "ATTITUDE":
+            self._apply_attitude(msg)
+        elif msg_type == "SYS_STATUS":
+            self._apply_sys_status(msg)
+        elif msg_type == "VFR_HUD":
+            self._apply_vfr_hud(msg)
+
+    def _apply_heartbeat(self, msg: Any) -> None:
+        """HEARTBEAT: custom_mode = flight mode number, map to name."""
+        self._heartbeat_count += 1
+        self._last_heartbeat_time = time.monotonic()
+        self._last_heartbeat_at = datetime.now(timezone.utc)
+        custom_mode = getattr(msg, "custom_mode", 0)
+        self._accum["mode"] = MODE_MAPPING_APM.get(custom_mode, "UNKNOWN")
+
+    def _apply_global_position_int(self, msg: Any) -> None:
+        """GLOBAL_POSITION_INT (id 33): lat/lon degE7, relative_alt mm, hdg cdeg.
+        Sentinel: hdg=65535 (UINT16_MAX) means unknown. See mavlink.io/common#GLOBAL_POSITION_INT."""
+        # lat, lon: degE7 -> degrees
+        self._accum["lat"] = msg.lat / 1e7
+        self._accum["lon"] = msg.lon / 1e7
+        # relative_alt: mm -> m
+        self._accum["rel_alt_m"] = msg.relative_alt / 1000.0
+        # hdg: centidegrees, UINT16_MAX=65535 means unknown
+        hdg = getattr(msg, "hdg", UINT16_MAX)
+        if hdg != UINT16_MAX:
+            self._accum["heading_deg"] = hdg / 100.0
+
+    def _apply_attitude(self, msg: Any) -> None:
+        """ATTITUDE (id 30): roll, pitch, yaw in radians. See mavlink.io/common#ATTITUDE."""
+        self._accum["roll_rad"] = getattr(msg, "roll", _nan())
+        self._accum["pitch_rad"] = getattr(msg, "pitch", _nan())
+        self._accum["yaw_rad"] = getattr(msg, "yaw", _nan())
+
+    def _apply_sys_status(self, msg: Any) -> None:
+        """SYS_STATUS (id 1): voltage_battery mV (65535=invalid), current_battery cA (-1=invalid).
+        See mavlink.io/common#SYS_STATUS."""
+        voltage = getattr(msg, "voltage_battery", UINT16_MAX)
+        if voltage != UINT16_MAX:
+            self._accum["voltage_v"] = voltage / 1000.0
+        current = getattr(msg, "current_battery", SYS_STATUS_CURRENT_INVALID)
+        if current != SYS_STATUS_CURRENT_INVALID:
+            self._accum["current_a"] = current / 100.0
+
+    def _apply_vfr_hud(self, msg: Any) -> None:
+        """VFR_HUD (id 74): heading deg, groundspeed/airspeed m/s. See mavlink.io/common#VFR_HUD."""
+        self._accum["heading_deg"] = getattr(msg, "heading", _nan())
+        self._accum["groundspeed_m_s"] = getattr(msg, "groundspeed", _nan())
+        self._accum["airspeed_m_s"] = getattr(msg, "airspeed", _nan())
+
+    def _is_stale(self) -> bool:
+        """True if no HEARTBEAT received within timeout."""
+        if self._last_heartbeat_time is None:
+            return True
+        return (time.monotonic() - self._last_heartbeat_time) > self._heartbeat_timeout
+
+    def build_state(
+        self,
+        telemetry_status_override: TelemetryStatus | None = None,
+        reconnect_count: int = 0,
+        last_disconnect_reason: str | None = None,
+    ) -> AircraftState:
+        """Build AircraftState from accumulated values. Sets connected=False if stale."""
+        connected = not self._is_stale()
+        status = telemetry_status_override or ("connected" if connected else "stale")
+        now = time.monotonic()
+        heartbeat_age_s = (
+            (now - self._last_heartbeat_time)
+            if self._last_heartbeat_time is not None
+            else float("nan")
+        )
+        return AircraftState(
+            connected=connected,
+            heartbeat=self._heartbeat_count,
+            last_heartbeat_at=self._last_heartbeat_at,
+            heartbeat_age_s=heartbeat_age_s,
+            telemetry_status=status,
+            reconnect_count=reconnect_count,
+            last_disconnect_reason=last_disconnect_reason,
+            mode=self._accum["mode"],
+            lat=self._accum["lat"],
+            lon=self._accum["lon"],
+            rel_alt_m=self._accum["rel_alt_m"],
+            heading_deg=self._accum["heading_deg"],
+            roll_rad=self._accum["roll_rad"],
+            pitch_rad=self._accum["pitch_rad"],
+            yaw_rad=self._accum["yaw_rad"],
+            voltage_v=self._accum["voltage_v"],
+            current_a=self._accum["current_a"],
+            groundspeed_m_s=self._accum["groundspeed_m_s"],
+            airspeed_m_s=self._accum["airspeed_m_s"],
+            timestamp=datetime.now(timezone.utc),
+        )
