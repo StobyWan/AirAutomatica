@@ -35,7 +35,10 @@ class CommandPolicy:
             return False, "no_state"
         if self.require_connected and not state.connected:
             return False, "telemetry_not_connected"
-        if math.isnan(state.heartbeat_age_s) or state.heartbeat_age_s > self.heartbeat_max_age_sec:
+        if (
+            math.isnan(state.heartbeat_age_s)
+            or state.heartbeat_age_s > self.heartbeat_max_age_sec
+        ):
             return False, "stale_heartbeat"
         if self.require_min_confidence is not None and ai_result is not None:
             if ai_result.confidence < self.require_min_confidence:

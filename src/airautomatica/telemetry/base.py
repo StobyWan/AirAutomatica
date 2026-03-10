@@ -1,7 +1,7 @@
 """Telemetry interface."""
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from airautomatica.models.state import AircraftState
 
@@ -12,4 +12,6 @@ class TelemetrySource(ABC):
     @abstractmethod
     async def stream(self) -> AsyncIterator[AircraftState]:
         """Stream telemetry state updates indefinitely."""
-        ...
+        if False:
+            yield  # makes this an async generator for type checker
+        raise NotImplementedError

@@ -5,10 +5,19 @@ from datetime import datetime, timezone
 from typing import Any
 
 # Allowed metadata keys per backend. Keeps metadata from becoming a junk drawer.
-_METADATA_ALLOWLIST: frozenset[str] = frozenset({
-    "error", "parse_error", "error_type", "raw_length",
-    "call_count", "mode", "model_name", "device", "todo",
-})
+_METADATA_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "error",
+        "parse_error",
+        "error_type",
+        "raw_length",
+        "call_count",
+        "mode",
+        "model_name",
+        "device",
+        "todo",
+    }
+)
 
 
 def _normalize_confidence(v: float) -> float:
@@ -42,7 +51,9 @@ class AiResult:
     summary: str  # Human-readable summary. Required.
     source_backend: str  # "mock", "lmstudio", or "aihat".
     timestamp: datetime  # When produced.
-    bbox: tuple[float, float, float, float] | None = None  # (x, y, w, h) for detections; optional.
+    bbox: tuple[float, float, float, float] | None = (
+        None  # (x, y, w, h) for detections; optional.
+    )
     action: str | None = None  # Optional suggested action.
     metadata: dict[str, Any] | None = None  # Allowed keys only; see ai_backends.md.
 

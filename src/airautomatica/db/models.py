@@ -36,7 +36,9 @@ class TelemetrySample(Base):
     __tablename__ = "telemetry_samples"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("flight_sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("flight_sessions.id"), nullable=False
+    )
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     telemetry_status: Mapped[str] = mapped_column(String(32), nullable=False)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -57,7 +59,9 @@ class Detection(Base):
     __tablename__ = "detections"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("flight_sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("flight_sessions.id"), nullable=False
+    )
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
@@ -77,7 +81,9 @@ class SystemEvent(Base):
     __tablename__ = "system_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[int | None] = mapped_column(ForeignKey("flight_sessions.id"), nullable=True)
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("flight_sessions.id"), nullable=True
+    )
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     level: Mapped[str] = mapped_column(String(16), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -93,7 +99,9 @@ class CommandSent(Base):
     __tablename__ = "commands_sent"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("flight_sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("flight_sessions.id"), nullable=False
+    )
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     command_name: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)

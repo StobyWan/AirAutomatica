@@ -76,7 +76,9 @@ def test_health_with_connected_state(client: TestClient, store: StateStore) -> N
     assert data["telemetry"]["heartbeat_age_s"] == 0.5
 
 
-def test_state_heartbeat_age_null_when_unknown(client: TestClient, store: StateStore) -> None:
+def test_state_heartbeat_age_null_when_unknown(
+    client: TestClient, store: StateStore
+) -> None:
     """GET /state returns heartbeat_age_s as null when unknown (no heartbeat yet)."""
     now = datetime.now(timezone.utc)
     state = AircraftState(
@@ -150,7 +152,9 @@ def test_state_with_data(client: TestClient, store: StateStore) -> None:
     assert data["state"]["heartbeat_age_s"] == 0.0
 
 
-def test_health_includes_persistence_info_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_health_includes_persistence_info_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """GET /health includes persistence block with DB path and session_id when DB is enabled."""
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "airautomatica.db"
@@ -164,7 +168,9 @@ def test_health_includes_persistence_info_when_enabled(monkeypatch: pytest.Monke
         session_id = persistence.start_session("mock", "mock")
         assert session_id is not None
 
-        client = TestClient(create_app(store, persistence=persistence, session_id=session_id))
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
         r = client.get("/health")
         assert r.status_code == 200
         data = r.json()
@@ -217,7 +223,9 @@ def test_recent_detections_returns_persisted(monkeypatch: pytest.MonkeyPatch) ->
         )
         persistence.insert_detection(session_id, result, 37.0, -122.0, 100.0)
 
-        client = TestClient(create_app(store, persistence=persistence, session_id=session_id))
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
         r = client.get("/recent-detections")
         assert r.status_code == 200
         data = r.json()
@@ -253,15 +261,28 @@ def test_recent_detections_newest_first(monkeypatch: pytest.MonkeyPatch) -> None
         persistence.insert_detection(
             session_id,
             AiResult("old", 0.8, "Old", "mock", base, metadata={"n": 1}),
-            37.0, -122.0, 100.0,
+            37.0,
+            -122.0,
+            100.0,
         )
         persistence.insert_detection(
             session_id,
-            AiResult("new", 0.9, "New", "mock", base + timedelta(seconds=10), metadata={"n": 2}),
-            37.0, -122.0, 100.0,
+            AiResult(
+                "new",
+                0.9,
+                "New",
+                "mock",
+                base + timedelta(seconds=10),
+                metadata={"n": 2},
+            ),
+            37.0,
+            -122.0,
+            100.0,
         )
 
-        client = TestClient(create_app(store, persistence=persistence, session_id=session_id))
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
         r = client.get("/recent-detections")
         assert r.status_code == 200
         data = r.json()
@@ -287,11 +308,21 @@ def test_recent_detections_limit(monkeypatch: pytest.MonkeyPatch) -> None:
         for i in range(25):
             persistence.insert_detection(
                 session_id,
-                AiResult(f"det_{i}", 0.8, f"Detection {i}", "mock", base + timedelta(seconds=i)),
-                37.0, -122.0, 100.0,
+                AiResult(
+                    f"det_{i}",
+                    0.8,
+                    f"Detection {i}",
+                    "mock",
+                    base + timedelta(seconds=i),
+                ),
+                37.0,
+                -122.0,
+                100.0,
             )
 
-        client = TestClient(create_app(store, persistence=persistence, session_id=session_id))
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
         r = client.get("/recent-detections")
         assert r.status_code == 200
         data = r.json()

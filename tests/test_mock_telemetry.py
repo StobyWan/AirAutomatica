@@ -1,7 +1,8 @@
 """Tests for mock telemetry and state store."""
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 from airautomatica.models.state import AircraftState
 from airautomatica.services.state_store import StateStore
@@ -54,5 +55,6 @@ async def test_state_store_update_and_get() -> None:
         timestamp=datetime.now(timezone.utc),
     )
     store.update(state)
-    assert store.get() is state
-    assert store.get().lat == 37.0
+    got = store.get()
+    assert got is state
+    assert got is not None and got.lat == 37.0

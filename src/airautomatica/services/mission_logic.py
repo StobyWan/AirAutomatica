@@ -20,10 +20,23 @@ logger = logging.getLogger(__name__)
 _PLACEHOLDER_LABELS: frozenset[str] = frozenset({"error", "lmstudio"})
 
 # Mode/status/system labels — not perception detections. Reject these. (Uppercase for case-insensitive check.)
-_NON_PERCEPTION_LABELS: frozenset[str] = frozenset({
-    "GUIDED", "AUTO", "LOITER", "RTL", "QLOITER", "QRTL", "STABILIZE", "UNKNOWN",
-    "DEVICE_STATUS", "BATTERY", "TELEMETRY", "STATE", "MODE",
-})
+_NON_PERCEPTION_LABELS: frozenset[str] = frozenset(
+    {
+        "GUIDED",
+        "AUTO",
+        "LOITER",
+        "RTL",
+        "QLOITER",
+        "QRTL",
+        "STABILIZE",
+        "UNKNOWN",
+        "DEVICE_STATUS",
+        "BATTERY",
+        "TELEMETRY",
+        "STATE",
+        "MODE",
+    }
+)
 
 
 def _fmt(x: float, fmt: str = "%.1f") -> str:

@@ -23,7 +23,9 @@ def create_db_engine(db_path: str) -> Engine:
     """Create SQLite engine with check_same_thread=False."""
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    return create_engine(_sqlite_url(db_path), connect_args={"check_same_thread": False})
+    return create_engine(
+        _sqlite_url(db_path), connect_args={"check_same_thread": False}
+    )
 
 
 def enable_wal(engine: Engine) -> None:

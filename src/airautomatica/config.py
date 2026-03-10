@@ -39,7 +39,8 @@ def get_aihat_model_name() -> str:
 
 def get_aihat_device() -> str:
     """AI HAT device config. Default: auto.
-    Placeholder: AI HAT+ uses PCIe; HailoRT auto-discovers. Unused until real integration."""
+    Placeholder: AI HAT+ uses PCIe; HailoRT auto-discovers. Unused until real integration.
+    """
     return os.environ.get("AIHAT_DEVICE", "auto")
 
 

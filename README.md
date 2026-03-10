@@ -167,6 +167,21 @@ pytest
 # or with uv: uv run pytest
 ```
 
+## Development
+
+- **Install dev deps**: `uv pip install -e ".[dev]"` (or `pip install -e ".[dev]"`)
+- **Format**: `make format` or `black src tests && isort src tests`
+- **Lint**: `make lint` (black + isort check)
+- **Typecheck**: `make typecheck`
+- **Test**: `make test` or `pytest`
+- **All checks**: `make check`
+
+**Pre-commit** (optional): `pip install pre-commit && pre-commit install`
+
+**Docker**: `docker build -t airautomatica . && docker run -p 8000:8000 airautomatica` — validate at http://localhost:8000/health
+
+CI runs format, lint, typecheck, and tests on push/PR.
+
 ## Future: Raspberry Pi Serial Mode
 
 On Raspberry Pi:

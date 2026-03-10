@@ -66,13 +66,16 @@ def _request_message_rates(conn: Any) -> None:
             0,
             0,
         )
-    logger.info("Requested MAVLink message rates (10 Hz) for GLOBAL_POSITION_INT, ATTITUDE, SYS_STATUS, VFR_HUD")
+    logger.info(
+        "Requested MAVLink message rates (10 Hz) for GLOBAL_POSITION_INT, ATTITUDE, SYS_STATUS, VFR_HUD"
+    )
 
 
 class SerialMavlinkTelemetry(TelemetrySource):
     """Read MAVLink telemetry from serial/USB connection to flight controller.
     Tracks telemetry_status (starting, connecting, connected, stale, disconnected, backoff),
-    auto-reconnects with backoff, and re-runs heartbeat wait and message rate requests."""
+    auto-reconnects with backoff, and re-runs heartbeat wait and message rate requests.
+    """
 
     def __init__(
         self,
@@ -119,9 +122,15 @@ class SerialMavlinkTelemetry(TelemetrySource):
                 def wait_and_request() -> bool:
                     hb = conn.wait_heartbeat(blocking=True, timeout=10)
                     if hb is None:
-                        logger.warning("No HEARTBEAT within 10s; continuing without rate request")
+                        logger.warning(
+                            "No HEARTBEAT within 10s; continuing without rate request"
+                        )
                         return False
-                    logger.info("Heartbeat from system %u component %u", conn.target_system, conn.target_component)
+                    logger.info(
+                        "Heartbeat from system %u component %u",
+                        conn.target_system,
+                        conn.target_component,
+                    )
                     _request_message_rates(conn)
                     return True
 
@@ -155,7 +164,9 @@ class SerialMavlinkTelemetry(TelemetrySource):
 
                 while True:
                     try:
-                        item = await loop.run_in_executor(None, lambda: queue.get(timeout=0.5))
+                        item = await loop.run_in_executor(
+                            None, lambda: queue.get(timeout=0.5)
+                        )
                     except Empty:
                         yield normalizer.build_state(
                             reconnect_count=reconnect_count,
@@ -168,7 +179,9 @@ class SerialMavlinkTelemetry(TelemetrySource):
                         logger.info("Reader exited normally; reconnecting")
                         break
                     if isinstance(item, tuple) and item[0] is READER_ERROR:
-                        last_disconnect_reason = item[1] if len(item) > 1 else "reader_error"
+                        last_disconnect_reason = (
+                            item[1] if len(item) > 1 else "reader_error"
+                        )
                         logger.warning("Reader reported error; reconnecting")
                         break
 
@@ -195,7 +208,9 @@ class SerialMavlinkTelemetry(TelemetrySource):
                 last_disconnect_reason=last_disconnect_reason,
             )
 
-            logger.info("Reconnecting in %.1fs (attempt %d)...", backoff, reconnect_count)
+            logger.info(
+                "Reconnecting in %.1fs (attempt %d)...", backoff, reconnect_count
+            )
             elapsed = 0.0
             while elapsed < backoff:
                 await asyncio.sleep(min(BACKOFF_YIELD_INTERVAL_SEC, backoff - elapsed))

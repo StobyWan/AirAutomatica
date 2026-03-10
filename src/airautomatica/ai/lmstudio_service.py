@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from typing import cast
 
 import httpx
 
@@ -21,14 +22,14 @@ def _extract_json_from_content(content: str) -> dict | None:
         return None
     # Try raw parse first
     try:
-        return json.loads(content)
+        return cast("dict[str, object] | None", json.loads(content))
     except json.JSONDecodeError:
         pass
     # Try extracting from ```json ... ``` block
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
     if match:
         try:
-            return json.loads(match.group(1).strip())
+            return cast("dict[str, object] | None", json.loads(match.group(1).strip()))
         except json.JSONDecodeError:
             pass
     return None
@@ -78,9 +79,7 @@ class LmStudioAiService(AiService):
                         {"parse_error": "json"},
                     )
                 content = (
-                    data.get("choices", [{}])[0]
-                    .get("message", {})
-                    .get("content", "")
+                    data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 )
                 content = (content or "").strip()
                 parsed = _extract_json_from_content(content)

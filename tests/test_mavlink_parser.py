@@ -8,8 +8,8 @@ import pytest
 
 from airautomatica.models.state import AircraftState
 from airautomatica.telemetry.mavlink_parser import (
-    MavlinkNormalizer,
     UINT16_MAX,
+    MavlinkNormalizer,
 )
 
 

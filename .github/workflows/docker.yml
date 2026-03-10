@@ -1,0 +1,32 @@
+name: Docker
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: airautomatica:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run container and verify health
+        run: |
+          docker run -d --name app -p 8000:8000 -e SQLITE_DB_PATH=/tmp/airautomatica.db airautomatica:test
+          sleep 3
+          curl -f http://localhost:8000/health
+          docker stop app

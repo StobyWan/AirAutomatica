@@ -11,9 +11,11 @@ Thanks for your interest. This is an early-stage project.
 
 ## Before Submitting
 
-- Run `pytest` and ensure all tests pass
+- Run `make check` (or `pytest` + `black --check` + `isort --check-only` + `mypy`)
 - Keep changes small and focused
 - No flight-critical logic; this app reads telemetry and logs detections only
+
+CI runs format, lint, typecheck, and tests on push/PR.
 
 ## Pull Requests
 

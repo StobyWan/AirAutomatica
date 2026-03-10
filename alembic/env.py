@@ -2,12 +2,10 @@
 
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, text
-from sqlalchemy import pool
-
-from alembic import context
+from sqlalchemy import engine_from_config, pool, text
 
 from airautomatica.db.models import Base
+from alembic import context
 
 config = context.config
 

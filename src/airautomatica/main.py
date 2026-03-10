@@ -8,12 +8,12 @@ import sys
 
 import uvicorn
 
-from airautomatica.ai import AiHatAiService, LmStudioAiService, MockAiService, AiService
+from airautomatica.ai import AiHatAiService, AiService, LmStudioAiService, MockAiService
 from airautomatica.api.server import create_app
 from airautomatica.config import (
-    get_ai_mode,
     get_ai_duplicate_window_sec,
     get_ai_min_confidence,
+    get_ai_mode,
     get_aihat_device,
     get_aihat_model_name,
     get_api_host,
@@ -35,7 +35,11 @@ from airautomatica.services.persistence import (
     TelemetrySampler,
 )
 from airautomatica.services.state_store import StateStore
-from airautomatica.telemetry import MockTelemetry, SerialMavlinkTelemetry, TelemetrySource
+from airautomatica.telemetry import (
+    MockTelemetry,
+    SerialMavlinkTelemetry,
+    TelemetrySource,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +205,9 @@ def main() -> None:
         get_ai_mode(),
     )
     if get_telemetry_backend() == "serial":
-        logger.info("Serial telemetry: port=%s baud=%s", get_serial_port(), get_serial_baud())
+        logger.info(
+            "Serial telemetry: port=%s baud=%s", get_serial_port(), get_serial_baud()
+        )
     asyncio.run(run_all())
 
 

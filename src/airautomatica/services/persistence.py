@@ -164,22 +164,26 @@ class PersistenceService:
                 out: list[dict] = []
                 for row in rows:
                     try:
-                        meta = json.loads(row.metadata_json) if row.metadata_json else {}
+                        meta = (
+                            json.loads(row.metadata_json) if row.metadata_json else {}
+                        )
                     except json.JSONDecodeError:
                         meta = {}
-                    out.append({
-                        "id": row.id,
-                        "session_id": row.session_id,
-                        "timestamp": row.timestamp.isoformat(),
-                        "label": row.label,
-                        "confidence": row.confidence,
-                        "summary": row.summary,
-                        "source_backend": row.source_backend,
-                        "lat": row.lat,
-                        "lon": row.lon,
-                        "rel_alt_m": row.rel_alt_m,
-                        "metadata": meta,
-                    })
+                    out.append(
+                        {
+                            "id": row.id,
+                            "session_id": row.session_id,
+                            "timestamp": row.timestamp.isoformat(),
+                            "label": row.label,
+                            "confidence": row.confidence,
+                            "summary": row.summary,
+                            "source_backend": row.source_backend,
+                            "lat": row.lat,
+                            "lon": row.lon,
+                            "rel_alt_m": row.rel_alt_m,
+                            "metadata": meta,
+                        }
+                    )
                 return out
         except Exception as e:
             self._record_error(str(e))
@@ -279,7 +283,11 @@ class TelemetryLifecycleLogger:
 
         event_type = "telemetry_status_transition"
         message = f"Telemetry {prev or 'initial'} -> {status}"
-        level = "info" if status == "connected" else "warning" if status in ("stale", "backoff") else "info"
+        level = (
+            "info"
+            if status == "connected"
+            else "warning" if status in ("stale", "backoff") else "info"
+        )
         self._persistence.insert_system_event(
             session_id=self._session_id,
             level=level,

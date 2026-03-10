@@ -100,7 +100,8 @@ class MavlinkNormalizer:
 
     def _apply_global_position_int(self, msg: Any) -> None:
         """GLOBAL_POSITION_INT (id 33): lat/lon degE7, relative_alt mm, hdg cdeg.
-        Sentinel: hdg=65535 (UINT16_MAX) means unknown. See mavlink.io/common#GLOBAL_POSITION_INT."""
+        Sentinel: hdg=65535 (UINT16_MAX) means unknown. See mavlink.io/common#GLOBAL_POSITION_INT.
+        """
         # lat, lon: degE7 -> degrees
         self._accum["lat"] = msg.lat / 1e7
         self._accum["lon"] = msg.lon / 1e7

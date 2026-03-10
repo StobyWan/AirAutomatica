@@ -170,7 +170,9 @@ async def test_lmstudio_malformed_json_response() -> None:
     with patch("airautomatica.ai.lmstudio_service.httpx.AsyncClient") as mock_client:
         mock_client.return_value.__aenter__.return_value = mock_instance
         mock_client.return_value.__aexit__.return_value = None
-        service = LmStudioAiService(base_url="http://localhost:1234", model="test", timeout_sec=5.0)
+        service = LmStudioAiService(
+            base_url="http://localhost:1234", model="test", timeout_sec=5.0
+        )
         result = await service.infer(None)
     assert result.label == "error"
     assert result.confidence == 0.0
@@ -188,7 +190,9 @@ async def test_lmstudio_timeout_returns_fallback() -> None:
     with patch("airautomatica.ai.lmstudio_service.httpx.AsyncClient") as mock_client:
         mock_client.return_value.__aenter__.return_value = mock_instance
         mock_client.return_value.__aexit__.return_value = None
-        service = LmStudioAiService(base_url="http://localhost:1234", model="test", timeout_sec=5.0)
+        service = LmStudioAiService(
+            base_url="http://localhost:1234", model="test", timeout_sec=5.0
+        )
         result = await service.infer(None)
     assert result.label == "error"
     assert result.confidence == 0.0
@@ -221,7 +225,9 @@ def test_ai_result_from_dict_normalization() -> None:
 def test_ai_result_fallback_shape() -> None:
     """Fallback AiResult from LmStudio has all required fields and valid types."""
     service = LmStudioAiService(base_url="http://x", model="m", timeout_sec=1.0)
-    result = service._fallback_result("Test error", {"error": True, "error_type": "timeout"})
+    result = service._fallback_result(
+        "Test error", {"error": True, "error_type": "timeout"}
+    )
     assert result.label == "error"
     assert result.confidence == 0.0
     assert isinstance(result.summary, str)

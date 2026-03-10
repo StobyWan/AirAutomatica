@@ -13,7 +13,9 @@ from airautomatica.services.mission_logic import MissionLogic
 from airautomatica.services.state_store import StateStore
 
 
-def _make_state(lat: float = 37.0, lon: float = -122.0, rel_alt_m: float = 100.0) -> AircraftState:
+def _make_state(
+    lat: float = 37.0, lon: float = -122.0, rel_alt_m: float = 100.0
+) -> AircraftState:
     return AircraftState(
         connected=True,
         heartbeat=1,

@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Optional
 
-TelemetryStatus = Literal["starting", "connecting", "connected", "stale", "disconnected", "backoff"]
+TelemetryStatus = Literal[
+    "starting", "connecting", "connected", "stale", "disconnected", "backoff"
+]
 
 
 def nan_to_none(x: float | None) -> float | None:
@@ -50,7 +52,9 @@ class AircraftState:
             "telemetry_status": self.telemetry_status,
             "reconnect_count": self.reconnect_count,
             "last_disconnect_reason": self.last_disconnect_reason,
-            "last_heartbeat_at": self.last_heartbeat_at.isoformat() if self.last_heartbeat_at else None,
+            "last_heartbeat_at": (
+                self.last_heartbeat_at.isoformat() if self.last_heartbeat_at else None
+            ),
             "heartbeat_age_s": nan_to_none(self.heartbeat_age_s),
             "mode": self.mode,
             "lat": nan_to_none(self.lat),

@@ -42,7 +42,11 @@ def create_app(
                 "persistence_enabled": persistence_enabled,
                 "sqlite_db_path": get_sqlite_db_path() if persistence_enabled else None,
                 "session_id": session_id,
-                "last_persistence_error": persistence.get_last_persistence_error() if persistence is not None else None,
+                "last_persistence_error": (
+                    persistence.get_last_persistence_error()
+                    if persistence is not None
+                    else None
+                ),
             },
         }
         if state is None:
@@ -59,7 +63,9 @@ def create_app(
             "connected": state.connected,
             "reconnect_count": state.reconnect_count,
             "last_disconnect_reason": state.last_disconnect_reason,
-            "last_heartbeat_at": state.last_heartbeat_at.isoformat() if state.last_heartbeat_at else None,
+            "last_heartbeat_at": (
+                state.last_heartbeat_at.isoformat() if state.last_heartbeat_at else None
+            ),
             "heartbeat_age_s": age,
         }
         return health_data

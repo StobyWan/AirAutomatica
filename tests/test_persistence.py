@@ -6,14 +6,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from sqlalchemy import select
 
 from airautomatica.db.base import create_db_engine, enable_wal, get_engine, init_db
 from airautomatica.db.models import SystemEvent, TelemetrySample
 from airautomatica.db.session import get_session
-from airautomatica.models.state import AircraftState
-from airautomatica.services.persistence import PersistenceService, TelemetryLifecycleLogger
+from airautomatica.models.state import AircraftState, TelemetryStatus
+from airautomatica.services.persistence import (
+    PersistenceService,
+    TelemetryLifecycleLogger,
+)
 
 
 def test_db_init_and_wal() -> None:
@@ -150,7 +152,11 @@ def test_persistence_no_op_when_engine_none() -> None:
         persistence.insert_telemetry_sample(1, state)
 
 
-def _make_state(telemetry_status: str, reconnect_count: int = 0, last_disconnect_reason: str | None = None) -> AircraftState:
+def _make_state(
+    telemetry_status: TelemetryStatus,
+    reconnect_count: int = 0,
+    last_disconnect_reason: str | None = None,
+) -> AircraftState:
     """Helper to create AircraftState with given telemetry_status."""
     now = datetime.now(timezone.utc)
     return AircraftState(
@@ -220,20 +226,28 @@ def test_lifecycle_logger_includes_reconnect_metadata() -> None:
 
         logger.maybe_log_transition(_make_state("disconnected"))
         logger.maybe_log_transition(
-            _make_state("connected", reconnect_count=2, last_disconnect_reason="Connection refused")
+            _make_state(
+                "connected",
+                reconnect_count=2,
+                last_disconnect_reason="Connection refused",
+            )
         )
 
         with get_session() as session:
             assert session is not None
             result = session.execute(
-                select(SystemEvent).where(
+                select(SystemEvent)
+                .where(
                     SystemEvent.session_id == session_id,
                     SystemEvent.event_type == "telemetry_status_transition",
-                ).order_by(SystemEvent.id)
+                )
+                .order_by(SystemEvent.id)
             )
             events = result.scalars().all()
             assert len(events) >= 2
-            reconnected = next(e for e in events if "disconnected -> connected" in e.message)
+            reconnected = next(
+                e for e in events if "disconnected -> connected" in e.message
+            )
             assert reconnected.metadata_json is not None
             meta = json.loads(reconnected.metadata_json)
             assert meta.get("reconnect_count") == 2
