@@ -46,7 +46,7 @@ def get_settings() -> dict:
     defaults = {
         "TELEMETRY_BACKEND": "mock",
         "AI_MODE": "mock",
-        "SERIAL_PORT": "/dev/ttyACM0",
+        "SERIAL_PORT": "/dev/ttyUSB0",
         "SERIAL_BAUD": "921600",
         "LOCAL_LLM_PROVIDER": "mock",
         "LOCAL_LLM_BASE_URL": "http://127.0.0.1:11434",

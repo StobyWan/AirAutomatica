@@ -72,7 +72,7 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TELEMETRY_BACKEND` | `mock` | `mock` or `serial` |
-| `SERIAL_PORT` | `/dev/ttyACM0` | Serial device (e.g. `/dev/ttyUSB0` for CP2102; `/dev/ttyACM0` for native USB) |
+| `SERIAL_PORT` | `/dev/ttyUSB0` | Serial device (default for CP2102/FTDI; use `/dev/ttyACM0` for native USB) |
 | `SERIAL_BAUD` | `921600` | Baud rate (57600 for telemetry radios) |
 | `AI_MODE` | `mock` | `mock`, `ollama`, or `aihat` (`AI_BACKEND` legacy) |
 | `LOCAL_LLM_PROVIDER` | — | Override: `mock` or `ollama` when using local LLM |

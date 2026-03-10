@@ -149,7 +149,7 @@ echo "  http://<pi-ip>:8000/dashboard"
 echo
 echo "For serial mode later, update .env or export:"
 echo "  TELEMETRY_BACKEND=serial"
-echo "  SERIAL_PORT=/dev/ttyUSB0   # or /dev/ttyACM0"
+echo "  SERIAL_PORT=/dev/ttyUSB0   # default; use /dev/ttyACM0 for native USB"
 echo "  SERIAL_BAUD=921600"
 echo
 echo "Helpful checks:"
