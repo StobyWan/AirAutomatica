@@ -12,6 +12,7 @@ from airautomatica.ai.ollama_tasks import (
     OllamaTaskType,
     TelemetrySummaryResult,
     build_prompt,
+    get_format_for_task,
     parse_event_classification_response,
     parse_perception_response,
     parse_telemetry_summary_response,
@@ -51,8 +52,9 @@ class OllamaTaskService:
         # provider is ollama; _ollama is guaranteed non-None by __init__
         assert self._ollama is not None
         prompt = build_prompt(task_type, context)
+        fmt = get_format_for_task(task_type)
         try:
-            content = await self._ollama.generate_raw(prompt)
+            content = await self._ollama.generate_raw(prompt, format=fmt)
         except Exception as e:
             logger.warning("Ollama generate_raw failed: %s", e)
             return _fallback_result(task_type, str(e))

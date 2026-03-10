@@ -66,6 +66,49 @@ class EventClassificationContext(TypedDict, total=False):
     events: list[dict[str, Any]]
 
 
+# --- JSON Schema objects for Ollama format (schema-based structured outputs) ---
+
+SCHEMA_TELEMETRY_OBJ: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "status": {"type": "string"},
+        "summary": {"type": "string"},
+        "concerns": {"type": "array", "items": {"type": "string"}},
+        "recommendations": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["status", "summary", "concerns", "recommendations"],
+    "additionalProperties": False,
+}
+
+SCHEMA_EVENT_OBJ: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "severity": {"type": "string"},
+        "category": {"type": "string"},
+        "summary": {"type": "string"},
+        "likely_causes": {"type": "array", "items": {"type": "string"}},
+        "recommended_checks": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "severity",
+        "category",
+        "summary",
+        "likely_causes",
+        "recommended_checks",
+    ],
+    "additionalProperties": False,
+}
+
+
+def get_format_for_task(task_type: OllamaTaskType) -> str | dict[str, Any]:
+    """Return format for Ollama: schema dict for schema-based tasks, 'json' otherwise."""
+    if task_type == OllamaTaskType.TELEMETRY_SUMMARY:
+        return SCHEMA_TELEMETRY_OBJ
+    if task_type == OllamaTaskType.EVENT_CLASSIFICATION:
+        return SCHEMA_EVENT_OBJ
+    return "json"  # perception_detection and unknown
+
+
 # --- Prompt builders (short, schema-first) ---
 # Use example values, not "str" - small models (gemma3:1b) output "str" literally.
 
@@ -109,12 +152,7 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
         if samples:
             ctx_parts.append(f"recent_samples={min(len(samples), 10)}")
         ctx = "; ".join(ctx_parts) if ctx_parts else "no data"
-        return (
-            "Return only valid JSON. No markdown. No explanation.\n"
-            "status: ok|warn|error. List fields must be arrays. Use [] when empty. Never null.\n"
-            f"Example: {_SCHEMA_TELEMETRY}\n"
-            f"Context: {ctx}"
-        )
+        return f"Return only valid JSON. No markdown. No explanation.\nContext: {ctx}"
 
     if task_type == OllamaTaskType.EVENT_CLASSIFICATION:
         events = context.get("events") or []
@@ -126,12 +164,7 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
                 msg = str(e.get("message", ""))[:60]
                 parts.append(f"{et}: {msg}")
             ctx = "; ".join(parts)
-        return (
-            "Return only valid JSON. No markdown. No explanation.\n"
-            "severity: info|warning|error|critical. List fields must be arrays. Use [] when empty. Never null.\n"
-            f"Example: {_SCHEMA_EVENT}\n"
-            f"Context: {ctx}"
-        )
+        return f"Return only valid JSON. No markdown. No explanation.\nContext: {ctx}"
 
     return "Return only valid JSON: {}"
 
