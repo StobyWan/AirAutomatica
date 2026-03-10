@@ -166,7 +166,7 @@ def test_parse_telemetry_summary_none() -> None:
 
 
 def test_parse_telemetry_summary_malformed_types() -> None:
-    """Malformed types (concerns=string) coerce safely."""
+    """Malformed types coerce safely: string->single-item, non-list->empty."""
     raw: dict[str, Any] = {
         "status": 123,
         "concerns": "not a list",
@@ -174,8 +174,36 @@ def test_parse_telemetry_summary_malformed_types() -> None:
     }
     result = parse_telemetry_summary_response(raw)
     assert isinstance(result.status, str)
-    assert result.concerns == ()  # not a list -> empty
+    assert result.concerns == ("not a list",)  # string -> single-item array
     assert result.recommendations == ("1", "2", "3")  # coerced to str
+
+
+def test_parse_telemetry_summary_null_concerns() -> None:
+    """null for list field normalizes to empty tuple."""
+    raw: dict[str, Any] = {"status": "ok", "summary": "x", "concerns": None}
+    result = parse_telemetry_summary_response(raw)
+    assert result.concerns == ()
+
+
+def test_parse_telemetry_summary_string_recommendations() -> None:
+    """String for list field normalizes to single-item tuple."""
+    raw: dict[str, Any] = {"status": "ok", "recommendations": "check battery"}
+    result = parse_telemetry_summary_response(raw)
+    assert result.recommendations == ("check battery",)
+
+
+def test_parse_telemetry_summary_whitespace_string() -> None:
+    """Whitespace-only string for list field normalizes to empty tuple."""
+    raw: dict[str, Any] = {"status": "ok", "concerns": "   "}
+    result = parse_telemetry_summary_response(raw)
+    assert result.concerns == ()
+
+
+def test_parse_telemetry_summary_malformed_non_list() -> None:
+    """Non-list non-string (e.g. int) for list field degrades to empty tuple."""
+    raw: dict[str, Any] = {"status": "ok", "concerns": 123}
+    result = parse_telemetry_summary_response(raw)
+    assert result.concerns == ()
 
 
 # --- Event classification parser ---
@@ -229,6 +257,27 @@ def test_parse_event_classification_valid_severities() -> None:
         raw = {"severity": sev}
         result = parse_event_classification_response(raw)
         assert result.severity == sev
+
+
+def test_parse_event_classification_null_likely_causes() -> None:
+    """null for list field normalizes to empty tuple."""
+    raw: dict[str, Any] = {"severity": "info", "likely_causes": None}
+    result = parse_event_classification_response(raw)
+    assert result.likely_causes == ()
+
+
+def test_parse_event_classification_string_recommended_checks() -> None:
+    """String for list field normalizes to single-item tuple."""
+    raw: dict[str, Any] = {"severity": "info", "recommended_checks": "inspect link"}
+    result = parse_event_classification_response(raw)
+    assert result.recommended_checks == ("inspect link",)
+
+
+def test_parse_event_classification_malformed_list() -> None:
+    """Non-list non-string for list field degrades to empty tuple."""
+    raw: dict[str, Any] = {"severity": "info", "likely_causes": 123}
+    result = parse_event_classification_response(raw)
+    assert result.likely_causes == ()
 
 
 # --- Mock-path: OllamaTaskService with provider=mock ---
