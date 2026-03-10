@@ -14,8 +14,8 @@ from airautomatica.telemetry.services.vehicle_connection_manager import (
 class MockTransport:
     """Mock transport with configurable message queue."""
 
-    def __init__(self, messages: list) -> None:
-        self._messages = list(messages)
+    def __init__(self, messages: list[object]) -> None:
+        self._messages: list[object] = list(messages)
         self._index = 0
         self._connected = False
 
