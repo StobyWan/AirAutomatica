@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIRAUTOMATICA Dashboard</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card: #16213e;
+      --text: #e8e8e8;
+      --muted: #a0a0a0;
+      --connected: #22c55e;
+      --stale: #eab308;
+      --disconnected: #ef4444;
+      --backoff: #f97316;
+      --connecting: #3b82f6;
+      --starting: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1rem;
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 1rem 0; }
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    .status-connected { background: var(--connected); color: #000; }
+    .status-stale { background: var(--stale); color: #000; }
+    .status-disconnected { background: var(--disconnected); color: #fff; }
+    .status-backoff { background: var(--backoff); color: #000; }
+    .status-connecting { background: var(--connecting); color: #fff; }
+    .status-starting { background: var(--starting); color: #fff; }
+    .card {
+      background: var(--card);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 { font-size: 1rem; margin: 0 0 0.75rem 0; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; }
+    .field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .field label { font-size: 0.75rem; color: var(--muted); }
+    .field span { font-family: ui-monospace, monospace; }
+    .connection-status { margin-bottom: 1rem; font-size: 0.875rem; color: var(--muted); }
+    .detection-item {
+      padding: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.875rem;
+    }
+    .detection-item:last-child { border-bottom: none; }
+    .na { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>AIRAUTOMATICA Dashboard</h1>
+  <div class="connection-status" id="connection-status">Connecting…</div>
+
+  <div class="card">
+    <h2>System Health</h2>
+    <div id="telemetry-status"></div>
+    <div class="grid" id="health-fields"></div>
+  </div>
+
+  <div class="card">
+    <h2>Aircraft State</h2>
+    <div class="grid" id="state-fields"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent Detections</h2>
+    <div id="detections-list"></div>
+  </div>
+
+  <div class="card">
+    <h2>Session / Persistence</h2>
+    <div class="grid" id="session-fields"></div>
+  </div>
+
+  <script>
+    const socket = io();
+    const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
+    const fmtNum = (v) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : String(v);
+
+    function statusClass(s) {
+      const m = { connected: 'status-connected', stale: 'status-stale', disconnected: 'status-disconnected',
+        backoff: 'status-backoff', connecting: 'status-connecting', starting: 'status-starting' };
+      return m[s] || 'status-starting';
+    }
+
+    socket.on('connect', () => {
+      document.getElementById('connection-status').textContent = 'Connected';
+    });
+    socket.on('disconnect', () => {
+      document.getElementById('connection-status').textContent = 'Disconnected';
+    });
+
+    socket.on('health_update', (d) => {
+      const tel = d.telemetry || {};
+      const status = tel.telemetry_status || 'disconnected';
+      document.getElementById('telemetry-status').innerHTML =
+        `<span class="status-badge ${statusClass(status)}">${status}</span>`;
+      document.getElementById('health-fields').innerHTML = [
+        ['telemetry_backend', d.telemetry_backend],
+        ['ai_mode', d.ai_mode],
+        ['heartbeat_age_s', tel.heartbeat_age_s != null ? tel.heartbeat_age_s.toFixed(1) + ' s' : null],
+        ['reconnect_count', tel.reconnect_count],
+        ['last_disconnect_reason', tel.last_disconnect_reason],
+      ].map(([k, v]) => `<div class="field"><label>${k}</label><span>${fmt(v)}</span></div>`).join('');
+      const p = d.persistence || {};
+      document.getElementById('session-fields').innerHTML = [
+        ['session_id', d.session_id],
+        ['persistence_enabled', p.persistence_enabled],
+        ['last_persistence_error', p.last_persistence_error],
+      ].map(([k, v]) => `<div class="field"><label>${k}</label><span>${fmt(v)}</span></div>`).join('');
+    });
+
+    socket.on('state_update', (d) => {
+      const s = d.state;
+      if (!s) {
+        document.getElementById('state-fields').innerHTML = '<span class="na">No state yet</span>';
+        return;
+      }
+      document.getElementById('state-fields').innerHTML = [
+        ['mode', s.mode],
+        ['lat', s.lat != null ? s.lat.toFixed(6) : null],
+        ['lon', s.lon != null ? s.lon.toFixed(6) : null],
+        ['rel_alt_m', s.rel_alt_m],
+        ['heading_deg', s.heading_deg],
+        ['voltage_v', s.voltage_v],
+        ['current_a', s.current_a],
+        ['groundspeed_m_s', s.groundspeed_m_s],
+        ['airspeed_m_s', s.airspeed_m_s],
+      ].map(([k, v]) => `<div class="field"><label>${k}</label><span>${fmtNum(v)}</span></div>`).join('');
+    });
+
+    socket.on('detections_update', (d) => {
+      const list = d.detections || [];
+      const el = document.getElementById('detections-list');
+      if (list.length === 0) {
+        el.innerHTML = '<span class="na">No detections</span>';
+        return;
+      }
+      el.innerHTML = list.map(d => `
+        <div class="detection-item">
+          <strong>${fmt(d.label)}</strong> ${(d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '')}
+          ${d.summary ? ' — ' + d.summary : ''}
+        </div>
+      `).join('');
+    });
+  </script>
+</body>
+</html>

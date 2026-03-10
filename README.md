@@ -13,6 +13,7 @@ Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an A
 - **LM Studio mode**: Local LLM simulates perception-style outputs. Useful for testing mission logic on macOS.
 - **Serial MAVLink mode**: Real telemetry from ArduPilot over USB/serial (Matek F405-WING, CP2102, etc.).
 - **API**: `/health`, `/state`, `/recent-detections`. SQLite persistence for sessions and detections.
+- **Live Dashboard**: Real-time UI at `GET /dashboard` with Socket.IO updates (health, state, detections). Read-only, non-flight-critical. Works with persistence disabled.
 - **Graceful shutdown**: Ctrl+C ends session cleanly.
 
 ## What Is Mock vs Real
@@ -38,7 +39,7 @@ python -m airautomatica.main
 # or: uv run airautomatica
 ```
 
-Then open `http://localhost:8000/health` and `http://localhost:8000/state`.
+Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `http://localhost:8000/dashboard` for the live UI.
 
 ## Requirements
 
@@ -128,6 +129,11 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 | `GET /health` | Health check |
 | `GET /state` | Current aircraft state (JSON) |
 | `GET /recent-detections` | Recent persisted detections (current session, limit 20) |
+| `GET /dashboard` | Real-time flight dashboard (HTML + Socket.IO) |
+
+## Live Dashboard
+
+`GET /dashboard` serves a real-time UI. Open `http://<host>:8000/dashboard` from a phone, tablet, or laptop on the same network. Uses Socket.IO for live updates (health, state, detections). Read-only, non-flight-critical. Works with persistence disabled.
 
 ## Project Structure
 
@@ -157,8 +163,15 @@ src/airautomatica/
 │   ├── state_store.py   # Shared in-memory state
 │   ├── mission_logic.py # Mission logic (state + AI)
 │   └── persistence.py  # PersistenceService, TelemetrySampler
-└── api/
-    └── server.py       # FastAPI app
+├── api/
+│   └── server.py       # FastAPI app
+├── realtime/
+│   ├── socketio_app.py # Socket.IO ASGI wrapper
+│   └── publisher.py    # Dashboard event publisher
+└── ui/
+    ├── dashboard.py    # Dashboard HTML loader
+    └── templates/
+        └── dashboard.html
 ```
 
 See [ai_backends.md](ai_backends.md) for AI backend details and Raspberry Pi transition.

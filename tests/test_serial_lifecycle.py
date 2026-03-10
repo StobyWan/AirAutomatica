@@ -1,6 +1,7 @@
 """Tests for serial MAVLink telemetry lifecycle and telemetry_status."""
 
 import asyncio
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -139,3 +140,33 @@ async def test_parser_failure_does_not_crash_stream() -> None:
     assert hasattr(states[0], "connected")
     assert hasattr(states[0], "last_heartbeat_at")
     assert hasattr(states[0], "heartbeat_age_s")
+
+
+@pytest.mark.asyncio
+async def test_serial_connection_closed_on_reconnect() -> None:
+    """MAVLink connection close() is called on no-heartbeat or reader exit."""
+    mock_conn = MagicMock()
+    mock_conn.wait_heartbeat.return_value = None
+    mock_conn.close = MagicMock()
+
+    with patch("pymavlink.mavutil.mavlink_connection", return_value=mock_conn):
+        source = SerialMavlinkTelemetry(
+            port="/dev/nonexistent",
+            baud=57600,
+            initial_backoff_sec=0.05,
+            max_backoff_sec=0.2,
+        )
+        states = []
+
+        async def collect() -> None:
+            async for s in source.stream():
+                states.append(s)
+                if len(states) >= 4:
+                    return
+
+        try:
+            await asyncio.wait_for(collect(), timeout=3.0)
+        except asyncio.TimeoutError:
+            pass
+
+        mock_conn.close.assert_called()

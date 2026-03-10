@@ -5,6 +5,8 @@ import atexit
 import logging
 import signal
 import sys
+from collections.abc import Coroutine
+from typing import Any, Callable
 
 import uvicorn
 
@@ -28,6 +30,7 @@ from airautomatica.config import (
 )
 from airautomatica.db import init_db
 from airautomatica.logging_config import setup_logging
+from airautomatica.realtime import DashboardPublisher, sio, wrap_app
 from airautomatica.services.mission_logic import MissionLogic
 from airautomatica.services.persistence import (
     PersistenceService,
@@ -98,6 +101,29 @@ def _create_ai_service() -> AiService:
     return MockAiService()
 
 
+async def _run_with_restart(
+    coro_fn: Callable[..., Coroutine[Any, Any, None]],
+    *args: Any,
+    name: str = "task",
+    restart_delay_sec: float = 1.0,
+    **kwargs: Any,
+) -> None:
+    """Run coroutine in a loop; on exception, log and restart after delay."""
+    while True:
+        try:
+            await coro_fn(*args, **kwargs)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.exception(
+                "%s failed, restarting in %.1fs: %s",
+                name,
+                restart_delay_sec,
+                e,
+            )
+            await asyncio.sleep(restart_delay_sec)
+
+
 async def _telemetry_loop(
     store: StateStore,
     source: TelemetrySource,
@@ -144,10 +170,21 @@ def main() -> None:
     atexit.register(_end_session)
 
     app = create_app(store, persistence=persistence, session_id=session_id)
+    asgi_app = wrap_app(app)
     host = get_api_host()
     port = get_api_port()
 
-    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    publisher = DashboardPublisher(
+        store,
+        persistence,
+        session_id,
+        get_ai_mode(),
+        get_telemetry_backend(),
+        sio,
+        interval_sec=1.0,
+    )
+
+    config = uvicorn.Config(asgi_app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
 
     mission_logic = MissionLogic(
@@ -173,9 +210,19 @@ def main() -> None:
 
         server_task = asyncio.create_task(server.serve())
         telemetry_task = asyncio.create_task(
-            _telemetry_loop(store, source, sampler, lifecycle_logger)
+            _run_with_restart(
+                _telemetry_loop,
+                store,
+                source,
+                sampler,
+                lifecycle_logger,
+                name="telemetry",
+            )
         )
-        mission_task = asyncio.create_task(mission_logic.run())
+        mission_task = asyncio.create_task(
+            _run_with_restart(mission_logic.run, name="mission")
+        )
+        publisher_task = asyncio.create_task(publisher.run())
         shutdown_waiter = asyncio.create_task(shutdown_event.wait())
 
         done, pending = await asyncio.wait(
@@ -191,13 +238,15 @@ def main() -> None:
 
         _shutdown_cleanup(persistence, session_ref)
 
-        for t in (server_task, telemetry_task, mission_task):
+        for t in (server_task, telemetry_task, mission_task, publisher_task):
             if not t.done():
                 t.cancel()
             try:
                 await t
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                logger.exception("Task cleanup: %s", e)
 
     logger.info(
         "Starting AIRAUTOMATICA (telemetry=%s ai=%s)",

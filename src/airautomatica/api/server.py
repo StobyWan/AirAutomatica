@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
 from airautomatica.config import get_ai_mode, get_sqlite_db_path, get_telemetry_backend
 from airautomatica.db.base import get_engine
@@ -12,6 +13,7 @@ from airautomatica.logging_config import setup_logging
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
+from airautomatica.ui.dashboard import get_dashboard_html
 
 
 @asynccontextmanager
@@ -85,5 +87,10 @@ def create_app(
             return {"detections": [], "session_id": None}
         detections = persistence.get_recent_detections(session_id, limit=20)
         return {"detections": detections, "session_id": session_id}
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard() -> HTMLResponse:
+        """Serve the real-time flight dashboard."""
+        return HTMLResponse(content=get_dashboard_html())
 
     return app
