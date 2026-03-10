@@ -2,37 +2,16 @@
 
 import json
 import logging
-import re
 from datetime import datetime, timezone
-from typing import cast
 
 import httpx
 
-from airautomatica.ai.models import AiResult
+from airautomatica.ai.json_utils import extract_json
+from airautomatica.ai.models import AiResult, create_error_fallback
 from airautomatica.ai.service import AiService
 from airautomatica.models.state import AircraftState
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_json_from_content(content: str) -> dict | None:
-    """Try to extract JSON from content. Handles markdown code blocks."""
-    content = (content or "").strip()
-    if not content:
-        return None
-    # Try raw parse first
-    try:
-        return cast("dict[str, object] | None", json.loads(content))
-    except json.JSONDecodeError:
-        pass
-    # Try extracting from ```json ... ``` block
-    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
-    if match:
-        try:
-            return cast("dict[str, object] | None", json.loads(match.group(1).strip()))
-        except json.JSONDecodeError:
-            pass
-    return None
 
 
 class LmStudioAiService(AiService):
@@ -45,19 +24,6 @@ class LmStudioAiService(AiService):
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout = httpx.Timeout(timeout_sec)
-
-    def _fallback_result(self, summary: str, metadata: dict[str, object]) -> AiResult:
-        """Return normalized error fallback. Metadata uses allowed keys only."""
-        allowed = {"error", "parse_error", "error_type", "raw_length"}
-        meta = {k: v for k, v in metadata.items() if k in allowed}
-        return AiResult(
-            label="error",
-            confidence=0.0,
-            summary=summary,
-            source_backend="lmstudio",
-            timestamp=datetime.now(timezone.utc),
-            metadata=meta if meta else None,
-        )
 
     async def infer(self, state: AircraftState | None) -> AiResult:
         """Call LM Studio chat completions. Returns normalized AiResult."""
@@ -77,15 +43,18 @@ class LmStudioAiService(AiService):
                     data = r.json()
                 except json.JSONDecodeError as e:
                     logger.warning("LM Studio returned invalid JSON: %s", e)
-                    return self._fallback_result(
+                    return create_error_fallback(
                         "Invalid JSON response",
                         {"parse_error": "json"},
+                        "lmstudio",
                     )
-                content = (
-                    data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                )
-                content = (content or "").strip()
-                parsed = _extract_json_from_content(content)
+                choices = data.get("choices") or []
+                first = choices[0] if choices else {}
+                first = first if isinstance(first, dict) else {}
+                msg = first.get("message")
+                msg = msg if isinstance(msg, dict) else {}
+                content = (msg.get("content") or "").strip()
+                parsed = extract_json(content)
                 if parsed is not None and isinstance(parsed, dict):
                     result = AiResult.from_dict(parsed, "lmstudio")
                     meta = dict(result.metadata or {})
@@ -111,21 +80,24 @@ class LmStudioAiService(AiService):
                 )
         except httpx.TimeoutException as e:
             logger.warning("LM Studio inference timeout: %s", e)
-            return self._fallback_result(
+            return create_error_fallback(
                 str(e),
                 {"error": True, "error_type": "timeout"},
+                "lmstudio",
             )
         except httpx.HTTPStatusError as e:
             logger.warning("LM Studio HTTP error: %s", e)
-            return self._fallback_result(
+            return create_error_fallback(
                 str(e),
                 {"error": True, "error_type": "http"},
+                "lmstudio",
             )
         except httpx.RequestError as e:
             logger.warning("LM Studio request failed: %s", e)
-            return self._fallback_result(
+            return create_error_fallback(
                 str(e),
                 {"error": True, "error_type": "network"},
+                "lmstudio",
             )
 
     def _build_prompt(self, state: AircraftState | None) -> str:

@@ -1,7 +1,5 @@
 """Ollama task types, prompts, and defensive parsers. Schema-first, no trust of LLM output."""
 
-import json
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -132,28 +130,9 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
     return "Return only valid JSON: {}"
 
 
-# --- JSON extraction ---
+# --- JSON extraction (re-export for backward compatibility) ---
 
-
-def extract_json(content: str) -> dict[str, Any] | None:
-    """Extract dict from raw LLM content. Handles markdown code blocks."""
-    content = (content or "").strip()
-    if not content:
-        return None
-    try:
-        out = json.loads(content)
-        return out if isinstance(out, dict) else None
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
-    if match:
-        try:
-            out = json.loads(match.group(1).strip())
-            return out if isinstance(out, dict) else None
-        except json.JSONDecodeError:
-            pass
-    return None
-
+from airautomatica.ai.json_utils import extract_json
 
 # --- Parsers (never trust Ollama; coerce everything) ---
 

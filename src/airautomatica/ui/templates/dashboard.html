@@ -265,6 +265,8 @@
   </div>
 
   <script>
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'];
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
@@ -279,7 +281,7 @@
     function loadSettingsForm() {
       fetch('/settings').then(r => r.json()).then(d => {
         const s = d.settings || {};
-        ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
+        SETTINGS_KEYS.forEach(k => {
           const el = document.getElementById(k);
           if (el && s[k] !== undefined) el.value = s[k];
         });
@@ -290,7 +292,7 @@
       e.preventDefault();
       const form = e.target;
       const updates = {};
-      ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
+      SETTINGS_KEYS.forEach(k => {
         const el = document.getElementById(k);
         if (el && el.value) updates[k] = el.value;
       });

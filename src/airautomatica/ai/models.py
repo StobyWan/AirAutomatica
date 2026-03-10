@@ -42,6 +42,24 @@ def _normalize_bbox(v: Any) -> tuple[float, float, float, float] | None:
         return None
 
 
+def create_error_fallback(
+    summary: str,
+    metadata: dict[str, object],
+    source_backend: str,
+) -> "AiResult":
+    """Return normalized error fallback. Metadata uses allowed keys only."""
+    allowed = {"error", "parse_error", "error_type", "raw_length"}
+    meta = {k: v for k, v in metadata.items() if k in allowed}
+    return AiResult(
+        label="error",
+        confidence=0.0,
+        summary=summary,
+        source_backend=source_backend,
+        timestamp=datetime.now(timezone.utc),
+        metadata=meta if meta else None,
+    )
+
+
 @dataclass(frozen=True)
 class AiResult:
     """Normalized AI result. Mission logic consumes this regardless of source (mock, ollama, aihat)."""

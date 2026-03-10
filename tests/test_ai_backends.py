@@ -14,7 +14,7 @@ from airautomatica.ai import (
     MockAiService,
     OllamaAiService,
 )
-from airautomatica.ai.models import AiResult
+from airautomatica.ai.models import AiResult, create_error_fallback
 from airautomatica.ai.service import AiService
 from airautomatica.models.state import AircraftState
 
@@ -224,6 +224,27 @@ async def test_lmstudio_malformed_json_response() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lmstudio_malformed_choices_does_not_raise() -> None:
+    """LmStudioAiService handles malformed choices/message structure without raising."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"choices": [None]}
+    mock_post = AsyncMock(return_value=mock_response)
+    mock_instance = AsyncMock()
+    mock_instance.post = mock_post
+    with patch("airautomatica.ai.lmstudio_service.httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__.return_value = mock_instance
+        mock_client.return_value.__aexit__.return_value = None
+        service = LmStudioAiService(
+            base_url="http://localhost:1234", model="test", timeout_sec=5.0
+        )
+        result = await service.infer(None)
+    assert result.label == "lmstudio"
+    assert result.source_backend == "lmstudio"
+    assert result.summary == "No response"
+
+
+@pytest.mark.asyncio
 async def test_lmstudio_timeout_returns_fallback() -> None:
     """LmStudioAiService returns error fallback on timeout."""
     mock_post = AsyncMock(side_effect=httpx.TimeoutException("Connection timed out"))
@@ -265,10 +286,9 @@ def test_ai_result_from_dict_normalization() -> None:
 
 
 def test_ai_result_fallback_shape() -> None:
-    """Fallback AiResult from LmStudio has all required fields and valid types."""
-    service = LmStudioAiService(base_url="http://x", model="m", timeout_sec=1.0)
-    result = service._fallback_result(
-        "Test error", {"error": True, "error_type": "timeout"}
+    """create_error_fallback returns AiResult with all required fields and valid types."""
+    result = create_error_fallback(
+        "Test error", {"error": True, "error_type": "timeout"}, "lmstudio"
     )
     assert result.label == "error"
     assert result.confidence == 0.0

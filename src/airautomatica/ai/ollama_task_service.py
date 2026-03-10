@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Union
 
+from airautomatica.ai.json_utils import extract_json
 from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.ollama_tasks import (
@@ -11,7 +12,6 @@ from airautomatica.ai.ollama_tasks import (
     OllamaTaskType,
     TelemetrySummaryResult,
     build_prompt,
-    extract_json,
     parse_event_classification_response,
     parse_perception_response,
     parse_telemetry_summary_response,
