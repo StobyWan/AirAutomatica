@@ -126,7 +126,7 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 
 | Endpoint | Description |
 |----------|--------------|
-| `GET /health` | Health check |
+| `GET /health` | Health check. When serial telemetry is connected, includes a `capabilities` block: `firmware_name` (ArduPilot, INAV, Unknown), `profile_id`, capability flags (`supports_params_read`, etc.), `notes`, and `downgrade_reasons` |
 | `GET /state` | Current aircraft state (JSON) |
 | `GET /recent-detections` | Recent persisted detections (current session, limit 20) |
 | `GET /recent-events` | Recent system events for dashboard |
@@ -143,7 +143,7 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 `GET /dashboard` serves a real-time UI. Open `http://<host>:8000/dashboard` from a phone, tablet, or laptop on the same network.
 
 **Features:**
-- **System Health** — Telemetry status, backend info, heartbeat age, reconnect count
+- **System Health** — Telemetry status, backend info, heartbeat age, reconnect count. When connected, **Autopilot Capabilities** shows detected firmware (ArduPilot/INAV/Unknown), profile ID, capability chips (params_read, guided, etc.), notes, and any downgrade reasons from probes.
 - **Aircraft State** — Mode, lat/lon, altitude, heading (with compass), voltage, speed
 - **Flight Path** — SVG plot of recent flight breadcrumb, current position, and detection markers
 - **Trends** — Sparklines for voltage, altitude, groundspeed, heartbeat age
@@ -168,7 +168,21 @@ src/airautomatica/
 │   ├── base.py          # Telemetry interface
 │   ├── mock.py          # Mock telemetry for dev
 │   ├── mavlink_parser.py # MAVLink normalization layer
-│   └── serial_mavlink.py # Serial MAVLink backend
+│   ├── mavlink_telemetry.py
+│   ├── serial_mavlink.py # Serial MAVLink backend
+│   ├── mavlink/
+│   │   └── detection.py # Autopilot detection from HEARTBEAT
+│   ├── capabilities/
+│   │   └── profile.py  # CapabilityProfile, CapabilityInfo, downgrade constants
+│   ├── adapters/
+│   │   ├── base.py     # AutopilotAdapterProtocol
+│   │   ├── ardupilot.py
+│   │   ├── inav.py
+│   │   └── generic.py
+│   ├── transport/
+│   │   └── ...
+│   └── services/
+│       └── vehicle_connection_manager.py
 ├── ai/
 │   ├── service.py      # AiService interface
 │   ├── models.py       # AiResult model

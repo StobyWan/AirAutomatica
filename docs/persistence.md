@@ -19,6 +19,8 @@ No image or video blobs are stored.
 
 When `telemetry_status` changes (e.g. `connecting` → `connected`, `connected` → `stale`), a `system_events` row is written with `event_type = "telemetry_status_transition"`. Metadata includes `from`, `to`, and when relevant `reconnect_count` and `last_disconnect_reason`. Duplicate events are avoided when the status has not changed.
 
+When capabilities are set on serial connect, a `capability_profile_set` system event is logged with metadata: `firmware_name`, `profile_id`, and `downgrade_reasons`. This records the detected autopilot and any probe downgrades for the current session.
+
 ## Configuration
 
 | Setting | Default | Description |
