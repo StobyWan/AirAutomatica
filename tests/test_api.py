@@ -16,6 +16,7 @@ from airautomatica.db.base import get_engine
 from airautomatica.models.state import AircraftState
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
+from airautomatica.settings import load_settings
 
 
 @pytest.fixture
@@ -461,20 +462,115 @@ def test_sessions_empty_when_no_persistence(client: TestClient) -> None:
 
 
 def test_get_settings(client: TestClient) -> None:
-    """GET /settings returns current settings."""
+    """GET /settings returns canonical keys only (no AI_MODE)."""
     r = client.get("/settings")
     assert r.status_code == 200
     data = r.json()
     assert "settings" in data
     s = data["settings"]
     assert "TELEMETRY_BACKEND" in s
-    assert "AI_MODE" in s
+    assert "LOCAL_LLM_PROVIDER" in s
+    assert "AI_HAT_ENABLED" in s
+    assert "AI_MODE" not in s
     assert s["TELEMETRY_BACKEND"] in ("mock", "serial")
-    assert s["AI_MODE"] in ("mock", "lmstudio", "ollama", "aihat")
+    assert s["LOCAL_LLM_PROVIDER"] in ("mock", "lmstudio", "ollama")
+    assert s["AI_HAT_ENABLED"] in ("0", "1")
+
+
+def test_load_settings_with_legacy_file_then_get_returns_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When settings.json has AI_MODE=ollama, load then GET /settings returns LOCAL_LLM_PROVIDER."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        settings_file = settings_dir / "settings.json"
+        settings_file.write_text('{"AI_MODE": "ollama"}')
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_FILE", settings_file)
+
+        monkeypatch.delenv("LOCAL_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("AI_MODE", raising=False)
+        load_settings()
+
+        client = TestClient(create_app(store))
+        r = client.get("/settings")
+        assert r.status_code == 200
+        s = r.json()["settings"]
+        assert s.get("LOCAL_LLM_PROVIDER") == "ollama"
+        assert "AI_MODE" not in s
+
+
+def test_get_settings_returns_canonical_when_legacy_in_env(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When AI_MODE is set (legacy), GET /settings returns LOCAL_LLM_PROVIDER, not AI_MODE."""
+    monkeypatch.setenv("AI_MODE", "ollama")
+    monkeypatch.delenv("LOCAL_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("AI_BACKEND", raising=False)
+    monkeypatch.delenv("AI_HAT_ENABLED", raising=False)
+
+    client = TestClient(create_app(store))
+    r = client.get("/settings")
+    assert r.status_code == 200
+    s = r.json()["settings"]
+    assert s.get("LOCAL_LLM_PROVIDER") == "ollama"
+    assert "AI_MODE" not in s
+
+
+def test_get_settings_ai_hat_enabled_when_aihat_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When AI_MODE=aihat, GET /settings returns AI_HAT_ENABLED=1, LOCAL_LLM_PROVIDER=mock."""
+    monkeypatch.setenv("AI_MODE", "aihat")
+    monkeypatch.delenv("LOCAL_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("AI_HAT_ENABLED", raising=False)
+    monkeypatch.delenv("AI_BACKEND", raising=False)
+
+    client = TestClient(create_app(store))
+    r = client.get("/settings")
+    assert r.status_code == 200
+    s = r.json()["settings"]
+    assert s.get("AI_HAT_ENABLED") == "1"
+    assert s.get("LOCAL_LLM_PROVIDER") == "mock"
+
+
+def test_post_settings_persists_canonical_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST with canonical keys; file contains only canonical keys."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        settings_file = settings_dir / "settings.json"
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_FILE", settings_file)
+
+        store = StateStore()
+        client = TestClient(create_app(store))
+        r = client.post(
+            "/settings",
+            json={
+                "TELEMETRY_BACKEND": "serial",
+                "LOCAL_LLM_PROVIDER": "ollama",
+                "AI_HAT_ENABLED": "1",
+            },
+        )
+        assert r.status_code == 200
+        with open(settings_file) as f:
+            saved = json.load(f)
+        assert saved.get("TELEMETRY_BACKEND") == "serial"
+        assert saved.get("LOCAL_LLM_PROVIDER") == "ollama"
+        assert saved.get("AI_HAT_ENABLED") == "1"
+        for legacy in ("AI_MODE", "AI_BACKEND"):
+            assert legacy not in saved
 
 
 def test_post_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """POST /settings saves and returns success."""
+    """POST /settings saves canonical keys only; legacy AI_MODE is mapped, not persisted."""
     with tempfile.TemporaryDirectory() as tmp:
         settings_dir = Path(tmp) / ".airautomatica"
         settings_dir.mkdir()
@@ -496,7 +592,8 @@ def test_post_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         with open(settings_file) as f:
             saved = json.load(f)
         assert saved.get("TELEMETRY_BACKEND") == "mock"
-        assert saved.get("AI_MODE") == "lmstudio"
+        assert saved.get("LOCAL_LLM_PROVIDER") == "lmstudio"
+        assert "AI_MODE" not in saved
 
 
 def test_get_session_path_returns_path(monkeypatch: pytest.MonkeyPatch) -> None:

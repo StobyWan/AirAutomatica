@@ -74,15 +74,16 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | `TELEMETRY_BACKEND` | `mock` | `mock` or `serial` |
 | `SERIAL_PORT` | `/dev/ttyUSB0` | Serial device (default for CP2102/FTDI; use `/dev/ttyACM0` for native USB) |
 | `SERIAL_BAUD` | `921600` | Baud rate (57600 for telemetry radios) |
-| `AI_MODE` | `mock` | `mock`, `ollama`, or `aihat` (`AI_BACKEND` legacy) |
-| `LOCAL_LLM_PROVIDER` | — | Override: `mock` or `ollama` when using local LLM |
+| `LOCAL_LLM_PROVIDER` | `mock` | `mock`, `ollama`, or `lmstudio` (legacy). Primary AI control. |
 | `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:11434` | Ollama API URL |
 | `LOCAL_LLM_MODEL` | `gemma3:1b` | Ollama model name |
 | `LOCAL_LLM_TIMEOUT` | `30` | Local LLM request timeout (seconds) |
+| `AI_HAT_ENABLED` | `0` | Enable AI HAT layer alongside local LLM (additive; Pi 5) |
 | `AI_MIN_CONFIDENCE` | `0.5` | Min confidence to persist detection (0–1) |
 | `AI_DUPLICATE_WINDOW_SEC` | `30` | Seconds to suppress same-label duplicate |
-| `AIHAT_MODEL_NAME` | `default` | AI HAT model (when `AI_MODE=aihat`) |
+| `AIHAT_MODEL_NAME` | `default` | AI HAT model (when AI HAT enabled) |
 | `AIHAT_DEVICE` | `auto` | Placeholder; AI HAT+ uses HailoRT auto-discovery |
+| `AI_MODE` | *(legacy)* | `mock`, `ollama`, `aihat`, `lmstudio`. Mapped to `LOCAL_LLM_PROVIDER`/`AI_HAT_ENABLED`. |
 | `API_HOST` | `0.0.0.0` | API bind host |
 | `API_PORT` | `8000` | API port |
 | `SQLITE_DB_PATH` | `~/.airautomatica/airautomatica.db` | SQLite database path |

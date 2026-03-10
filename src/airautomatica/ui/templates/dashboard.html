@@ -93,6 +93,11 @@
     .settings-field input, .settings-field select { width: 100%; max-width: 20rem; padding: 0.5rem; border-radius: 6px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: var(--text); font-size: 0.875rem; }
     .settings-field select { cursor: pointer; }
     .settings-field input:focus, .settings-field select:focus { outline: none; border-color: var(--connecting); }
+    .settings-section { margin-bottom: 1.5rem; }
+    .settings-section h3 { font-size: 0.8125rem; font-weight: 600; color: var(--muted); margin: 0 0 0.5rem 0; }
+    .settings-advanced-toggle { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 0.8125rem; padding: 0.25rem 0; display: flex; align-items: center; gap: 0.375rem; }
+    .settings-advanced-toggle:hover { color: var(--text); }
+    .settings-legacy { opacity: 0.85; }
   </style>
 </head>
 <body>
@@ -213,49 +218,89 @@
     <h2>Settings</h2>
     <p class="text-sm text-slate-400 mb-4">Changes are saved to <code class="text-slate-500">~/.airautomatica/settings.json</code>. Restart the app to apply.</p>
     <form id="settings-form" class="max-w-xl">
-      <div class="settings-field">
-        <label for="TELEMETRY_BACKEND">Telemetry backend</label>
-        <select id="TELEMETRY_BACKEND" name="TELEMETRY_BACKEND">
-          <option value="mock">mock</option>
-          <option value="serial">serial</option>
-        </select>
+      <div class="settings-section">
+        <h3>Telemetry</h3>
+        <div class="settings-field">
+          <label for="TELEMETRY_BACKEND">Telemetry backend</label>
+          <select id="TELEMETRY_BACKEND" name="TELEMETRY_BACKEND">
+            <option value="mock">mock</option>
+            <option value="serial">serial</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label for="SERIAL_PORT">Serial port</label>
+          <input type="text" id="SERIAL_PORT" name="SERIAL_PORT" placeholder="/dev/ttyUSB0" />
+          <span class="text-xs text-slate-500 mt-1 block">Default: /dev/ttyUSB0 (CP2102/USB-TTL). Use /dev/ttyACM0 for native USB devices.</span>
+        </div>
+        <div class="settings-field">
+          <label for="SERIAL_BAUD">Serial baud rate</label>
+          <input type="number" id="SERIAL_BAUD" name="SERIAL_BAUD" placeholder="921600" min="9600" max="2000000" />
+        </div>
       </div>
-      <div class="settings-field">
-        <label for="AI_MODE">AI mode</label>
-        <select id="AI_MODE" name="AI_MODE">
-          <option value="mock">mock</option>
-          <option value="ollama">ollama</option>
-          <option value="aihat">aihat</option>
-        </select>
+
+      <div class="settings-section">
+        <h3>AI Provider</h3>
+        <div class="settings-field">
+          <label for="LOCAL_LLM_PROVIDER">AI provider</label>
+          <select id="LOCAL_LLM_PROVIDER" name="LOCAL_LLM_PROVIDER">
+            <option value="mock">mock</option>
+            <option value="ollama">ollama</option>
+            <option value="lmstudio">lmstudio (legacy)</option>
+          </select>
+        </div>
+        <div id="ollama-fields" class="hidden">
+          <div class="settings-field">
+            <label for="LOCAL_LLM_BASE_URL">Ollama base URL</label>
+            <input type="text" id="LOCAL_LLM_BASE_URL" name="LOCAL_LLM_BASE_URL" placeholder="http://127.0.0.1:11434" />
+          </div>
+          <div class="settings-field">
+            <label for="LOCAL_LLM_MODEL">Ollama model name</label>
+            <input type="text" id="LOCAL_LLM_MODEL" name="LOCAL_LLM_MODEL" placeholder="gemma3:1b" />
+          </div>
+          <div class="settings-field">
+            <label for="LOCAL_LLM_TIMEOUT">Local LLM timeout (seconds)</label>
+            <input type="number" id="LOCAL_LLM_TIMEOUT" name="LOCAL_LLM_TIMEOUT" placeholder="30" min="1" />
+          </div>
+        </div>
+        <div id="lmstudio-fields" class="settings-legacy hidden">
+          <div class="settings-field">
+            <label for="LM_STUDIO_BASE_URL">LM Studio base URL</label>
+            <input type="text" id="LM_STUDIO_BASE_URL" name="LM_STUDIO_BASE_URL" placeholder="http://localhost:1234" />
+          </div>
+          <div class="settings-field">
+            <label for="LM_STUDIO_MODEL">LM Studio model name</label>
+            <input type="text" id="LM_STUDIO_MODEL" name="LM_STUDIO_MODEL" placeholder="local-model" />
+          </div>
+        </div>
       </div>
-      <div class="settings-field">
-        <label for="SERIAL_PORT">Serial port</label>
-        <input type="text" id="SERIAL_PORT" name="SERIAL_PORT" placeholder="/dev/ttyACM0" />
+
+      <div class="settings-section">
+        <h3>AI HAT</h3>
+        <div class="settings-field">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="AI_HAT_ENABLED" name="AI_HAT_ENABLED" value="1" />
+            <span>Enable AI HAT layer</span>
+          </label>
+          <span class="text-xs text-slate-500 mt-1 block">Additive: runs alongside the selected AI provider on Pi 5. Not mutually exclusive.</span>
+        </div>
       </div>
-      <div class="settings-field">
-        <label for="SERIAL_BAUD">Serial baud rate</label>
-        <input type="number" id="SERIAL_BAUD" name="SERIAL_BAUD" placeholder="921600" min="9600" max="2000000" />
+
+      <div class="settings-section">
+        <button type="button" id="advanced-toggle" class="settings-advanced-toggle" aria-expanded="false">
+          <span>▼</span> Advanced
+        </button>
+        <div id="advanced-fields" class="hidden mt-2">
+          <div class="settings-field">
+            <label for="AI_MIN_CONFIDENCE">AI min confidence (0–1)</label>
+            <input type="number" id="AI_MIN_CONFIDENCE" name="AI_MIN_CONFIDENCE" placeholder="0.5" min="0" max="1" step="0.1" />
+          </div>
+          <div class="settings-field">
+            <label for="AI_DUPLICATE_WINDOW_SEC">AI duplicate window (seconds)</label>
+            <input type="number" id="AI_DUPLICATE_WINDOW_SEC" name="AI_DUPLICATE_WINDOW_SEC" placeholder="30" min="1" />
+          </div>
+        </div>
       </div>
-      <div class="settings-field">
-        <label for="LOCAL_LLM_BASE_URL">Ollama base URL</label>
-        <input type="text" id="LOCAL_LLM_BASE_URL" name="LOCAL_LLM_BASE_URL" placeholder="http://127.0.0.1:11434" />
-      </div>
-      <div class="settings-field">
-        <label for="LOCAL_LLM_MODEL">Ollama model name</label>
-        <input type="text" id="LOCAL_LLM_MODEL" name="LOCAL_LLM_MODEL" placeholder="gemma3:1b" />
-      </div>
-      <div class="settings-field">
-        <label for="LOCAL_LLM_TIMEOUT">Local LLM timeout (seconds)</label>
-        <input type="number" id="LOCAL_LLM_TIMEOUT" name="LOCAL_LLM_TIMEOUT" placeholder="30" min="1" />
-      </div>
-      <div class="settings-field">
-        <label for="AI_MIN_CONFIDENCE">AI min confidence (0–1)</label>
-        <input type="number" id="AI_MIN_CONFIDENCE" name="AI_MIN_CONFIDENCE" placeholder="0.5" min="0" max="1" step="0.1" />
-      </div>
-      <div class="settings-field">
-        <label for="AI_DUPLICATE_WINDOW_SEC">AI duplicate window (seconds)</label>
-        <input type="number" id="AI_DUPLICATE_WINDOW_SEC" name="AI_DUPLICATE_WINDOW_SEC" placeholder="30" min="1" />
-      </div>
+
       <div class="flex gap-2 mt-4">
         <button type="submit" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm">Save</button>
         <span id="settings-status" class="text-sm text-slate-500 self-center"></span>
@@ -265,7 +310,13 @@
   </div>
 
   <script>
-    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'];
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','LM_STUDIO_BASE_URL','LM_STUDIO_MODEL','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'];
+
+    function updateProviderVisibility() {
+      const p = document.getElementById('LOCAL_LLM_PROVIDER').value;
+      document.getElementById('ollama-fields').classList.toggle('hidden', p !== 'ollama');
+      document.getElementById('lmstudio-fields').classList.toggle('hidden', p !== 'lmstudio');
+    }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -278,23 +329,44 @@
       });
     });
 
+    document.getElementById('LOCAL_LLM_PROVIDER').addEventListener('change', updateProviderVisibility);
+
+    document.getElementById('advanced-toggle').addEventListener('click', () => {
+      const el = document.getElementById('advanced-fields');
+      const btn = document.getElementById('advanced-toggle');
+      const open = !el.classList.contains('hidden');
+      el.classList.toggle('hidden', open);
+      btn.setAttribute('aria-expanded', !open);
+      btn.querySelector('span').textContent = open ? '▼' : '▲';
+    });
+
     function loadSettingsForm() {
       fetch('/settings').then(r => r.json()).then(d => {
         const s = d.settings || {};
         SETTINGS_KEYS.forEach(k => {
           const el = document.getElementById(k);
-          if (el && s[k] !== undefined) el.value = s[k];
+          if (!el) return;
+          if (el.type === 'checkbox') {
+            el.checked = s[k] === '1' || s[k] === 'true' || s[k] === true;
+          } else if (s[k] !== undefined && s[k] !== null) {
+            el.value = s[k];
+          }
         });
+        updateProviderVisibility();
       }).catch(() => {});
     }
 
     document.getElementById('settings-form').addEventListener('submit', (e) => {
       e.preventDefault();
-      const form = e.target;
       const updates = {};
       SETTINGS_KEYS.forEach(k => {
         const el = document.getElementById(k);
-        if (el && el.value) updates[k] = el.value;
+        if (!el) return;
+        if (el.type === 'checkbox') {
+          updates[k] = el.checked ? '1' : '0';
+        } else if (el.value) {
+          updates[k] = el.value;
+        }
       });
       const statusEl = document.getElementById('settings-status');
       statusEl.textContent = 'Saving…';

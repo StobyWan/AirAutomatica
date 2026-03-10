@@ -33,3 +33,21 @@ def test_session_detail_route_exists(client: TestClient) -> None:
     assert "text/html" in r.headers.get("content-type", "")
     assert "AIRAUTOMATICA" in r.text
     assert "path-list" in r.text
+
+
+def test_dashboard_settings_uses_canonical_keys(client: TestClient) -> None:
+    """Settings tab uses LOCAL_LLM_PROVIDER and AI_HAT_ENABLED; no AI_MODE.
+    Frontend sends canonical keys only on save."""
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+    html = r.text
+    assert 'id="LOCAL_LLM_PROVIDER"' in html
+    assert 'id="AI_HAT_ENABLED"' in html
+    assert "LOCAL_LLM_PROVIDER" in html
+    assert "AI_HAT_ENABLED" in html
+    assert 'id="AI_MODE"' not in html
+    assert "'AI_MODE'" not in html and '"AI_MODE"' not in html
+    assert "Telemetry" in html
+    assert "AI Provider" in html
+    assert "AI HAT" in html
+    assert "Advanced" in html
