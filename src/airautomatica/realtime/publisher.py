@@ -28,6 +28,7 @@ def _build_health_payload(
     session_id: Optional[int],
     persistence_enabled: bool,
     last_persistence_error: Optional[str],
+    capabilities: Optional[dict] = None,
 ) -> dict:
     """Build null-safe health payload for Socket.IO."""
     payload: dict = {
@@ -57,6 +58,8 @@ def _build_health_payload(
             "last_disconnect_reason": state.last_disconnect_reason,
             "heartbeat_age_s": nan_to_none(state.heartbeat_age_s),
         }
+    if capabilities is not None:
+        payload["capabilities"] = capabilities
     return payload
 
 
@@ -127,6 +130,8 @@ class DashboardPublisher:
                             }
                         )
 
+                caps = self._store.get_capabilities()
+                caps_dict = caps.to_dict() if caps is not None else None
                 health = _build_health_payload(
                     state,
                     self._ai_mode,
@@ -134,6 +139,7 @@ class DashboardPublisher:
                     self._session_id,
                     persistence_enabled,
                     last_error,
+                    capabilities=caps_dict,
                 )
                 await self._sio.emit("health_update", health)
 

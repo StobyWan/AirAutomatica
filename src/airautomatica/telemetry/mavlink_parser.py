@@ -61,6 +61,7 @@ class MavlinkNormalizer:
         self._heartbeat_count = 0
         self._last_heartbeat_time: float | None = None
         self._last_heartbeat_at: datetime | None = None
+        self._mode_mapping: dict[int, str] = dict(MODE_MAPPING_APM)
         self._accum: dict[str, Any] = {
             "mode": "UNKNOWN",
             "lat": _nan(),
@@ -96,7 +97,11 @@ class MavlinkNormalizer:
         self._last_heartbeat_time = time.monotonic()
         self._last_heartbeat_at = datetime.now(timezone.utc)
         custom_mode = getattr(msg, "custom_mode", 0)
-        self._accum["mode"] = MODE_MAPPING_APM.get(custom_mode, "UNKNOWN")
+        self._accum["mode"] = self._mode_mapping.get(custom_mode, "UNKNOWN")
+
+    def set_mode_mapping(self, mapping: dict[int, str]) -> None:
+        """Override flight mode mapping (for INAV, generic adapters)."""
+        self._mode_mapping = dict(mapping)
 
     def _apply_global_position_int(self, msg: Any) -> None:
         """GLOBAL_POSITION_INT (id 33): lat/lon degE7, relative_alt mm, hdg cdeg.

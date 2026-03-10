@@ -48,6 +48,7 @@ from airautomatica.telemetry import (
     SerialMavlinkTelemetry,
     TelemetrySource,
 )
+from airautomatica.telemetry.capabilities import CapabilityInfo
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +73,29 @@ def _shutdown_cleanup(
         session_ref[0] = None
 
 
-def _create_telemetry_source() -> TelemetrySource:
+def _create_telemetry_source(
+    store: StateStore,
+    persistence: PersistenceService | None = None,
+    session_ref: list[int | None] | None = None,
+) -> TelemetrySource:
     """Create telemetry source based on TELEMETRY_BACKEND env var."""
+
+    def _capability_callback(info: CapabilityInfo) -> None:
+        store.set_capabilities(info)
+        sid = session_ref[0] if session_ref else None
+        if persistence is not None and sid is not None:
+            persistence.insert_system_event(
+                session_id=sid,
+                level="info",
+                event_type="capability_profile_set",
+                message=f"Capability profile: {info.firmware_name} ({info.profile_id})",
+                metadata={
+                    "firmware_name": info.firmware_name,
+                    "profile_id": info.profile_id,
+                    "downgrade_reasons": list(info.downgrade_reasons),
+                },
+            )
+
     backend = get_telemetry_backend()
     if backend == "mock":
         return MockTelemetry()
@@ -81,6 +103,7 @@ def _create_telemetry_source() -> TelemetrySource:
         return SerialMavlinkTelemetry(
             port=get_serial_port(),
             baud=get_serial_baud(),
+            capability_callback=_capability_callback,
         )
     logger.warning("Unknown backend %r, defaulting to mock", backend)
     return MockTelemetry()
@@ -151,7 +174,6 @@ def main() -> None:
     """Run API server, telemetry loop, and mission logic."""
     setup_logging()
     store = StateStore()
-    source = _create_telemetry_source()
     ai_service = _create_ai_service()
 
     init_db(get_sqlite_db_path())
@@ -162,6 +184,7 @@ def main() -> None:
         ai_backend=get_ai_mode(),
     )
     session_ref: list[int | None] = [session_id]
+    source = _create_telemetry_source(store, persistence, session_ref)
     if session_id is not None:
         logger.info("Session: id=%s", session_id)
     else:
