@@ -59,6 +59,9 @@ def create_app(
                 "reconnect_count": 0,
                 "last_disconnect_reason": None,
             }
+            caps = store.get_capabilities()
+            if caps is not None:
+                health_data["capabilities"] = caps.to_dict()
             return health_data
         age = nan_to_none(state.heartbeat_age_s)
         health_data["telemetry"] = {
@@ -71,6 +74,9 @@ def create_app(
             ),
             "heartbeat_age_s": age,
         }
+        caps = store.get_capabilities()
+        if caps is not None:
+            health_data["capabilities"] = caps.to_dict()
         return health_data
 
     @app.get("/state")

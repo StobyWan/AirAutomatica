@@ -121,6 +121,10 @@
     </div>
     <div id="telemetry-status"></div>
     <div id="telemetry-alert" class="hidden mt-2 px-3 py-2 rounded text-sm bg-amber-900/40 text-amber-200 border border-amber-700/50"></div>
+    <div id="capability-banner" class="hidden mt-2 pt-2 border-t border-white/10">
+      <h3 class="text-xs font-semibold text-slate-400 mb-1.5">Autopilot Capabilities</h3>
+      <div id="capability-content"></div>
+    </div>
     <div class="grid" id="health-fields"></div>
   </div>
 
@@ -344,6 +348,28 @@
         alertEl.textContent = status === 'stale' ? 'Telemetry stale (no recent heartbeat). Unplug FC to see disconnect.' : 'Telemetry disconnected. Unplug FC to see this with real hardware.';
       } else {
         alertEl.classList.add('hidden');
+      }
+      const caps = d.capabilities;
+      const bannerEl = document.getElementById('capability-banner');
+      const contentEl = document.getElementById('capability-content');
+      if (caps && typeof caps === 'object') {
+        bannerEl.classList.remove('hidden');
+        const labelMap = { supports_params_read: 'params_read', supports_params_write: 'params_write', supports_command_long: 'command_long', supports_message_interval: 'message_interval', supports_missions: 'missions', supports_guided_actions: 'guided', supports_rc_over_mavlink: 'rc_over_mavlink' };
+        const chips = Object.entries(labelMap).map(([k, label]) => {
+          const v = caps[k];
+          const supported = v === true;
+          const c = supported ? 'chip-ok' : 'chip-err';
+          const sym = supported ? '✓' : '✗';
+          return `<span class="chip ${c}">${label} ${sym}</span>`;
+        }).join(' ');
+        let html = `<div class="flex items-center gap-2 flex-wrap text-sm"><span class="text-slate-300">${fmt(caps.firmware_name)}</span><span class="text-slate-500">(${fmt(caps.profile_id)})</span></div>`;
+        html += `<div class="flex flex-wrap gap-1.5 mt-1.5">${chips}</div>`;
+        if (caps.notes) html += `<div class="mt-1 text-xs text-slate-500">${fmt(caps.notes)}</div>`;
+        const reasons = caps.downgrade_reasons || [];
+        if (reasons.length > 0) html += `<div class="mt-1.5 text-xs"><span class="text-amber-400">Downgrades:</span> <span class="text-slate-400">${reasons.join(', ')}</span></div>`;
+        contentEl.innerHTML = html;
+      } else {
+        bannerEl.classList.add('hidden');
       }
       document.getElementById('health-fields').innerHTML = [
         ['telemetry_backend', d.telemetry_backend],

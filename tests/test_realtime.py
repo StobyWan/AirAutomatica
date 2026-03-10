@@ -147,3 +147,35 @@ def test_sessions_payload_with_sessions() -> None:
     payload = _build_sessions_payload(sessions, 20)
     assert payload["sessions"] == sessions
     assert payload["current_session_id"] == 20
+
+
+def test_health_payload_includes_capabilities_with_firmware_and_profile() -> None:
+    """Health payload capabilities include firmware_name and profile_id when provided."""
+    capabilities = {
+        "firmware_name": "ArduPilot",
+        "profile_id": "ardupilot",
+        "supports_params_read": True,
+        "supports_params_write": True,
+        "supports_command_long": True,
+        "supports_message_interval": True,
+        "supports_missions": True,
+        "supports_guided_actions": True,
+        "supports_rc_over_mavlink": True,
+        "notes": "",
+        "downgrade_reasons": ["parameter read probe timeout"],
+    }
+    payload = _build_health_payload(
+        state=None,
+        ai_mode="mock",
+        telemetry_backend="serial",
+        session_id=None,
+        persistence_enabled=False,
+        last_persistence_error=None,
+        capabilities=capabilities,
+    )
+    assert payload["capabilities"] == capabilities
+    assert payload["capabilities"]["firmware_name"] == "ArduPilot"
+    assert payload["capabilities"]["profile_id"] == "ardupilot"
+    assert payload["capabilities"]["downgrade_reasons"] == [
+        "parameter read probe timeout"
+    ]
