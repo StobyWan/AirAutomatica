@@ -90,6 +90,7 @@ def test_get_format_for_task_returns_schema_for_telemetry_summary() -> None:
     assert "required" in result
     assert result.get("additionalProperties") is False
     assert "status" in result["properties"]
+    assert result["properties"]["status"].get("enum") == ["ok", "warn", "error"]
     assert "summary" in result["properties"]
     assert "concerns" in result["properties"]
     assert "recommendations" in result["properties"]
@@ -254,6 +255,31 @@ def test_parse_telemetry_summary_str_schema_leakage() -> None:
     assert result.status == "unknown"
     assert result.concerns == ()
     assert result.recommendations == ()
+
+
+def test_parse_telemetry_summary_invalid_status() -> None:
+    """Invalid status (e.g. flight mode 'guiding') normalizes to unknown."""
+    raw: dict[str, Any] = {
+        "status": "guiding",
+        "summary": "10 samples",
+        "concerns": ["bat"],
+        "recommendations": [],
+    }
+    result = parse_telemetry_summary_response(raw)
+    assert result.status == "unknown"
+
+
+def test_parse_telemetry_summary_valid_statuses() -> None:
+    """Valid status values ok, warn, error pass through."""
+    for st in ("ok", "warn", "error"):
+        raw: dict[str, Any] = {
+            "status": st,
+            "summary": "x",
+            "concerns": [],
+            "recommendations": [],
+        }
+        result = parse_telemetry_summary_response(raw)
+        assert result.status == st
 
 
 # --- Event classification parser ---

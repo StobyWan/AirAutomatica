@@ -71,7 +71,7 @@ class EventClassificationContext(TypedDict, total=False):
 SCHEMA_TELEMETRY_OBJ: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "status": {"type": "string"},
+        "status": {"type": "string", "enum": ["ok", "warn", "error"]},
         "summary": {"type": "string"},
         "concerns": {"type": "array", "items": {"type": "string"}},
         "recommendations": {"type": "array", "items": {"type": "string"}},
@@ -231,7 +231,7 @@ def parse_telemetry_summary_response(
         )
         raw = {}
     status = _safe_str(raw.get("status")) or "unknown"
-    if status.lower() == "str":
+    if status.lower() == "str" or status.lower() not in ("ok", "warn", "error"):
         status = "unknown"
     return TelemetrySummaryResult(
         status=status,
