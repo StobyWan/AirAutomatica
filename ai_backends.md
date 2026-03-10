@@ -21,23 +21,20 @@ Local LLM provider (mock or ollama) and AI HAT are **complementary**, not mutual
 ## Configuration
 
 ```bash
-# Mode selection (default: mock). AI_BACKEND supported for legacy.
-export AI_MODE=mock|ollama|aihat
-
-# Local LLM (when AI_MODE=ollama or LOCAL_LLM_PROVIDER=ollama)
+# AI provider: mock, ollama, or lmstudio
 export LOCAL_LLM_PROVIDER=mock
 export LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
 export LOCAL_LLM_MODEL=gemma3:1b
 export LOCAL_LLM_TIMEOUT=30
 
-# AI HAT: enable alongside local provider (AI_HAT_ENABLED=1 or AI_MODE=aihat)
+# AI HAT: enable alongside local provider
 export AI_HAT_ENABLED=0
 
-# Mission logic filtering (all modes): min confidence to persist; duplicate window (sec)
+# Mission logic filtering: min confidence to persist; duplicate window (sec)
 export AI_MIN_CONFIDENCE=0.5
 export AI_DUPLICATE_WINDOW_SEC=30
 
-# AI HAT (when AI_MODE=aihat)
+# AI HAT (when AI_HAT_ENABLED=1)
 export AIHAT_MODEL_NAME=default
 # AIHAT_DEVICE: placeholder. Real AI HAT+ uses HailoRT device discovery; no path needed.
 export AIHAT_DEVICE=auto
@@ -47,13 +44,13 @@ export AIHAT_DEVICE=auto
 
 1. **Mock mode** (default): No setup. AI results are deterministic fakes.
    ```bash
-   AI_MODE=mock python -m airautomatica.main
+   LOCAL_LLM_PROVIDER=mock python -m airautomatica.main
    ```
 
 2. **Ollama mode**: Install [Ollama](https://ollama.com/), pull a model (`ollama pull gemma3:1b`), start the server (runs automatically). Ollama simulates AI outputs at the contract level—useful for testing mission logic without hardware.
    ```bash
    make setup-ollama
-   AI_MODE=ollama python -m airautomatica.main
+   LOCAL_LLM_PROVIDER=ollama python -m airautomatica.main
    ```
    Ollama mode is intended to simulate **perception-style outputs** (e.g. person, vehicle, object), not aircraft status or system summaries. Mission logic rejects mode/status labels (GUIDED, AUTO, device_status, battery, etc.) so only detection-like results are persisted.
 
@@ -73,7 +70,7 @@ In flight, AI HAT mode provides **onboard perception** (vision, object detection
 
 To switch from Ollama (dev) to AI HAT (Raspberry Pi 5):
 
-1. Set `AI_MODE=aihat` and configure `AIHAT_MODEL_NAME`, `AIHAT_DEVICE`.
+1. Set `AI_HAT_ENABLED=1` and configure `AIHAT_MODEL_NAME`, `AIHAT_DEVICE`.
 2. Complete the `AiHatAiService` implementation using Hailo SDK or Pi AI Kit.
 3. No refactoring of mission logic—only service implementation and config.
 

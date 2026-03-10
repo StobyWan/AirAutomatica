@@ -172,6 +172,7 @@ def test_mode_selection_lmstudio() -> None:
         m.setenv("AI_MODE", "lmstudio")
         m.delenv("AI_BACKEND", raising=False)
         m.delenv("AI_HAT_ENABLED", raising=False)
+        m.delenv("LOCAL_LLM_PROVIDER", raising=False)
         service = _create_ai_service()
     assert isinstance(service, LmStudioAiService)
 
@@ -184,6 +185,7 @@ def test_mode_selection_aihat() -> None:
         m.setenv("AI_MODE", "aihat")
         m.delenv("AI_BACKEND", raising=False)
         m.delenv("LOCAL_LLM_PROVIDER", raising=False)
+        m.delenv("AI_HAT_ENABLED", raising=False)
         service = _create_ai_service()
     assert isinstance(service, ComposedAiService)
 
@@ -195,6 +197,7 @@ def test_ai_backend_legacy_env() -> None:
     with pytest.MonkeyPatch.context() as m:
         m.delenv("AI_MODE", raising=False)
         m.delenv("AI_HAT_ENABLED", raising=False)
+        m.delenv("LOCAL_LLM_PROVIDER", raising=False)
         m.setenv("AI_BACKEND", "lmstudio")
         service = _create_ai_service()
     assert isinstance(service, LmStudioAiService)
@@ -419,6 +422,7 @@ def test_aihat_unavailable_fallback() -> None:
     with pytest.MonkeyPatch.context() as m:
         m.setenv("AI_MODE", "mock")
         m.setenv("AI_HAT_ENABLED", "0")
+        m.delenv("LOCAL_LLM_PROVIDER", raising=False)
         service = _create_ai_service()
     assert isinstance(service, MockAiService)
 

@@ -74,7 +74,7 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | `TELEMETRY_BACKEND` | `mock` | `mock` or `serial` |
 | `SERIAL_PORT` | `/dev/ttyUSB0` | Serial device (default for CP2102/FTDI; use `/dev/ttyACM0` for native USB) |
 | `SERIAL_BAUD` | `921600` | Baud rate (57600 for telemetry radios) |
-| `LOCAL_LLM_PROVIDER` | `mock` | `mock`, `ollama`, or `lmstudio` (legacy). Primary AI control. |
+| `LOCAL_LLM_PROVIDER` | `mock` | `mock`, `ollama`, or `lmstudio` |
 | `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:11434` | Ollama API URL |
 | `LOCAL_LLM_MODEL` | `gemma3:1b` | Ollama model name |
 | `LOCAL_LLM_TIMEOUT` | `30` | Local LLM request timeout (seconds) |
@@ -83,7 +83,6 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | `AI_DUPLICATE_WINDOW_SEC` | `30` | Seconds to suppress same-label duplicate |
 | `AIHAT_MODEL_NAME` | `default` | AI HAT model (when AI HAT enabled) |
 | `AIHAT_DEVICE` | `auto` | Placeholder; AI HAT+ uses HailoRT auto-discovery |
-| `AI_MODE` | *(legacy)* | `mock`, `ollama`, `aihat`, `lmstudio`. Mapped to `LOCAL_LLM_PROVIDER`/`AI_HAT_ENABLED`. |
 | `API_HOST` | `0.0.0.0` | API bind host |
 | `API_PORT` | `8000` | API port |
 | `SQLITE_DB_PATH` | `~/.airautomatica/airautomatica.db` | SQLite database path |
@@ -94,7 +93,7 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 
 ```bash
 export TELEMETRY_BACKEND=mock
-export AI_MODE=mock
+export LOCAL_LLM_PROVIDER=mock
 python -m airautomatica.main
 # or: airautomatica
 # or with uv: uv run airautomatica
@@ -104,7 +103,7 @@ python -m airautomatica.main
 
 ```bash
 # Install Ollama, pull a model: make setup-ollama
-export AI_MODE=ollama
+export LOCAL_LLM_PROVIDER=ollama
 export LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
 export LOCAL_LLM_MODEL=gemma3:1b
 python -m airautomatica.main

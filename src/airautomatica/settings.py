@@ -75,6 +75,10 @@ def load_settings() -> None:
         for k, v in data.items():
             if k in _LOAD_ACCEPTED_KEYS and v is not None:
                 os.environ[k] = str(v)
+        if any(k in data for k in _LEGACY_KEYS):
+            logger.debug(
+                "Legacy AI_MODE/AI_BACKEND in settings; consider LOCAL_LLM_PROVIDER and AI_HAT_ENABLED"
+            )
     except Exception as e:
         logger.warning("Failed to load settings from %s: %s", _SETTINGS_FILE, e)
 

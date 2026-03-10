@@ -92,7 +92,8 @@ text = env_path.read_text() if env_path.exists() else ""
 
 defaults = {
     "TELEMETRY_BACKEND": "mock",
-    "AI_MODE": "mock",
+    "LOCAL_LLM_PROVIDER": "mock",
+    "AI_HAT_ENABLED": "0",
     "API_HOST": "0.0.0.0",
     "API_PORT": "8000",
     "SQLITE_DB_PATH": "~/.airautomatica/airautomatica.db",
