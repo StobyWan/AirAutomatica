@@ -8,6 +8,7 @@ The local database stores:
 
 - **Flight sessions** — Start/end times, telemetry and AI backend names
 - **Telemetry samples** — Throttled position, altitude, heading, battery, speed (sampled at ~1 Hz)
+- **Path points** — Distance-based flight path (lat/lon) for map display; stored when aircraft moves > 5 m
 - **Detections** — AI inference results (label, confidence, summary, position)
 - **System events** — Logged events, including telemetry lifecycle transitions (reconnects, status changes)
 - **Commands sent** — MAVLink or other commands (for future use)
@@ -53,6 +54,7 @@ SQLite runs in [WAL (Write-Ahead Logging)](https://www.sqlite.org/wal.html) mode
 |-------|---------|
 | `flight_sessions` | Session metadata (started_at, ended_at, backends) |
 | `telemetry_samples` | Throttled telemetry (lat, lon, alt, heading, voltage, etc.) |
+| `path_points` | Distance-based flight path (lat, lon, rel_alt_m) for map display |
 | `detections` | AI results (label, confidence, summary, position) |
 | `system_events` | Event log (level, type, message) |
 | `commands_sent` | Command log (name, status) |
@@ -60,6 +62,10 @@ SQLite runs in [WAL (Write-Ahead Logging)](https://www.sqlite.org/wal.html) mode
 ## Recent Detections
 
 `GET /recent-detections` returns up to 20 most recent persisted detections for the current flight session (newest first). Useful for bench testing AI detection flow. Returns empty list when DB is disabled or no session exists.
+
+## Session Path
+
+`GET /sessions/{session_id}/path` returns the flight path (lat/lon points, oldest first) for a session. Uses `path_points` when available; falls back to `telemetry_samples` for sessions recorded before path points existed. Useful for map display or export.
 
 ## Shutdown
 

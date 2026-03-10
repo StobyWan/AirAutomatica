@@ -1,7 +1,7 @@
 """Tests for SQLite persistence layer."""
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,13 +9,27 @@ import pytest
 from sqlalchemy import select
 
 from airautomatica.db.base import create_db_engine, enable_wal, get_engine, init_db
-from airautomatica.db.models import SystemEvent, TelemetrySample
+from airautomatica.db.models import PathPoint, SystemEvent, TelemetrySample
 from airautomatica.db.session import get_session
 from airautomatica.models.state import AircraftState, TelemetryStatus
 from airautomatica.services.persistence import (
+    PathRecorder,
     PersistenceService,
     TelemetryLifecycleLogger,
+    _haversine_m,
 )
+
+
+def test_haversine_m() -> None:
+    """Haversine distance is reasonable for known points."""
+    # Same point
+    assert _haversine_m(37.0, -122.0, 37.0, -122.0) < 1.0
+    # ~1 degree lat ≈ 111 km
+    d = _haversine_m(37.0, -122.0, 38.0, -122.0)
+    assert 110_000 < d < 112_000
+    # ~0.0001 deg ≈ 11 m
+    d = _haversine_m(37.0, -122.0, 37.0 + 0.0001, -122.0)
+    assert 10 < d < 12
 
 
 def test_db_init_and_wal() -> None:
@@ -125,6 +139,141 @@ def test_get_recent_detections_empty_when_no_engine() -> None:
     with patch("airautomatica.services.persistence.get_engine", return_value=None):
         persistence = PersistenceService()
         assert persistence.get_recent_detections(1) == []
+
+
+def test_get_recent_sessions_returns_sessions() -> None:
+    """get_recent_sessions returns sessions newest first with expected fields."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        assert get_engine() is not None
+
+        persistence = PersistenceService()
+        s1 = persistence.start_session("mock", "mock")
+        s2 = persistence.start_session("serial", "lmstudio")
+        assert s1 is not None and s2 is not None
+
+        sessions = persistence.get_recent_sessions(limit=10)
+        assert len(sessions) >= 2
+        assert sessions[0]["id"] == s2
+        assert sessions[1]["id"] == s1
+        assert sessions[0]["telemetry_backend"] == "serial"
+        assert sessions[0]["ai_backend"] == "lmstudio"
+        assert "started_at" in sessions[0]
+        assert "ended_at" in sessions[0]
+        assert sessions[0]["ended_at"] is None
+
+
+def test_insert_path_point_and_get_session_path() -> None:
+    """insert_path_point stores points; get_session_path returns them oldest first."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        assert get_engine() is not None
+
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        t1 = datetime.now(timezone.utc)
+        t2 = t1 + timedelta(seconds=1)
+        t3 = t2 + timedelta(seconds=1)
+        persistence.insert_path_point(session_id, t1, 37.0, -122.0, 100.0)
+        persistence.insert_path_point(session_id, t2, 37.001, -122.001, 105.0)
+        persistence.insert_path_point(session_id, t3, 37.002, -122.002, 110.0)
+
+        path_data = persistence.get_session_path(session_id)
+        assert len(path_data) == 3
+        assert path_data[0]["lat"] == 37.0
+        assert path_data[0]["lon"] == -122.0
+        assert path_data[0]["rel_alt_m"] == 100.0
+        assert path_data[2]["lat"] == 37.002
+        assert path_data[2]["lon"] == -122.002
+
+
+def test_get_session_path_fallback_to_telemetry_samples() -> None:
+    """get_session_path falls back to telemetry_samples when path_points is empty."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        assert get_engine() is not None
+
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        now = datetime.now(timezone.utc)
+        state = AircraftState(
+            connected=True,
+            heartbeat=1,
+            mode="GUIDED",
+            lat=37.5,
+            lon=-122.5,
+            rel_alt_m=50.0,
+            heading_deg=90.0,
+            roll_rad=0.0,
+            pitch_rad=0.0,
+            yaw_rad=0.0,
+            voltage_v=12.5,
+            current_a=2.0,
+            groundspeed_m_s=10.0,
+            airspeed_m_s=12.0,
+            timestamp=now,
+            telemetry_status="connected",
+        )
+        persistence.insert_telemetry_sample(session_id, state)
+
+        path_data = persistence.get_session_path(session_id)
+        assert len(path_data) == 1
+        assert path_data[0]["lat"] == 37.5
+        assert path_data[0]["lon"] == -122.5
+        assert path_data[0]["rel_alt_m"] == 50.0
+
+
+def test_path_recorder_distance_based() -> None:
+    """PathRecorder stores first point, then only when moved > min_distance_m."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        assert get_engine() is not None
+
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        recorder = PathRecorder(persistence, session_id, min_distance_m=100.0)
+        now = datetime.now(timezone.utc)
+
+        def make_state(lat: float, lon: float) -> AircraftState:
+            return AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=lat,
+                lon=lon,
+                rel_alt_m=100.0,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=now,
+                telemetry_status="connected",
+            )
+
+        recorder.maybe_record(make_state(37.0, -122.0))
+        recorder.maybe_record(make_state(37.0, -122.0))
+        recorder.maybe_record(make_state(37.001, -122.0))
+        recorder.maybe_record(make_state(37.002, -122.0))
+
+        path_data = persistence.get_session_path(session_id)
+        assert len(path_data) == 3
+        assert path_data[0]["lat"] == 37.0
+        assert path_data[1]["lat"] == 37.001
+        assert path_data[2]["lat"] == 37.002
 
 
 def test_persistence_no_op_when_engine_none() -> None:

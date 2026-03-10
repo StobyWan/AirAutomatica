@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import threading
 import time
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from airautomatica.db.base import get_engine
-from airautomatica.db.models import Detection, FlightSession, TelemetrySample
+from airautomatica.db.models import Detection, FlightSession, PathPoint, TelemetrySample
 from airautomatica.db.session import get_session
 from airautomatica.models.state import nan_to_none
 
@@ -190,6 +191,126 @@ class PersistenceService:
             logger.exception("get_recent_detections failed: %s", e)
             return []
 
+    def insert_path_point(
+        self,
+        session_id: int,
+        timestamp: datetime,
+        lat: float,
+        lon: float,
+        rel_alt_m: float | None = None,
+    ) -> None:
+        """Insert a path point. Used by PathRecorder for distance-based sampling."""
+        if get_engine() is None:
+            return
+        try:
+            with get_session() as session:
+                if session is None:
+                    return
+                row = PathPoint(
+                    session_id=session_id,
+                    timestamp=timestamp,
+                    lat=lat,
+                    lon=lon,
+                    rel_alt_m=rel_alt_m,
+                )
+                session.add(row)
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("insert_path_point failed: %s", e)
+
+    def get_session_path(
+        self,
+        session_id: int,
+        limit: int = 5000,
+    ) -> list[dict]:
+        """Fetch flight path for a session, oldest first. Returns [] when DB disabled or on error.
+
+        Uses path_points if available; otherwise falls back to telemetry_samples for backward
+        compatibility with sessions recorded before path_points existed.
+        """
+        if get_engine() is None or session_id is None:
+            return []
+        try:
+            with get_session() as session:
+                if session is None:
+                    return []
+                # Prefer path_points (compact); fallback to telemetry_samples
+                result = session.execute(
+                    select(PathPoint)
+                    .where(PathPoint.session_id == session_id)
+                    .order_by(PathPoint.timestamp.asc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                if rows:
+                    return [
+                        {
+                            "timestamp": r.timestamp.isoformat(),
+                            "lat": r.lat,
+                            "lon": r.lon,
+                            "rel_alt_m": r.rel_alt_m,
+                        }
+                        for r in rows
+                    ]
+                # Fallback: use telemetry_samples (filter out null lat/lon)
+                result = session.execute(
+                    select(TelemetrySample)
+                    .where(
+                        TelemetrySample.session_id == session_id,
+                        TelemetrySample.lat.isnot(None),
+                        TelemetrySample.lon.isnot(None),
+                    )
+                    .order_by(TelemetrySample.timestamp.asc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                return [
+                    {
+                        "timestamp": r.timestamp.isoformat(),
+                        "lat": r.lat,
+                        "lon": r.lon,
+                        "rel_alt_m": r.rel_alt_m,
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_session_path failed: %s", e)
+            return []
+
+    def get_recent_sessions(self, limit: int = 10) -> list[dict]:
+        """Fetch recent flight sessions, newest first. Returns [] when DB disabled or on error."""
+        if get_engine() is None:
+            return []
+        try:
+            with get_session() as session:
+                if session is None:
+                    return []
+                result = session.execute(
+                    select(FlightSession)
+                    .order_by(FlightSession.started_at.desc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                out: list[dict] = []
+                for row in rows:
+                    out.append(
+                        {
+                            "id": row.id,
+                            "started_at": row.started_at.isoformat(),
+                            "ended_at": (
+                                row.ended_at.isoformat() if row.ended_at else None
+                            ),
+                            "telemetry_backend": row.telemetry_backend,
+                            "ai_backend": row.ai_backend,
+                        }
+                    )
+                return out
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_recent_sessions failed: %s", e)
+            return []
+
     def insert_system_event(
         self,
         session_id: int | None,
@@ -295,6 +416,70 @@ class TelemetryLifecycleLogger:
             message=message,
             metadata=metadata,
         )
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Approximate distance in meters between two lat/lon points."""
+    R = 6_371_000  # Earth radius in m
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+
+class PathRecorder:
+    """Distance-based path recorder. Stores a point only when aircraft has moved > min_distance_m."""
+
+    def __init__(
+        self,
+        persistence: PersistenceService,
+        session_id: int | None,
+        min_distance_m: float = 5.0,
+    ) -> None:
+        self._persistence = persistence
+        self._session_id = session_id
+        self._min_distance_m = min_distance_m
+        self._last_lat: float | None = None
+        self._last_lon: float | None = None
+
+    def maybe_record(self, state: "AircraftState") -> None:
+        """If moved enough from last point (or first valid point), insert path point."""
+        if self._session_id is None:
+            return
+        if get_engine() is None:
+            return
+        lat = nan_to_none(state.lat)
+        lon = nan_to_none(state.lon)
+        if lat is None or lon is None:
+            return
+        if self._last_lat is None or self._last_lon is None:
+            self._persistence.insert_path_point(
+                self._session_id,
+                state.timestamp,
+                lat,
+                lon,
+                nan_to_none(state.rel_alt_m),
+            )
+            self._last_lat = lat
+            self._last_lon = lon
+            return
+        dist = _haversine_m(self._last_lat, self._last_lon, lat, lon)
+        if dist >= self._min_distance_m:
+            self._persistence.insert_path_point(
+                self._session_id,
+                state.timestamp,
+                lat,
+                lon,
+                nan_to_none(state.rel_alt_m),
+            )
+            self._last_lat = lat
+            self._last_lon = lon
 
 
 class TelemetrySampler:

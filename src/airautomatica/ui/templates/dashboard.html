@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AIRAUTOMATICA Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
     :root {
@@ -60,6 +61,12 @@
       font-size: 0.875rem;
     }
     .detection-item:last-child { border-bottom: none; }
+    .session-item {
+      padding: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.875rem;
+    }
+    .session-item:last-child { border-bottom: none; }
     .na { color: var(--muted); }
   </style>
 </head>
@@ -70,12 +77,29 @@
   <div class="card">
     <h2>System Health</h2>
     <div id="telemetry-status"></div>
+    <div id="telemetry-alert" class="hidden mt-2 px-3 py-2 rounded text-sm bg-amber-900/40 text-amber-200 border border-amber-700/50"></div>
     <div class="grid" id="health-fields"></div>
   </div>
 
   <div class="card">
     <h2>Aircraft State</h2>
-    <div class="grid" id="state-fields"></div>
+    <div class="flex flex-col items-start gap-4">
+      <div class="flex flex-col items-center gap-1">
+        <div class="relative w-20 h-20 rounded-full border-2 border-gray-500 bg-gray-800/50 flex items-center justify-center">
+          <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-gray-400">N</span>
+          <span class="absolute right-0.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-500">E</span>
+          <span class="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-gray-500">S</span>
+          <span class="absolute left-0.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-500">W</span>
+          <div id="compass-arrow" class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150 ease-out" style="transform: rotate(0deg)">
+            <svg class="w-7 h-7 drop-shadow-sm" viewBox="0 0 24 24">
+              <polygon points="12,2 22,20 2,20" fill="#ef4444"/>
+            </svg>
+          </div>
+        </div>
+        <span id="compass-heading" class="text-xs text-gray-400 font-mono">—</span>
+      </div>
+      <div class="grid w-full" id="state-fields"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -86,6 +110,11 @@
   <div class="card">
     <h2>Session / Persistence</h2>
     <div class="grid" id="session-fields"></div>
+  </div>
+
+  <div class="card">
+    <h2>Session History</h2>
+    <div id="sessions-list"></div>
   </div>
 
   <script>
@@ -118,6 +147,13 @@
       const status = tel.telemetry_status || 'disconnected';
       document.getElementById('telemetry-status').innerHTML =
         `<span class="status-badge ${statusClass(status)}">${status}</span>`;
+      const alertEl = document.getElementById('telemetry-alert');
+      if (status === 'disconnected' || status === 'backoff' || status === 'stale') {
+        alertEl.classList.remove('hidden');
+        alertEl.textContent = status === 'stale' ? 'Telemetry stale (no recent heartbeat). Unplug FC to see disconnect.' : 'Telemetry disconnected. Unplug FC to see this with real hardware.';
+      } else {
+        alertEl.classList.add('hidden');
+      }
       document.getElementById('health-fields').innerHTML = [
         ['telemetry_backend', d.telemetry_backend],
         ['ai_mode', d.ai_mode],
@@ -137,6 +173,8 @@
       const s = d.state;
       if (!s) {
         document.getElementById('state-fields').innerHTML = '<span class="na">No state yet</span>';
+        document.getElementById('compass-arrow').style.transform = 'rotate(0deg)';
+        document.getElementById('compass-heading').textContent = '—';
         return;
       }
       const stateFields = [
@@ -152,6 +190,17 @@
       ];
       document.getElementById('state-fields').innerHTML = stateFields
         .map(([k, v]) => `<div class="field"><label>${k}</label><span>${v}</span></div>`).join('');
+
+      const heading = s.heading_deg;
+      const arrowEl = document.getElementById('compass-arrow');
+      const headingEl = document.getElementById('compass-heading');
+      if (heading != null && typeof heading === 'number' && !isNaN(heading) && heading >= 0 && heading <= 360 && Math.abs(heading) < 1e6) {
+        arrowEl.style.transform = `rotate(${heading}deg)`;
+        headingEl.textContent = `${Math.round(heading)}°`;
+      } else {
+        arrowEl.style.transform = 'rotate(0deg)';
+        headingEl.textContent = '—';
+      }
     });
 
     socket.on('detections_update', (d) => {
@@ -167,6 +216,34 @@
           ${d.summary ? ' — ' + d.summary : ''}
         </div>
       `).join('');
+    });
+
+    socket.on('sessions_update', (d) => {
+      const list = d.sessions || [];
+      const currentId = d.current_session_id;
+      const el = document.getElementById('sessions-list');
+      if (list.length === 0) {
+        el.innerHTML = '<span class="na">No sessions</span>';
+        return;
+      }
+      const fmtDate = (s) => {
+        if (!s) return '—';
+        try {
+          const dt = new Date(s);
+          return dt.toLocaleString();
+        } catch {
+          return s;
+        }
+      };
+      el.innerHTML = list.map(s => {
+        const isCurrent = s.id === currentId;
+        const badge = isCurrent ? '<span class="status-badge status-connecting text-[10px] ml-1">current</span>' : '';
+        const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="na">active</span>';
+        return `<div class="session-item">
+          <strong>#${s.id}</strong>${badge} — ${s.telemetry_backend} / ${s.ai_backend}
+          <div class="text-xs text-gray-500 mt-0.5">Started: ${fmtDate(s.started_at)} · Ended: ${ended}</div>
+        </div>`;
+      }).join('');
     });
   </script>
 </body>
