@@ -1,5 +1,8 @@
 # AIRAUTOMATICA
 
+[![CI](https://github.com/StobyWan/AirAutomatica/actions/workflows/ci.yml/badge.svg)](https://github.com/StobyWan/AirAutomatica/actions/workflows/ci.yml)
+[![Docker](https://github.com/StobyWan/AirAutomatica/actions/workflows/docker.yml/badge.svg)](https://github.com/StobyWan/AirAutomatica/actions/workflows/docker.yml)
+
 Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an ArduPilot flight controller over serial/USB, maintains shared aircraft state, and exposes a local FastAPI server. Designed for future onboard AI perception (Raspberry Pi AI HAT+); today it runs in mock or LM Studio mode for development.
 
 **Disclaimer:** This software is **not flight-critical**. It does not send commands to the flight controller. It reads telemetry and logs detections. Use at your own risk.
