@@ -107,7 +107,18 @@
 
   <div id="tab-main" class="tab-panel active">
   <div class="card">
-    <h2>System Health</h2>
+    <div class="flex items-center justify-between gap-4 mb-2">
+      <h2 class="m-0">System Health</h2>
+      <div id="session-view-btn" class="hidden">
+        <a href="#" id="session-view-link" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+          </svg>
+          View current session
+        </a>
+      </div>
+    </div>
     <div id="telemetry-status"></div>
     <div id="telemetry-alert" class="hidden mt-2 px-3 py-2 rounded text-sm bg-amber-900/40 text-amber-200 border border-amber-700/50"></div>
     <div class="grid" id="health-fields"></div>
@@ -347,6 +358,15 @@
         ['persistence_enabled', p.persistence_enabled],
         ['last_persistence_error', p.last_persistence_error],
       ].map(([k, v]) => `<div class="field"><label>${k}</label><span>${fmt(v)}</span></div>`).join('');
+      const sid = d.session_id;
+      const btnWrap = document.getElementById('session-view-btn');
+      const linkEl = document.getElementById('session-view-link');
+      if (sid != null && sid !== '') {
+        btnWrap.classList.remove('hidden');
+        linkEl.href = '/dashboard/sessions/' + sid;
+      } else {
+        btnWrap.classList.add('hidden');
+      }
     });
 
     socket.on('state_update', (d) => {

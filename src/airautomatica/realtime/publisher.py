@@ -204,9 +204,12 @@ class DashboardPublisher:
                             rel_alt_m_list.append(a if a is not None else 0.0)
                             g = s.get("groundspeed_m_s")
                             groundspeed_m_s.append(g if g is not None else 0.0)
-                    hb_list = list(self._heartbeat_buffer)[-30:]
-                    for h in reversed(hb_list):
-                        heartbeat_age_s.append(h["heartbeat_age_s"])
+                            hb = s.get("heartbeat_age_s")
+                            heartbeat_age_s.append(hb if hb is not None else 0.0)
+                    if not heartbeat_age_s:
+                        hb_list = list(self._heartbeat_buffer)[-30:]
+                        for h in reversed(hb_list):
+                            heartbeat_age_s.append(h["heartbeat_age_s"])
                     trends_payload = {
                         "voltage": voltage,
                         "rel_alt_m": rel_alt_m_list,

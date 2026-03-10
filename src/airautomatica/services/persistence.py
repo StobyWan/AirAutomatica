@@ -103,10 +103,20 @@ class PersistenceService:
                     lon=nan_to_none(state.lon),
                     rel_alt_m=nan_to_none(state.rel_alt_m),
                     heading_deg=nan_to_none(state.heading_deg),
+                    roll_rad=nan_to_none(state.roll_rad),
+                    pitch_rad=nan_to_none(state.pitch_rad),
+                    yaw_rad=nan_to_none(state.yaw_rad),
                     voltage_v=nan_to_none(state.voltage_v),
                     current_a=nan_to_none(state.current_a),
                     groundspeed_m_s=nan_to_none(state.groundspeed_m_s),
                     airspeed_m_s=nan_to_none(state.airspeed_m_s),
+                    mode=state.mode or None,
+                    heartbeat_age_s=nan_to_none(state.heartbeat_age_s),
+                    heartbeat=state.heartbeat,
+                    reconnect_count=state.reconnect_count,
+                    last_heartbeat_at=state.last_heartbeat_at,
+                    last_disconnect_reason=state.last_disconnect_reason,
+                    connected=state.connected,
                 )
                 session.add(row)
         except Exception as e:
@@ -446,6 +456,14 @@ class PersistenceService:
                         "rel_alt_m": r.rel_alt_m,
                         "voltage_v": r.voltage_v,
                         "groundspeed_m_s": r.groundspeed_m_s,
+                        "heartbeat_age_s": r.heartbeat_age_s,
+                        "mode": r.mode,
+                        "heading_deg": r.heading_deg,
+                        "roll_rad": r.roll_rad,
+                        "pitch_rad": r.pitch_rad,
+                        "yaw_rad": r.yaw_rad,
+                        "connected": r.connected,
+                        "reconnect_count": r.reconnect_count,
                     }
                     for r in rows
                 ]

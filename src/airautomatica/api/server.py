@@ -97,6 +97,14 @@ def create_app(
         path = persistence.get_session_path(sid)
         return {"path": path, "session_id": sid}
 
+    @app.get("/sessions/{sid:int}/detections")
+    def get_session_detections(sid: int) -> dict:
+        """Return detections for a session. For session detail page."""
+        if persistence is None:
+            return {"detections": [], "session_id": sid}
+        detections = persistence.get_recent_detections(sid, limit=50)
+        return {"detections": detections, "session_id": sid}
+
     @app.get("/recent-events")
     def get_recent_events() -> dict:
         """Return recent system events for dashboard. Degrades to [] when persistence disabled."""
