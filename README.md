@@ -13,7 +13,7 @@ Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an A
 - **LM Studio mode**: Local LLM simulates perception-style outputs. Useful for testing mission logic on macOS.
 - **Serial MAVLink mode**: Real telemetry from ArduPilot over USB/serial (Matek F405-WING, CP2102, etc.).
 - **API**: `/health`, `/state`, `/recent-detections`. SQLite persistence for sessions and detections.
-- **Live Dashboard**: Real-time UI at `GET /dashboard` with Socket.IO updates (health, state, detections). Read-only, non-flight-critical. Works with persistence disabled.
+- **Live Dashboard**: Real-time UI at `GET /dashboard` with Socket.IO updates (health, state, detections, session history). Session detail pages show flight path (lat/lon). Read-only, non-flight-critical. Works with persistence disabled.
 - **Graceful shutdown**: Ctrl+C ends session cleanly.
 
 ## What Is Mock vs Real
@@ -130,10 +130,21 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 | `GET /state` | Current aircraft state (JSON) |
 | `GET /recent-detections` | Recent persisted detections (current session, limit 20) |
 | `GET /dashboard` | Real-time flight dashboard (HTML + Socket.IO) |
+| `GET /dashboard/sessions/{id}` | Session detail page with flight path (lat/lon) |
+| `GET /sessions/{id}/path` | Flight path JSON (lat, lon, rel_alt_m, timestamp) |
 
 ## Live Dashboard
 
-`GET /dashboard` serves a real-time UI. Open `http://<host>:8000/dashboard` from a phone, tablet, or laptop on the same network. Uses Socket.IO for live updates (health, state, detections). Read-only, non-flight-critical. Works with persistence disabled.
+`GET /dashboard` serves a real-time UI. Open `http://<host>:8000/dashboard` from a phone, tablet, or laptop on the same network.
+
+**Features:**
+- **System Health** — Telemetry status, backend info, heartbeat age, reconnect count
+- **Aircraft State** — Mode, lat/lon, altitude, heading (with compass), voltage, speed
+- **Recent Detections** — AI detections for the current session
+- **Session History** — List of recent flight sessions; click a session to view its path
+- **Session Detail** — `GET /dashboard/sessions/{id}` shows the flight path (lat/lon points) for a session
+
+Uses Socket.IO for live updates. Read-only, non-flight-critical. Works with persistence disabled.
 
 ## Project Structure
 
@@ -171,7 +182,8 @@ src/airautomatica/
 └── ui/
     ├── dashboard.py    # Dashboard HTML loader
     └── templates/
-        └── dashboard.html
+        ├── dashboard.html
+        └── session_detail.html
 ```
 
 See [ai_backends.md](ai_backends.md) for AI backend details and Raspberry Pi transition.
