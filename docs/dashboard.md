@@ -16,6 +16,8 @@ The AIRAUTOMATICA dashboard is a real-time flight console served at `GET /dashbo
 
 Telemetry status badge, backend info, heartbeat age, reconnect count, last disconnect reason.
 
+When serial telemetry is connected, an **Autopilot Capabilities** subsection appears: firmware name (e.g. ArduPilot, INAV), profile ID, capability chips (params_read, params_write, command_long, message_interval, missions, guided, rc_over_mavlink) each with check or cross, optional notes, and any downgrade_reasons (e.g. "parameter read probe timeout"). This banner is hidden when `capabilities` is absent (e.g. mock mode).
+
 ### Aircraft State
 
 Mode, lat/lon, altitude, heading (with compass), voltage, current, groundspeed, airspeed.
@@ -56,7 +58,7 @@ Recent flight sessions with started_at, ended_at, duration (computed client-side
 
 | Event                   | Interval | Payload                          |
 |-------------------------|----------|----------------------------------|
-| health_update           | 1s       | status, telemetry, persistence  |
+| health_update           | 1s       | status, telemetry, persistence, capabilities (optional: firmware_name, profile_id, supports_*, notes, downgrade_reasons) |
 | state_update            | 1s       | aircraft state                   |
 | detections_update       | 1s       | detections, session_id           |
 | sessions_update         | 1s       | sessions (with detection_count)  |

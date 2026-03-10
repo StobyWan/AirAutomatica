@@ -154,6 +154,12 @@ The serial MAVLink backend derives `telemetry_status` from the connection lifecy
 
 ---
 
+## Autopilot Detection and Capability Probes
+
+HEARTBEAT `autopilot` (uint8) drives adapter selection: ArduPilot=3 (MAV_AUTOPILOT_ARDUPILOTMEGA), INAV=13, others → generic read-only profile. Each adapter exposes a capability profile (params read/write, missions, guided, etc.). Adapters may run optional probes (e.g. param read); probe failures add downgrade reasons and reduce reported capabilities. See `/health` `capabilities` block and dashboard Autopilot Capabilities panel.
+
+---
+
 ## TODOs
 
 - **BATTERY_STATUS**: Richer battery data (cell voltages, etc.). Currently use SYS_STATUS only. Consider BATTERY_STATUS if needed.
