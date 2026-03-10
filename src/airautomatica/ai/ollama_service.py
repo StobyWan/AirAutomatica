@@ -1,4 +1,4 @@
-"""LM Studio AI service for local macOS development and simulation."""
+"""Ollama AI service for local inference via POST /api/generate."""
 
 import json
 import logging
@@ -20,12 +20,10 @@ def _extract_json_from_content(content: str) -> dict | None:
     content = (content or "").strip()
     if not content:
         return None
-    # Try raw parse first
     try:
         return cast("dict[str, object] | None", json.loads(content))
     except json.JSONDecodeError:
         pass
-    # Try extracting from ```json ... ``` block
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
     if match:
         try:
@@ -35,11 +33,8 @@ def _extract_json_from_content(content: str) -> dict | None:
     return None
 
 
-class LmStudioAiService(AiService):
-    """Local inference via LM Studio HTTP API. Simulates AI HAT-like outputs for dev.
-
-    Deprecated. Use Ollama or mock instead. Kept for backward compatibility.
-    """
+class OllamaAiService(AiService):
+    """Local inference via Ollama HTTP API (POST /api/generate)."""
 
     def __init__(self, base_url: str, model: str, timeout_sec: float = 30.0) -> None:
         self._base_url = base_url.rstrip("/")
@@ -54,75 +49,73 @@ class LmStudioAiService(AiService):
             label="error",
             confidence=0.0,
             summary=summary,
-            source_backend="lmstudio",
+            source_backend="ollama",
             timestamp=datetime.now(timezone.utc),
             metadata=meta if meta else None,
         )
 
     async def infer(self, state: AircraftState | None) -> AiResult:
-        """Call LM Studio chat completions. Returns normalized AiResult."""
+        """Call Ollama /api/generate. Returns normalized AiResult."""
         prompt = self._build_prompt(state)
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 r = await client.post(
-                    f"{self._base_url}/v1/chat/completions",
+                    f"{self._base_url}/api/generate",
                     json={
                         "model": self._model,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "max_tokens": 256,
+                        "prompt": prompt,
+                        "stream": False,
+                        "format": "json",
                     },
                 )
                 r.raise_for_status()
                 try:
                     data = r.json()
                 except json.JSONDecodeError as e:
-                    logger.warning("LM Studio returned invalid JSON: %s", e)
+                    logger.warning("Ollama returned invalid JSON: %s", e)
                     return self._fallback_result(
                         "Invalid JSON response",
                         {"parse_error": "json"},
                     )
-                content = (
-                    data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                )
+                content = data.get("response", "")
                 content = (content or "").strip()
                 parsed = _extract_json_from_content(content)
                 if parsed is not None and isinstance(parsed, dict):
-                    result = AiResult.from_dict(parsed, "lmstudio")
+                    result = AiResult.from_dict(parsed, "ollama")
                     meta = dict(result.metadata or {})
                     meta["raw_length"] = len(content)
                     return AiResult(
                         label=result.label,
                         confidence=result.confidence,
                         summary=result.summary,
-                        source_backend="lmstudio",
+                        source_backend="ollama",
                         timestamp=result.timestamp,
                         bbox=result.bbox,
                         action=result.action,
                         metadata=meta,
                     )
-                # Best-effort: use raw content as summary
                 return AiResult(
-                    label="lmstudio",
-                    confidence=0.9,
+                    label="ollama",
+                    confidence=0.0,
                     summary=content[:200] if content else "No response",
-                    source_backend="lmstudio",
+                    source_backend="ollama",
                     timestamp=datetime.now(timezone.utc),
                     metadata={"raw_length": len(content)},
                 )
         except httpx.TimeoutException as e:
-            logger.warning("LM Studio inference timeout: %s", e)
+            logger.warning("Ollama inference timeout: %s", e)
             return self._fallback_result(
                 str(e),
                 {"error": True, "error_type": "timeout"},
             )
         except httpx.HTTPStatusError as e:
-            logger.warning("LM Studio HTTP error: %s", e)
+            logger.warning("Ollama HTTP error: %s", e)
             return self._fallback_result(
                 str(e),
                 {"error": True, "error_type": "http"},
             )
         except httpx.RequestError as e:
-            logger.warning("LM Studio request failed: %s", e)
+            logger.warning("Ollama request failed: %s", e)
             return self._fallback_result(
                 str(e),
                 {"error": True, "error_type": "network"},

@@ -14,19 +14,31 @@ from typing import Any, Callable
 
 import uvicorn
 
-from airautomatica.ai import AiHatAiService, AiService, LmStudioAiService, MockAiService
+from airautomatica.ai import (
+    AiHatAiService,
+    AiService,
+    ComposedAiService,
+    LmStudioAiService,
+    MockAiService,
+    OllamaAiService,
+)
 from airautomatica.api.server import create_app
 from airautomatica.config import (
     get_ai_duplicate_window_sec,
+    get_ai_hat_enabled,
     get_ai_min_confidence,
-    get_ai_mode,
     get_aihat_device,
     get_aihat_model_name,
     get_api_host,
     get_api_port,
+    get_effective_ai_backend,
     get_lm_studio_base_url,
     get_lm_studio_model,
     get_lm_studio_timeout,
+    get_local_llm_base_url,
+    get_local_llm_model,
+    get_local_llm_provider,
+    get_local_llm_timeout,
     get_serial_baud,
     get_serial_port,
     get_sqlite_db_path,
@@ -109,24 +121,46 @@ def _create_telemetry_source(
     return MockTelemetry()
 
 
-def _create_ai_service() -> AiService:
-    """Create AI service based on AI_MODE env var."""
-    mode = get_ai_mode()
-    if mode == "mock":
+def _create_base_ai_service() -> AiService:
+    """Create base local LLM service (mock or ollama). AI HAT is composed separately."""
+    provider = get_local_llm_provider()
+    if provider == "mock":
         return MockAiService()
-    if mode == "lmstudio":
+    if provider == "ollama":
+        return OllamaAiService(
+            base_url=get_local_llm_base_url("ollama"),
+            model=get_local_llm_model("ollama"),
+            timeout_sec=get_local_llm_timeout(),
+        )
+    if provider == "lmstudio":
+        logger.warning(
+            "LmStudioAiService is deprecated; prefer LOCAL_LLM_PROVIDER=ollama"
+        )
         return LmStudioAiService(
             base_url=get_lm_studio_base_url(),
             model=get_lm_studio_model(),
             timeout_sec=get_lm_studio_timeout(),
         )
-    if mode == "aihat":
-        return AiHatAiService(
+    logger.warning("Unknown AI provider %r, defaulting to mock", provider)
+    return MockAiService()
+
+
+def _create_ai_service() -> AiService:
+    """Create composed AI service: base local LLM + optional AI HAT layer."""
+    base = _create_base_ai_service()
+    aihat: AiService | None = None
+    if get_ai_hat_enabled():
+        aihat = AiHatAiService(
             model_name=get_aihat_model_name(),
             device=get_aihat_device(),
         )
-    logger.warning("Unknown AI mode %r, defaulting to mock", mode)
-    return MockAiService()
+        logger.info(
+            "AI HAT enabled alongside %s",
+            get_local_llm_provider(),
+        )
+    if aihat is not None:
+        return ComposedAiService(base_ai_service=base, aihat_service=aihat)
+    return base
 
 
 async def _run_with_restart(
@@ -181,7 +215,7 @@ def main() -> None:
     persistence = PersistenceService()
     session_id = persistence.start_session(
         telemetry_backend=get_telemetry_backend(),
-        ai_backend=get_ai_mode(),
+        ai_backend=get_effective_ai_backend(),
     )
     session_ref: list[int | None] = [session_id]
     source = _create_telemetry_source(store, persistence, session_ref)
@@ -210,7 +244,7 @@ def main() -> None:
         store,
         persistence,
         session_id,
-        get_ai_mode(),
+        get_effective_ai_backend(),
         get_telemetry_backend(),
         sio,
         interval_sec=1.0,
@@ -284,7 +318,7 @@ def main() -> None:
     logger.info(
         "Starting AIRAUTOMATICA (telemetry=%s ai=%s)",
         get_telemetry_backend(),
-        get_ai_mode(),
+        get_effective_ai_backend(),
     )
     if get_telemetry_backend() == "serial":
         logger.info(

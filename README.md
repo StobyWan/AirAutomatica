@@ -3,14 +3,14 @@
 [![CI](https://github.com/StobyWan/AirAutomatica/actions/workflows/ci.yml/badge.svg)](https://github.com/StobyWan/AirAutomatica/actions/workflows/ci.yml)
 [![Docker](https://github.com/StobyWan/AirAutomatica/actions/workflows/docker.yml/badge.svg)](https://github.com/StobyWan/AirAutomatica/actions/workflows/docker.yml)
 
-Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an ArduPilot flight controller over serial/USB, maintains shared aircraft state, and exposes a local FastAPI server. Designed for future onboard AI perception (Raspberry Pi AI HAT+); today it runs in mock or LM Studio mode for development.
+Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an ArduPilot flight controller over serial/USB, maintains shared aircraft state, and exposes a local FastAPI server. Designed for future onboard AI perception (Raspberry Pi AI HAT+); today it runs in mock or Ollama mode for development.
 
 **Disclaimer:** This software is **not flight-critical**. It does not send commands to the flight controller. It reads telemetry and logs detections. Use at your own risk.
 
 ## What Works Today
 
 - **Mock mode**: Simulated telemetry and AI. No hardware. Run locally for development.
-- **LM Studio mode**: Local LLM simulates perception-style outputs. Useful for testing mission logic on macOS.
+- **Ollama mode**: Local LLM via [Ollama](https://ollama.com/) simulates perception-style outputs. Useful for testing mission logic.
 - **Serial MAVLink mode**: Real telemetry from ArduPilot over USB/serial (Matek F405-WING, CP2102, etc.).
 - **API**: `/health`, `/state`, `/recent-detections`. SQLite persistence for sessions and detections.
 - **Live Dashboard**: Real-time UI at `GET /dashboard` with Socket.IO updates (health, state, detections, session history). Session detail pages show flight path (lat/lon). Read-only, non-flight-critical. Works with persistence disabled.
@@ -21,7 +21,7 @@ Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an A
 | Component | Mock | Real |
 |-----------|------|------|
 | Telemetry | Simulated orbit/state | MAVLink over serial |
-| AI | Deterministic fake or LM Studio | Raspberry Pi AI HAT+ (scaffold only) |
+| AI | Deterministic fake or Ollama | Raspberry Pi AI HAT+ (scaffold only) |
 | Persistence | SQLite (optional) | Same |
 
 AI HAT mode exists as a scaffold; real Hailo integration is not yet implemented.
@@ -58,6 +58,7 @@ uv venv
 source .venv/bin/activate  # or: .venv\Scripts\activate on Windows
 uv pip install -e ".[dev]"
 
+# Optional: Ollama for local AI (run make setup-ollama to install and pull default model)
 # Or with standard venv
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -73,9 +74,11 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | `TELEMETRY_BACKEND` | `mock` | `mock` or `serial` |
 | `SERIAL_PORT` | `/dev/ttyACM0` | Serial device (e.g. `/dev/ttyUSB0` for CP2102; `/dev/ttyACM0` for native USB) |
 | `SERIAL_BAUD` | `921600` | Baud rate (57600 for telemetry radios) |
-| `AI_MODE` | `mock` | `mock`, `lmstudio`, or `aihat` (`AI_BACKEND` legacy) |
-| `LM_STUDIO_BASE_URL` | `http://localhost:1234` | LM Studio API URL |
-| `LM_STUDIO_MODEL` | `local-model` | LM Studio model name |
+| `AI_MODE` | `mock` | `mock`, `ollama`, or `aihat` (`AI_BACKEND` legacy) |
+| `LOCAL_LLM_PROVIDER` | — | Override: `mock` or `ollama` when using local LLM |
+| `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:11434` | Ollama API URL |
+| `LOCAL_LLM_MODEL` | `gemma3:1b` | Ollama model name |
+| `LOCAL_LLM_TIMEOUT` | `30` | Local LLM request timeout (seconds) |
 | `AI_MIN_CONFIDENCE` | `0.5` | Min confidence to persist detection (0–1) |
 | `AI_DUPLICATE_WINDOW_SEC` | `30` | Seconds to suppress same-label duplicate |
 | `AIHAT_MODEL_NAME` | `default` | AI HAT model (when `AI_MODE=aihat`) |
@@ -96,13 +99,13 @@ python -m airautomatica.main
 # or with uv: uv run airautomatica
 ```
 
-**LM Studio mode** (local AI on macOS):
+**Ollama mode** (local AI):
 
 ```bash
-# Start LM Studio, load a model, enable local server
-export AI_MODE=lmstudio
-export LM_STUDIO_BASE_URL=http://localhost:1234
-export LM_STUDIO_MODEL=your-model
+# Install Ollama, pull a model: make setup-ollama
+export AI_MODE=ollama
+export LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
+export LOCAL_LLM_MODEL=gemma3:1b
 python -m airautomatica.main
 ```
 
@@ -151,7 +154,7 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 - **Event Log** — Recent system events (telemetry lifecycle, app shutdown)
 - **Session History** — Sessions with duration, detection count; click to view path
 - **Session Detail** — `GET /dashboard/sessions/{id}` shows the flight path (lat/lon points) for a session
-- **Settings** — Configure telemetry backend, AI mode, serial port, LM Studio URL, etc. Saves to `~/.airautomatica/settings.json`; restart required to apply
+- **Settings** — Configure telemetry backend, AI mode, serial port, Ollama URL/model, etc. Saves to `~/.airautomatica/settings.json`; restart required to apply
 
 Uses Socket.IO for live updates. Read-only, non-flight-critical. Works with persistence disabled. See [docs/dashboard.md](docs/dashboard.md) for details.
 
@@ -187,8 +190,8 @@ src/airautomatica/
 │   ├── service.py      # AiService interface
 │   ├── models.py       # AiResult model
 │   ├── mock_service.py # Mock AI for tests
-│   ├── lmstudio_service.py # LM Studio (macOS dev)
-│   └── aihat_service.py # Raspberry Pi AI HAT+ scaffold
+│   ├── ollama_service.py  # Ollama (local LLM)
+│   └── aihat_service.py   # Raspberry Pi AI HAT+ scaffold
 ├── db/
 │   ├── base.py          # Engine, WAL, init
 │   ├── models.py        # SQLAlchemy models
@@ -250,6 +253,6 @@ See [docs/bench_first_test.md](docs/bench_first_test.md) for a first hardware br
 
 ## Status and Roadmap
 
-- **Current**: Mock and LM Studio modes work. Serial MAVLink works with ArduPilot. Persistence, shutdown, and API are functional.
+- **Current**: Mock and Ollama modes work. Serial MAVLink works with ArduPilot. Persistence, shutdown, and API are functional.
 - **Next**: Raspberry Pi 5 bench validation; AI HAT+ Hailo integration (vision only).
 - **Not planned**: Flight-critical command sending; LLM reasoning onboard.

@@ -157,6 +157,27 @@ def test_placeholder_label_lmstudio_ignored() -> None:
     persistence.insert_detection.assert_not_called()
 
 
+def test_placeholder_label_ollama_ignored() -> None:
+    """Result with label='ollama' (unparseable placeholder) is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="ollama",
+        confidence=0.9,
+        summary="Unparseable content from Ollama",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+        metadata={"raw_length": 50},
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
 def test_guided_label_ignored() -> None:
     """Result with label='GUIDED' (ArduPilot mode) is not persisted."""
     persistence = MagicMock()

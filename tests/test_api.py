@@ -34,7 +34,14 @@ def test_health(client: TestClient) -> None:
     data = r.json()
     assert data["status"] == "ok"
     assert "ai_mode" in data
-    assert data["ai_mode"] in ("mock", "lmstudio", "aihat")
+    assert data["ai_mode"] in (
+        "mock",
+        "lmstudio",
+        "ollama",
+        "aihat",
+        "mock+aihat",
+        "ollama+aihat",
+    )
     assert data["telemetry_backend"] in ("mock", "serial")
     assert data["telemetry"]["telemetry_status"] == "disconnected"
     assert data["telemetry"]["connected"] is False
@@ -462,7 +469,7 @@ def test_get_settings(client: TestClient) -> None:
     assert "TELEMETRY_BACKEND" in s
     assert "AI_MODE" in s
     assert s["TELEMETRY_BACKEND"] in ("mock", "serial")
-    assert s["AI_MODE"] in ("mock", "lmstudio", "aihat")
+    assert s["AI_MODE"] in ("mock", "lmstudio", "ollama", "aihat")
 
 
 def test_post_settings(monkeypatch: pytest.MonkeyPatch) -> None:
