@@ -1,6 +1,7 @@
 """Tests for Ollama task types, prompt builders, parsers, and task service."""
 
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -117,7 +118,7 @@ def test_parse_perception_none() -> None:
 
 def test_parse_perception_not_dict() -> None:
     """Non-dict input produces safe AiResult."""
-    result = parse_perception_response("not a dict", "ollama")
+    result = parse_perception_response("not a dict", "ollama")  # type: ignore[arg-type]
     assert isinstance(result, AiResult)
 
 
@@ -150,7 +151,7 @@ def test_parse_telemetry_summary_empty_arrays() -> None:
 
 def test_parse_telemetry_summary_missing_fields() -> None:
     """Missing fields get safe defaults."""
-    raw = {}
+    raw: dict[str, Any] = {}
     result = parse_telemetry_summary_response(raw)
     assert result.status == "unknown"
     assert result.summary == ""
@@ -166,7 +167,11 @@ def test_parse_telemetry_summary_none() -> None:
 
 def test_parse_telemetry_summary_malformed_types() -> None:
     """Malformed types (concerns=string) coerce safely."""
-    raw = {"status": 123, "concerns": "not a list", "recommendations": [1, 2, 3]}
+    raw: dict[str, Any] = {
+        "status": 123,
+        "concerns": "not a list",
+        "recommendations": [1, 2, 3],
+    }
     result = parse_telemetry_summary_response(raw)
     assert isinstance(result.status, str)
     assert result.concerns == ()  # not a list -> empty
@@ -196,7 +201,7 @@ def test_parse_event_classification_valid() -> None:
 
 def test_parse_event_classification_missing_fields() -> None:
     """Missing fields get defaults."""
-    raw = {}
+    raw: dict[str, Any] = {}
     result = parse_event_classification_response(raw)
     assert result.severity == "info"
     assert result.category == "general"

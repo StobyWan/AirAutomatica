@@ -48,7 +48,8 @@ class OllamaTaskService:
         """Run task. Returns typed result; never crashes on malformed Ollama output."""
         if self._provider == "mock":
             return _mock_result(task_type)
-        # provider is ollama
+        # provider is ollama; _ollama is guaranteed non-None by __init__
+        assert self._ollama is not None
         prompt = build_prompt(task_type, context)
         try:
             content = await self._ollama.generate_raw(prompt)
