@@ -269,7 +269,7 @@ def test_get_recent_sessions_returns_sessions() -> None:
 
         persistence = PersistenceService()
         s1 = persistence.start_session("mock", "mock")
-        s2 = persistence.start_session("serial", "lmstudio")
+        s2 = persistence.start_session("serial", "mock")
         assert s1 is not None and s2 is not None
 
         sessions = persistence.get_recent_sessions(limit=10)
@@ -277,7 +277,7 @@ def test_get_recent_sessions_returns_sessions() -> None:
         assert sessions[0]["id"] == s2
         assert sessions[1]["id"] == s1
         assert sessions[0]["telemetry_backend"] == "serial"
-        assert sessions[0]["ai_backend"] == "lmstudio"
+        assert sessions[0]["ai_backend"] == "mock"
         assert "started_at" in sessions[0]
         assert "ended_at" in sessions[0]
         assert sessions[0]["ended_at"] is None

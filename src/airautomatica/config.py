@@ -1,10 +1,15 @@
 """Configuration from environment variables."""
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
+
+_lmstudio_warned = False
 
 
 def get_ai_mode() -> str:
-    """AI mode: 'mock', 'lmstudio', 'ollama', or 'aihat'. Default: mock.
+    """AI mode: 'mock', 'ollama', or 'aihat'. Default: mock.
     Env: AI_MODE or AI_BACKEND (legacy)."""
     return os.environ.get("AI_MODE", os.environ.get("AI_BACKEND", "mock")).lower()
 
@@ -14,38 +19,42 @@ def get_ai_backend() -> str:
     return get_ai_mode()
 
 
-def get_lm_studio_base_url() -> str:
-    """LM Studio API base URL. Default: http://localhost:1234."""
-    return os.environ.get("LM_STUDIO_BASE_URL", "http://localhost:1234")
-
-
-def get_lm_studio_model() -> str:
-    """LM Studio model name. Default: local-model."""
-    return os.environ.get("LM_STUDIO_MODEL", "local-model")
-
-
-def get_lm_studio_timeout() -> float:
-    """LM Studio request timeout in seconds. Default: 30.0.
-    Deprecated: use get_local_llm_timeout() for Ollama."""
-    try:
-        return float(os.environ.get("LM_STUDIO_TIMEOUT", "30.0"))
-    except ValueError:
-        return 30.0
+def _warn_lmstudio_once() -> None:
+    global _lmstudio_warned
+    if not _lmstudio_warned:
+        _lmstudio_warned = True
+        logger.warning(
+            "LOCAL_LLM_PROVIDER=lmstudio is no longer supported; falling back to mock"
+        )
 
 
 def get_local_llm_provider() -> str:
-    """Local LLM provider: 'mock', 'ollama', or 'lmstudio' (deprecated).
-    When LOCAL_LLM_PROVIDER is set and in (mock, ollama, lmstudio), use it.
-    Else use AI_MODE if mock/ollama/lmstudio; when AI_MODE=aihat (legacy), default to mock.
-    """
+    """Local LLM provider: 'mock' or 'ollama'. Default: ollama.
+    When LOCAL_LLM_PROVIDER is set and in (mock, ollama), use it.
+    Else use AI_MODE/AI_BACKEND if set (legacy); when AI_MODE=aihat, base is mock.
+    lmstudio (legacy) logs a warning once and falls back to mock.
+    When nothing is set, returns ollama as canonical default."""
     provider = os.environ.get("LOCAL_LLM_PROVIDER", "").lower()
-    if provider in ("mock", "ollama", "lmstudio"):
+    if provider in ("mock", "ollama"):
         return provider
-    mode = get_ai_mode()
-    if mode in ("mock", "ollama", "lmstudio"):
-        return mode
-    # Legacy AI_MODE=aihat no longer means exclusive; use mock as base provider
-    return "mock"
+    if provider == "lmstudio":
+        _warn_lmstudio_once()
+        return "mock"
+    # Legacy: AI_MODE or AI_BACKEND explicitly set
+    if (
+        os.environ.get("AI_MODE") is not None
+        or os.environ.get("AI_BACKEND") is not None
+    ):
+        mode = get_ai_mode()
+        if mode in ("mock", "ollama"):
+            return mode
+        if mode == "lmstudio":
+            _warn_lmstudio_once()
+            return "mock"
+        # AI_MODE=aihat: use mock as base provider
+        return "mock"
+    # Nothing set: canonical default
+    return "ollama"
 
 
 def get_ai_hat_enabled() -> bool:

@@ -8,7 +8,7 @@ COPY src/ src/
 RUN pip install --no-cache-dir -e .
 
 ENV TELEMETRY_BACKEND=mock
-ENV AI_MODE=mock
+ENV LOCAL_LLM_PROVIDER=ollama
 ENV SQLITE_DB_PATH=/tmp/airautomatica.db
 
 EXPOSE 8000

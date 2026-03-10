@@ -20,7 +20,7 @@ def test_create_error_fallback_filters_metadata() -> None:
     r = create_error_fallback(
         "Parse error",
         {"parse_error": "json", "error_type": "timeout", "extra": "ignored"},
-        "lmstudio",
+        "ollama",
     )
     assert r.metadata == {"parse_error": "json", "error_type": "timeout"}
     assert "extra" not in (r.metadata or {})

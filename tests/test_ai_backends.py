@@ -10,7 +10,6 @@ import pytest
 from airautomatica.ai import (
     AiHatAiService,
     ComposedAiService,
-    LmStudioAiService,
     MockAiService,
     OllamaAiService,
 )
@@ -117,17 +116,17 @@ def test_ai_result_normalized_shape() -> None:
     assert result.metadata == {"raw": "data"}
 
 
-def test_default_provider_is_mock() -> None:
-    """Factory creates MockAiService when no provider/mode set (default)."""
+def test_default_provider_is_ollama() -> None:
+    """Factory creates OllamaAiService when no provider/mode set (canonical default)."""
     from airautomatica.main import _create_ai_service
 
     with pytest.MonkeyPatch.context() as m:
         m.delenv("LOCAL_LLM_PROVIDER", raising=False)
-        m.delenv("AI_HAT_ENABLED", raising=False)
-        m.setenv("AI_MODE", "mock")
+        m.delenv("AI_MODE", raising=False)
         m.delenv("AI_BACKEND", raising=False)
+        m.delenv("AI_HAT_ENABLED", raising=False)
         service = _create_ai_service()
-    assert isinstance(service, MockAiService)
+    assert isinstance(service, OllamaAiService)
 
 
 def test_mode_selection_mock() -> None:
@@ -164,17 +163,38 @@ def test_provider_selection_ollama() -> None:
     assert isinstance(service, OllamaAiService)
 
 
-def test_mode_selection_lmstudio() -> None:
-    """Factory creates LmStudioAiService for mode=lmstudio (deprecated path)."""
+def test_lmstudio_maps_to_mock(caplog: pytest.LogCaptureFixture) -> None:
+    """LOCAL_LLM_PROVIDER=lmstudio or AI_MODE/AI_BACKEND=lmstudio resolve to MockAiService with warning."""
+    import airautomatica.config as config_module
     from airautomatica.main import _create_ai_service
 
+    config_module._lmstudio_warned = False
     with pytest.MonkeyPatch.context() as m:
+        m.setenv("LOCAL_LLM_PROVIDER", "lmstudio")
+        m.delenv("AI_MODE", raising=False)
+        m.delenv("AI_BACKEND", raising=False)
+        m.delenv("AI_HAT_ENABLED", raising=False)
+        service = _create_ai_service()
+    assert isinstance(service, MockAiService)
+    assert "lmstudio is no longer supported" in caplog.text
+
+    config_module._lmstudio_warned = False
+    with pytest.MonkeyPatch.context() as m:
+        m.delenv("LOCAL_LLM_PROVIDER", raising=False)
         m.setenv("AI_MODE", "lmstudio")
         m.delenv("AI_BACKEND", raising=False)
         m.delenv("AI_HAT_ENABLED", raising=False)
-        m.delenv("LOCAL_LLM_PROVIDER", raising=False)
         service = _create_ai_service()
-    assert isinstance(service, LmStudioAiService)
+    assert isinstance(service, MockAiService)
+
+    config_module._lmstudio_warned = False
+    with pytest.MonkeyPatch.context() as m:
+        m.delenv("LOCAL_LLM_PROVIDER", raising=False)
+        m.delenv("AI_MODE", raising=False)
+        m.setenv("AI_BACKEND", "lmstudio")
+        m.delenv("AI_HAT_ENABLED", raising=False)
+        service = _create_ai_service()
+    assert isinstance(service, MockAiService)
 
 
 def test_mode_selection_aihat() -> None:
@@ -190,93 +210,16 @@ def test_mode_selection_aihat() -> None:
     assert isinstance(service, ComposedAiService)
 
 
-def test_ai_backend_legacy_env() -> None:
-    """AI_BACKEND env still works when AI_MODE not set."""
-    from airautomatica.main import _create_ai_service
-
-    with pytest.MonkeyPatch.context() as m:
-        m.delenv("AI_MODE", raising=False)
-        m.delenv("AI_HAT_ENABLED", raising=False)
-        m.delenv("LOCAL_LLM_PROVIDER", raising=False)
-        m.setenv("AI_BACKEND", "lmstudio")
-        service = _create_ai_service()
-    assert isinstance(service, LmStudioAiService)
-
-
-@pytest.mark.asyncio
-async def test_lmstudio_malformed_json_response() -> None:
-    """LmStudioAiService returns error fallback when API returns invalid JSON."""
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
-    mock_post = AsyncMock(return_value=mock_response)
-    mock_instance = AsyncMock()
-    mock_instance.post = mock_post
-    with patch("airautomatica.ai.lmstudio_service.httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__.return_value = mock_instance
-        mock_client.return_value.__aexit__.return_value = None
-        service = LmStudioAiService(
-            base_url="http://localhost:1234", model="test", timeout_sec=5.0
-        )
-        result = await service.infer(None)
-    assert result.label == "error"
-    assert result.confidence == 0.0
-    assert result.source_backend == "lmstudio"
-    assert result.metadata is not None
-    assert result.metadata.get("parse_error") == "json"
-
-
-@pytest.mark.asyncio
-async def test_lmstudio_malformed_choices_does_not_raise() -> None:
-    """LmStudioAiService handles malformed choices/message structure without raising."""
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json.return_value = {"choices": [None]}
-    mock_post = AsyncMock(return_value=mock_response)
-    mock_instance = AsyncMock()
-    mock_instance.post = mock_post
-    with patch("airautomatica.ai.lmstudio_service.httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__.return_value = mock_instance
-        mock_client.return_value.__aexit__.return_value = None
-        service = LmStudioAiService(
-            base_url="http://localhost:1234", model="test", timeout_sec=5.0
-        )
-        result = await service.infer(None)
-    assert result.label == "lmstudio"
-    assert result.source_backend == "lmstudio"
-    assert result.summary == "No response"
-
-
-@pytest.mark.asyncio
-async def test_lmstudio_timeout_returns_fallback() -> None:
-    """LmStudioAiService returns error fallback on timeout."""
-    mock_post = AsyncMock(side_effect=httpx.TimeoutException("Connection timed out"))
-    mock_instance = AsyncMock()
-    mock_instance.post = mock_post
-    with patch("airautomatica.ai.lmstudio_service.httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__.return_value = mock_instance
-        mock_client.return_value.__aexit__.return_value = None
-        service = LmStudioAiService(
-            base_url="http://localhost:1234", model="test", timeout_sec=5.0
-        )
-        result = await service.infer(None)
-    assert result.label == "error"
-    assert result.confidence == 0.0
-    assert result.source_backend == "lmstudio"
-    assert result.metadata is not None
-    assert result.metadata.get("error_type") == "timeout"
-
-
 def test_ai_result_from_dict_normalization() -> None:
     """AiResult.from_dict normalizes partial/malformed dict with defaults."""
     result = AiResult.from_dict(
         {"label": "det", "confidence": 1.5, "summary": "ok", "bbox": [1, 2, 3, 4]},
-        "lmstudio",
+        "ollama",
     )
     assert result.label == "det"
     assert result.confidence == 1.0  # clamped
     assert result.summary == "ok"
-    assert result.source_backend == "lmstudio"
+    assert result.source_backend == "ollama"
     assert result.bbox == (1.0, 2.0, 3.0, 4.0)
     assert result.action is None
 
@@ -291,12 +234,12 @@ def test_ai_result_from_dict_normalization() -> None:
 def test_ai_result_fallback_shape() -> None:
     """create_error_fallback returns AiResult with all required fields and valid types."""
     result = create_error_fallback(
-        "Test error", {"error": True, "error_type": "timeout"}, "lmstudio"
+        "Test error", {"error": True, "error_type": "timeout"}, "ollama"
     )
     assert result.label == "error"
     assert result.confidence == 0.0
     assert isinstance(result.summary, str)
-    assert result.source_backend == "lmstudio"
+    assert result.source_backend == "ollama"
     assert isinstance(result.timestamp, datetime)
     assert result.bbox is None
     assert result.action is None

@@ -18,7 +18,6 @@ from airautomatica.ai import (
     AiHatAiService,
     AiService,
     ComposedAiService,
-    LmStudioAiService,
     MockAiService,
     OllamaAiService,
     OllamaTaskService,
@@ -33,9 +32,6 @@ from airautomatica.config import (
     get_api_host,
     get_api_port,
     get_effective_ai_backend,
-    get_lm_studio_base_url,
-    get_lm_studio_model,
-    get_lm_studio_timeout,
     get_local_llm_base_url,
     get_local_llm_model,
     get_local_llm_provider,
@@ -132,15 +128,6 @@ def _create_base_ai_service() -> AiService:
             base_url=get_local_llm_base_url("ollama"),
             model=get_local_llm_model("ollama"),
             timeout_sec=get_local_llm_timeout(),
-        )
-    if provider == "lmstudio":
-        logger.warning(
-            "LmStudioAiService is deprecated; prefer LOCAL_LLM_PROVIDER=ollama"
-        )
-        return LmStudioAiService(
-            base_url=get_lm_studio_base_url(),
-            model=get_lm_studio_model(),
-            timeout_sec=get_lm_studio_timeout(),
         )
     logger.warning("Unknown AI provider %r, defaulting to mock", provider)
     return MockAiService()

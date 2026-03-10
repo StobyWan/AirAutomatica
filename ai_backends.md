@@ -21,8 +21,8 @@ Local LLM provider (mock or ollama) and AI HAT are **complementary**, not mutual
 ## Configuration
 
 ```bash
-# AI provider: mock, ollama, or lmstudio
-export LOCAL_LLM_PROVIDER=mock
+# AI provider: ollama (default) or mock
+export LOCAL_LLM_PROVIDER=ollama
 export LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
 export LOCAL_LLM_MODEL=gemma3:1b
 export LOCAL_LLM_TIMEOUT=30
@@ -42,15 +42,15 @@ export AIHAT_DEVICE=auto
 
 ## Local Development (macOS / Linux)
 
-1. **Mock mode** (default): No setup. AI results are deterministic fakes.
-   ```bash
-   LOCAL_LLM_PROVIDER=mock python -m airautomatica.main
-   ```
-
-2. **Ollama mode**: Install [Ollama](https://ollama.com/), pull a model (`ollama pull gemma3:1b`), start the server (runs automatically). Ollama simulates AI outputs at the contract level—useful for testing mission logic without hardware.
+1. **Ollama mode** (default): Install [Ollama](https://ollama.com/), pull a model (`ollama pull gemma3:1b`), start the server (runs automatically). Ollama simulates AI outputs at the contract level—useful for testing mission logic without hardware.
    ```bash
    make setup-ollama
-   LOCAL_LLM_PROVIDER=ollama python -m airautomatica.main
+   python -m airautomatica.main
+   ```
+
+2. **Mock mode**: No setup. AI results are deterministic fakes.
+   ```bash
+   LOCAL_LLM_PROVIDER=mock python -m airautomatica.main
    ```
    Ollama mode is intended to simulate **perception-style outputs** (e.g. person, vehicle, object), not aircraft status or system summaries. Mission logic rejects mode/status labels (GUIDED, AUTO, device_status, battery, etc.) so only detection-like results are persisted.
 

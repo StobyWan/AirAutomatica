@@ -21,8 +21,6 @@ CANONICAL_SETTINGS_KEYS = [
     "LOCAL_LLM_BASE_URL",
     "LOCAL_LLM_MODEL",
     "LOCAL_LLM_TIMEOUT",
-    "LM_STUDIO_BASE_URL",
-    "LM_STUDIO_MODEL",
     "AI_HAT_ENABLED",
     "AI_MIN_CONFIDENCE",
     "AI_DUPLICATE_WINDOW_SEC",
@@ -31,8 +29,13 @@ CANONICAL_SETTINGS_KEYS = [
 # Legacy keys accepted when loading from file or in POST body; never persisted.
 _LEGACY_KEYS = ("AI_MODE", "AI_BACKEND")
 
-# All keys accepted when loading from file (canonical + legacy)
-_LOAD_ACCEPTED_KEYS = frozenset(CANONICAL_SETTINGS_KEYS) | frozenset(_LEGACY_KEYS)
+# LM Studio keys: accepted on load only (old settings files); not canonical, not exposed.
+_LOAD_ONLY_KEYS = frozenset({"LM_STUDIO_BASE_URL", "LM_STUDIO_MODEL"})
+
+# All keys accepted when loading from file
+_LOAD_ACCEPTED_KEYS = (
+    frozenset(CANONICAL_SETTINGS_KEYS) | frozenset(_LEGACY_KEYS) | _LOAD_ONLY_KEYS
+)
 
 # Backward compat: SETTINGS_KEYS used by existing code (e.g. tests that patch)
 SETTINGS_KEYS = CANONICAL_SETTINGS_KEYS
@@ -42,10 +45,14 @@ def _migrate_legacy_to_canonical(data: dict) -> dict:
     """Map legacy keys to canonical. Used for load (runtime) and save (persistence).
     AI_MODE=ollama -> LOCAL_LLM_PROVIDER=ollama
     AI_MODE=aihat -> AI_HAT_ENABLED=1, LOCAL_LLM_PROVIDER=mock
-    AI_MODE=lmstudio -> LOCAL_LLM_PROVIDER=lmstudio
+    AI_MODE=lmstudio -> LOCAL_LLM_PROVIDER=mock
     AI_MODE=mock -> LOCAL_LLM_PROVIDER=mock
+    LOCAL_LLM_PROVIDER=lmstudio -> mock (no longer supported)
     """
     out = dict(data)
+    # Map deprecated lmstudio to mock when present in updates
+    if (out.get("LOCAL_LLM_PROVIDER") or "").lower() == "lmstudio":
+        out["LOCAL_LLM_PROVIDER"] = "mock"
     mode = (out.get("AI_MODE") or out.get("AI_BACKEND") or "").lower()
 
     if mode and not out.get("LOCAL_LLM_PROVIDER"):
@@ -55,7 +62,7 @@ def _migrate_legacy_to_canonical(data: dict) -> dict:
             out["LOCAL_LLM_PROVIDER"] = "mock"
             out["AI_HAT_ENABLED"] = "1"
         elif mode == "lmstudio":
-            out["LOCAL_LLM_PROVIDER"] = "lmstudio"
+            out["LOCAL_LLM_PROVIDER"] = "mock"
         elif mode == "mock":
             out["LOCAL_LLM_PROVIDER"] = "mock"
 
@@ -90,12 +97,10 @@ def get_settings() -> dict:
         "TELEMETRY_BACKEND": "mock",
         "SERIAL_PORT": "/dev/ttyUSB0",
         "SERIAL_BAUD": "921600",
-        "LOCAL_LLM_PROVIDER": "mock",
+        "LOCAL_LLM_PROVIDER": "ollama",
         "LOCAL_LLM_BASE_URL": "http://127.0.0.1:11434",
         "LOCAL_LLM_MODEL": "gemma3:1b",
         "LOCAL_LLM_TIMEOUT": "30",
-        "LM_STUDIO_BASE_URL": "http://localhost:1234",
-        "LM_STUDIO_MODEL": "local-model",
         "AI_HAT_ENABLED": "0",
         "AI_MIN_CONFIDENCE": "0.5",
         "AI_DUPLICATE_WINDOW_SEC": "30",

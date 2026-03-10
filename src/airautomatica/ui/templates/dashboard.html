@@ -243,9 +243,8 @@
         <div class="settings-field">
           <label for="LOCAL_LLM_PROVIDER">AI provider</label>
           <select id="LOCAL_LLM_PROVIDER" name="LOCAL_LLM_PROVIDER">
-            <option value="mock">mock</option>
             <option value="ollama">ollama</option>
-            <option value="lmstudio">lmstudio (legacy)</option>
+            <option value="mock">mock</option>
           </select>
         </div>
         <div id="ollama-fields" class="hidden">
@@ -260,16 +259,6 @@
           <div class="settings-field">
             <label for="LOCAL_LLM_TIMEOUT">Local LLM timeout (seconds)</label>
             <input type="number" id="LOCAL_LLM_TIMEOUT" name="LOCAL_LLM_TIMEOUT" placeholder="30" min="1" />
-          </div>
-        </div>
-        <div id="lmstudio-fields" class="settings-legacy hidden">
-          <div class="settings-field">
-            <label for="LM_STUDIO_BASE_URL">LM Studio base URL</label>
-            <input type="text" id="LM_STUDIO_BASE_URL" name="LM_STUDIO_BASE_URL" placeholder="http://localhost:1234" />
-          </div>
-          <div class="settings-field">
-            <label for="LM_STUDIO_MODEL">LM Studio model name</label>
-            <input type="text" id="LM_STUDIO_MODEL" name="LM_STUDIO_MODEL" placeholder="local-model" />
           </div>
         </div>
       </div>
@@ -310,12 +299,11 @@
   </div>
 
   <script>
-    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','LM_STUDIO_BASE_URL','LM_STUDIO_MODEL','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'];
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'];
 
     function updateProviderVisibility() {
       const p = document.getElementById('LOCAL_LLM_PROVIDER').value;
       document.getElementById('ollama-fields').classList.toggle('hidden', p !== 'ollama');
-      document.getElementById('lmstudio-fields').classList.toggle('hidden', p !== 'lmstudio');
     }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {

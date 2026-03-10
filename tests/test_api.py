@@ -38,7 +38,6 @@ def test_health(client: TestClient) -> None:
     assert "ai_mode" in data
     assert data["ai_mode"] in (
         "mock",
-        "lmstudio",
         "ollama",
         "aihat",
         "mock+aihat",
@@ -473,7 +472,7 @@ def test_get_settings(client: TestClient) -> None:
     assert "AI_HAT_ENABLED" in s
     assert "AI_MODE" not in s
     assert s["TELEMETRY_BACKEND"] in ("mock", "serial")
-    assert s["LOCAL_LLM_PROVIDER"] in ("mock", "lmstudio", "ollama")
+    assert s["LOCAL_LLM_PROVIDER"] in ("mock", "ollama")
     assert s["AI_HAT_ENABLED"] in ("0", "1")
 
 
@@ -592,7 +591,7 @@ def test_post_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         with open(settings_file) as f:
             saved = json.load(f)
         assert saved.get("TELEMETRY_BACKEND") == "mock"
-        assert saved.get("LOCAL_LLM_PROVIDER") == "lmstudio"
+        assert saved.get("LOCAL_LLM_PROVIDER") == "mock"
         assert "AI_MODE" not in saved
 
 

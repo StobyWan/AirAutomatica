@@ -47,7 +47,7 @@ Recent flight sessions with started_at, ended_at, duration (computed client-side
 Configure telemetry, AI provider, AI HAT, and mission logic. Grouped into:
 
 - **Telemetry**: Backend (mock/serial), serial port, baud rate. Default port `/dev/ttyUSB0` for CP2102/USB-TTL; `/dev/ttyACM0` for native USB.
-- **AI Provider**: mock, ollama, or lmstudio (legacy). Ollama URL/model/timeout shown when ollama selected; LM Studio fields when lmstudio (legacy).
+- **AI Provider**: mock or ollama. Ollama URL/model/timeout shown when ollama selected.
 - **AI HAT**: Additive checkbox; runs alongside the selected provider on Pi 5, not instead of it.
 - **Advanced** (collapsible): Min confidence, duplicate window.
 

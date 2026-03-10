@@ -32,7 +32,7 @@ def _is_meaningful_aihat_result(result: AiResult) -> bool:
 class ComposedAiService(AiService):
     """Composes a base local LLM provider with an optional AI HAT layer.
 
-    - base_ai_service: MockAiService or OllamaAiService (or LmStudioAiService)
+    - base_ai_service: MockAiService or OllamaAiService
     - aihat_service: optional AiHatAiService; when set and producing meaningful
       output, its result is used; else the base provider's result is used.
     """

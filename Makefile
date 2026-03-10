@@ -25,4 +25,4 @@ run:
 setup-ollama:
 	@command -v ollama >/dev/null 2>&1 || { echo "Install Ollama: https://ollama.com (macOS: brew install ollama)"; exit 1; }
 	ollama pull gemma3:1b || true
-	@echo "Ollama ready. Start app with: LOCAL_LLM_PROVIDER=ollama python -m airautomatica.main"
+	@echo "Ollama ready. Start app with: python -m airautomatica.main  (ollama is default)"

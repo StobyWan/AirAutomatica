@@ -74,7 +74,7 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | `TELEMETRY_BACKEND` | `mock` | `mock` or `serial` |
 | `SERIAL_PORT` | `/dev/ttyUSB0` | Serial device (default for CP2102/FTDI; use `/dev/ttyACM0` for native USB) |
 | `SERIAL_BAUD` | `921600` | Baud rate (57600 for telemetry radios) |
-| `LOCAL_LLM_PROVIDER` | `mock` | `mock`, `ollama`, or `lmstudio` |
+| `LOCAL_LLM_PROVIDER` | `ollama` | `ollama` or `mock` |
 | `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:11434` | Ollama API URL |
 | `LOCAL_LLM_MODEL` | `gemma3:1b` | Ollama model name |
 | `LOCAL_LLM_TIMEOUT` | `30` | Local LLM request timeout (seconds) |
@@ -89,23 +89,20 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 
 ## Running
 
-**Mock mode** (default, no hardware needed):
+**Default** (Ollama for local AI):
 
 ```bash
-export TELEMETRY_BACKEND=mock
-export LOCAL_LLM_PROVIDER=mock
+# Install Ollama first: make setup-ollama
 python -m airautomatica.main
 # or: airautomatica
 # or with uv: uv run airautomatica
 ```
 
-**Ollama mode** (local AI):
+**Mock mode** (no setup, no Ollama):
 
 ```bash
-# Install Ollama, pull a model: make setup-ollama
-export LOCAL_LLM_PROVIDER=ollama
-export LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
-export LOCAL_LLM_MODEL=gemma3:1b
+export TELEMETRY_BACKEND=mock
+export LOCAL_LLM_PROVIDER=mock
 python -m airautomatica.main
 ```
 
