@@ -4,9 +4,10 @@ Thanks for your interest. This is an early-stage project.
 
 ## Getting Started
 
-1. Clone the repo and install: `uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"`
-2. Run in mock mode: `python -m airautomatica.main`
-3. Run tests: `pytest`
+1. Clone: `git clone https://github.com/StobyWan/AirAutomatica.git && cd AirAutomatica`
+2. Install: `uv venv && source .venv/bin/activate && uv pip install -e ".[dev]"`
+3. Run in mock mode: `python -m airautomatica.main`
+4. Run tests: `pytest`
 
 ## Before Submitting
 

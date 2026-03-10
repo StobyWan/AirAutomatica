@@ -27,7 +27,7 @@ AI HAT mode exists as a scaffold; real Hailo integration is not yet implemented.
 No hardware or `.env` needed:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/StobyWan/AirAutomatica.git
 cd AirAutomatica
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
@@ -45,7 +45,8 @@ Then open `http://localhost:8000/health` and `http://localhost:8000/state`.
 ## Local Setup
 
 ```bash
-# Clone or navigate to project
+# Clone (or navigate if you already have the repo)
+git clone https://github.com/StobyWan/AirAutomatica.git
 cd AirAutomatica
 
 # Create venv and install (with uv)

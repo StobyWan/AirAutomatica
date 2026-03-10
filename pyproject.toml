@@ -18,6 +18,9 @@ dependencies = [
     "alembic>=1.13.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/StobyWan/AirAutomatica"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
