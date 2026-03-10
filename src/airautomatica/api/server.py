@@ -2,11 +2,18 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Body, FastAPI
 from fastapi.responses import HTMLResponse
 
+from airautomatica.ai.ollama_task_service import OllamaTaskService
+from airautomatica.ai.ollama_tasks import (
+    EventClassificationResult,
+    OllamaTaskType,
+    TelemetrySummaryResult,
+)
 from airautomatica.config import (
     get_effective_ai_backend,
     get_sqlite_db_path,
@@ -32,6 +39,7 @@ def create_app(
     store: StateStore,
     persistence: Optional[PersistenceService] = None,
     session_id: Optional[int] = None,
+    task_service: Optional[OllamaTaskService] = None,
 ) -> FastAPI:
     """Create FastAPI app with state store dependency."""
     app = FastAPI(title="AIRAUTOMATICA", version="0.1.0", lifespan=_lifespan)
@@ -90,6 +98,56 @@ def create_app(
         if state is None:
             return {"state": None}
         return {"state": state.to_dict()}
+
+    @app.post("/ai/telemetry-summary")
+    async def post_telemetry_summary() -> dict:
+        """Request AI interpretation of current telemetry. Returns TelemetrySummaryResult."""
+        if task_service is None:
+            return {"error": "AI task service not available"}
+        state = store.get()
+        samples: list = []
+        if persistence is not None and session_id is not None:
+            samples = persistence.get_recent_telemetry_samples(session_id, limit=30)
+        result = await task_service.infer_task(
+            OllamaTaskType.TELEMETRY_SUMMARY,
+            {"state": state, "telemetry_samples": samples},
+        )
+        if not isinstance(result, TelemetrySummaryResult):
+            return {"error": "Unexpected result type"}
+        return {
+            "status": result.status,
+            "summary": result.summary,
+            "concerns": list(result.concerns),
+            "recommendations": list(result.recommendations),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "telemetry_sample_count": len(samples),
+            "provider": task_service.provider,
+        }
+
+    @app.post("/ai/event-classification")
+    async def post_event_classification() -> dict:
+        """Request AI classification of recent system events. Returns EventClassificationResult."""
+        if task_service is None:
+            return {"error": "AI task service not available"}
+        events: list = []
+        if persistence is not None:
+            events = persistence.get_recent_system_events(limit=30)
+        result = await task_service.infer_task(
+            OllamaTaskType.EVENT_CLASSIFICATION,
+            {"events": events},
+        )
+        if not isinstance(result, EventClassificationResult):
+            return {"error": "Unexpected result type"}
+        return {
+            "severity": result.severity,
+            "category": result.category,
+            "summary": result.summary,
+            "likely_causes": list(result.likely_causes),
+            "recommended_checks": list(result.recommended_checks),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "event_count": len(events),
+            "provider": task_service.provider,
+        }
 
     @app.get("/recent-detections")
     def get_recent_detections() -> dict:

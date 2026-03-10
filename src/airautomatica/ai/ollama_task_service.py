@@ -35,6 +35,11 @@ class OllamaTaskService:
         if provider == "ollama" and ollama_service is None:
             raise ValueError("ollama_service required when provider is ollama")
 
+    @property
+    def provider(self) -> str:
+        """Provider used for inference: 'mock' or 'ollama'."""
+        return self._provider
+
     async def infer_task(
         self,
         task_type: OllamaTaskType,

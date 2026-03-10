@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from airautomatica.ai.models import AiResult
+from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.api.server import create_app
 from airautomatica.db import init_db
 from airautomatica.db.base import get_engine
@@ -529,3 +530,64 @@ def test_get_session_path_returns_path(monkeypatch: pytest.MonkeyPatch) -> None:
         assert data["path"][0]["lon"] == -122.5
         assert data["path"][1]["lat"] == 37.51
         assert data["path"][1]["lon"] == -122.51
+
+
+def test_post_telemetry_summary_returns_structured_result(
+    store: StateStore,
+) -> None:
+    """POST /ai/telemetry-summary returns TelemetrySummaryResult when task_service provided."""
+    task_service = OllamaTaskService(provider="mock", ollama_service=None)
+    client = TestClient(create_app(store, task_service=task_service))
+    r = client.post("/ai/telemetry-summary")
+    assert r.status_code == 200
+    data = r.json()
+    assert "error" not in data
+    assert data["status"] == "ok"
+    assert data["summary"] == "Mock telemetry summary"
+    assert data["concerns"] == []
+    assert data["recommendations"] == []
+    assert "generated_at" in data
+    assert data["telemetry_sample_count"] == 0
+    assert data["provider"] == "mock"
+
+
+def test_post_telemetry_summary_error_when_no_task_service(
+    store: StateStore,
+) -> None:
+    """POST /ai/telemetry-summary returns error when task_service is None."""
+    client = TestClient(create_app(store))
+    r = client.post("/ai/telemetry-summary")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("error") == "AI task service not available"
+
+
+def test_post_event_classification_returns_structured_result(
+    store: StateStore,
+) -> None:
+    """POST /ai/event-classification returns EventClassificationResult when task_service provided."""
+    task_service = OllamaTaskService(provider="mock", ollama_service=None)
+    client = TestClient(create_app(store, task_service=task_service))
+    r = client.post("/ai/event-classification")
+    assert r.status_code == 200
+    data = r.json()
+    assert "error" not in data
+    assert data["severity"] == "info"
+    assert data["category"] == "general"
+    assert data["summary"] == "No significant events"
+    assert data["likely_causes"] == []
+    assert data["recommended_checks"] == []
+    assert "generated_at" in data
+    assert data["event_count"] == 0
+    assert data["provider"] == "mock"
+
+
+def test_post_event_classification_error_when_no_task_service(
+    store: StateStore,
+) -> None:
+    """POST /ai/event-classification returns error when task_service is None."""
+    client = TestClient(create_app(store))
+    r = client.post("/ai/event-classification")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("error") == "AI task service not available"

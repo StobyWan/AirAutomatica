@@ -21,6 +21,7 @@ from airautomatica.ai import (
     LmStudioAiService,
     MockAiService,
     OllamaAiService,
+    OllamaTaskService,
 )
 from airautomatica.api.server import create_app
 from airautomatica.config import (
@@ -204,11 +205,25 @@ async def _telemetry_loop(
             lifecycle_logger.maybe_log_transition(state)
 
 
+def _create_task_service() -> OllamaTaskService:
+    """Create OllamaTaskService for dashboard AI tasks (telemetry summary, etc.)."""
+    provider = get_local_llm_provider()
+    if provider == "ollama":
+        ollama = OllamaAiService(
+            base_url=get_local_llm_base_url("ollama"),
+            model=get_local_llm_model("ollama"),
+            timeout_sec=get_local_llm_timeout(),
+        )
+        return OllamaTaskService(provider="ollama", ollama_service=ollama)
+    return OllamaTaskService(provider="mock", ollama_service=None)
+
+
 def main() -> None:
     """Run API server, telemetry loop, and mission logic."""
     setup_logging()
     store = StateStore()
     ai_service = _create_ai_service()
+    task_service = _create_task_service()
 
     init_db(get_sqlite_db_path())
 
@@ -235,7 +250,12 @@ def main() -> None:
 
     atexit.register(_end_session)
 
-    app = create_app(store, persistence=persistence, session_id=session_id)
+    app = create_app(
+        store,
+        persistence=persistence,
+        session_id=session_id,
+        task_service=task_service,
+    )
     asgi_app = wrap_app(app)
     host = get_api_host()
     port = get_api_port()
