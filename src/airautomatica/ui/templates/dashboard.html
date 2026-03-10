@@ -240,7 +240,7 @@
         const badge = isCurrent ? '<span class="status-badge status-connecting text-[10px] ml-1">current</span>' : '';
         const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="na">active</span>';
         return `<div class="session-item">
-          <strong>#${s.id}</strong>${badge} — ${s.telemetry_backend} / ${s.ai_backend}
+          <a href="/dashboard/sessions/${s.id}" class="hover:underline"><strong>#${s.id}</strong></a>${badge} — ${s.telemetry_backend} / ${s.ai_backend}
           <div class="text-xs text-gray-500 mt-0.5">Started: ${fmtDate(s.started_at)} · Ended: ${ended}</div>
         </div>`;
       }).join('');

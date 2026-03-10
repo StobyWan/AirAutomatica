@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session — AIRAUTOMATICA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card: #16213e;
+      --text: #e8e8e8;
+      --muted: #a0a0a0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1rem;
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 1rem 0; }
+    .card {
+      background: var(--card);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 { font-size: 1rem; margin: 0 0 0.75rem 0; color: var(--muted); }
+    .path-point {
+      padding: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-family: ui-monospace, monospace;
+      font-size: 0.875rem;
+    }
+    .path-point:last-child { border-bottom: none; }
+    .na { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Session <span id="session-id">—</span> — Path</h1>
+  <p class="text-gray-400 text-sm mb-4"><a href="/dashboard" class="underline hover:text-gray-200">← Back to dashboard</a></p>
+  <div class="card">
+    <h2>Lat / Lon</h2>
+    <div id="path-list"></div>
+  </div>
+  <script>
+    const sessionId = parseInt(window.location.pathname.split('/').pop(), 10);
+    document.getElementById('session-id').textContent = sessionId;
+    document.title = 'Session ' + sessionId + ' — AIRAUTOMATICA';
+    fetch(`/sessions/${sessionId}/path`)
+      .then(r => r.json())
+      .then(data => {
+        const path = data.path || [];
+        const el = document.getElementById('path-list');
+        if (path.length === 0) {
+          el.innerHTML = '<span class="na">No path points for this session</span>';
+          return;
+        }
+        el.innerHTML = path.map((p, i) => {
+          const ts = p.timestamp ? new Date(p.timestamp).toLocaleString() : '—';
+          const lat = p.lat != null ? p.lat.toFixed(6) : '—';
+          const lon = p.lon != null ? p.lon.toFixed(6) : '—';
+          const alt = p.rel_alt_m != null ? p.rel_alt_m.toFixed(1) + ' m' : '—';
+          return `<div class="path-point">${i + 1}. lat=${lat}, lon=${lon} ${p.rel_alt_m != null ? ', alt=' + alt : ''} <span class="text-gray-500 text-xs">${ts}</span></div>`;
+        }).join('');
+      })
+      .catch(err => {
+        document.getElementById('path-list').innerHTML =
+          '<span class="na">Failed to load path: ' + err.message + '</span>';
+      });
+  </script>
+</body>
+</html>
