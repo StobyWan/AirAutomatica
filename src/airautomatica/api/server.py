@@ -88,6 +88,14 @@ def create_app(
         detections = persistence.get_recent_detections(session_id, limit=20)
         return {"detections": detections, "session_id": session_id}
 
+    @app.get("/sessions/{sid:int}/path")
+    def get_session_path(sid: int) -> dict:
+        """Return flight path for a session (lat/lon points, oldest first). For map display or export."""
+        if persistence is None:
+            return {"path": [], "session_id": sid}
+        path = persistence.get_session_path(sid)
+        return {"path": path, "session_id": sid}
+
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:
         """Serve the real-time flight dashboard."""

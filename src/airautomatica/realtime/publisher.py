@@ -69,6 +69,14 @@ def _build_detections_payload(
     return {"detections": detections, "session_id": session_id}
 
 
+def _build_sessions_payload(
+    sessions: list[dict],
+    current_session_id: Optional[int],
+) -> dict:
+    """Build sessions payload."""
+    return {"sessions": sessions, "current_session_id": current_session_id}
+
+
 class DashboardPublisher:
     """Emits health, state, and detections updates to Socket.IO clients."""
 
@@ -122,6 +130,12 @@ class DashboardPublisher:
                     )
                 det_payload = _build_detections_payload(detections, self._session_id)
                 await self._sio.emit("detections_update", det_payload)
+
+                sessions: list[dict] = []
+                if self._persistence is not None:
+                    sessions = self._persistence.get_recent_sessions(limit=10)
+                sessions_payload = _build_sessions_payload(sessions, self._session_id)
+                await self._sio.emit("sessions_update", sessions_payload)
 
             except asyncio.CancelledError:
                 raise

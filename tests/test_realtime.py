@@ -8,6 +8,7 @@ from airautomatica.models.state import AircraftState
 from airautomatica.realtime.publisher import (
     _build_detections_payload,
     _build_health_payload,
+    _build_sessions_payload,
     _build_state_payload,
 )
 
@@ -123,3 +124,26 @@ def test_detections_payload_with_detections() -> None:
     payload = _build_detections_payload(detections, 5)
     assert payload["detections"] == detections
     assert payload["session_id"] == 5
+
+
+def test_sessions_payload_empty() -> None:
+    """Sessions payload has empty list when no sessions."""
+    payload = _build_sessions_payload([], None)
+    assert payload["sessions"] == []
+    assert payload["current_session_id"] is None
+
+
+def test_sessions_payload_with_sessions() -> None:
+    """Sessions payload includes sessions and current_session_id."""
+    sessions = [
+        {
+            "id": 20,
+            "started_at": "2025-03-09T18:30:00.000Z",
+            "ended_at": None,
+            "telemetry_backend": "mock",
+            "ai_backend": "lmstudio",
+        },
+    ]
+    payload = _build_sessions_payload(sessions, 20)
+    assert payload["sessions"] == sessions
+    assert payload["current_session_id"] == 20

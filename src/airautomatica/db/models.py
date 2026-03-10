@@ -25,6 +25,7 @@ class FlightSession(Base):
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     telemetry_samples = relationship("TelemetrySample", back_populates="session")
+    path_points = relationship("PathPoint", back_populates="session")
     detections = relationship("Detection", back_populates="session")
     system_events = relationship("SystemEvent", back_populates="session")
     commands_sent = relationship("CommandSent", back_populates="session")
@@ -51,6 +52,23 @@ class TelemetrySample(Base):
     airspeed_m_s: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     session = relationship("FlightSession", back_populates="telemetry_samples")
+
+
+class PathPoint(Base):
+    """Flight path point (distance-based sampling for compact path storage)."""
+
+    __tablename__ = "path_points"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("flight_sessions.id"), nullable=False
+    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    rel_alt_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    session = relationship("FlightSession", back_populates="path_points")
 
 
 class Detection(Base):

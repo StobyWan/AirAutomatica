@@ -329,3 +329,45 @@ def test_recent_detections_limit(monkeypatch: pytest.MonkeyPatch) -> None:
         assert len(data["detections"]) == 20
         assert data["detections"][0]["label"] == "det_24"
         assert data["detections"][19]["label"] == "det_5"
+
+
+def test_get_session_path_empty_when_no_persistence(client: TestClient) -> None:
+    """GET /sessions/{id}/path returns empty path when persistence not configured."""
+    r = client.get("/sessions/1/path")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["session_id"] == 1
+    assert data["path"] == []
+
+
+def test_get_session_path_returns_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /sessions/{id}/path returns path points when available."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        assert get_engine() is not None
+
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        now = datetime.now(timezone.utc)
+        persistence.insert_path_point(session_id, now, 37.5, -122.5, 100.0)
+        persistence.insert_path_point(
+            session_id, now + timedelta(seconds=10), 37.51, -122.51, 105.0
+        )
+
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
+        r = client.get(f"/sessions/{session_id}/path")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["session_id"] == session_id
+        assert len(data["path"]) == 2
+        assert data["path"][0]["lat"] == 37.5
+        assert data["path"][0]["lon"] == -122.5
+        assert data["path"][1]["lat"] == 37.51
+        assert data["path"][1]["lon"] == -122.51

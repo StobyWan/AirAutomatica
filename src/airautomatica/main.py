@@ -33,6 +33,7 @@ from airautomatica.logging_config import setup_logging
 from airautomatica.realtime import DashboardPublisher, sio, wrap_app
 from airautomatica.services.mission_logic import MissionLogic
 from airautomatica.services.persistence import (
+    PathRecorder,
     PersistenceService,
     TelemetryLifecycleLogger,
     TelemetrySampler,
@@ -128,6 +129,7 @@ async def _telemetry_loop(
     store: StateStore,
     source: TelemetrySource,
     sampler: TelemetrySampler | None = None,
+    path_recorder: PathRecorder | None = None,
     lifecycle_logger: TelemetryLifecycleLogger | None = None,
 ) -> None:
     """Consume telemetry stream and update store."""
@@ -135,6 +137,8 @@ async def _telemetry_loop(
         store.update(state)
         if sampler is not None:
             sampler.maybe_sample(state)
+        if path_recorder is not None:
+            path_recorder.maybe_record(state)
         if lifecycle_logger is not None:
             lifecycle_logger.maybe_log_transition(state)
 
@@ -159,6 +163,7 @@ def main() -> None:
     else:
         logger.warning("Session start failed; persistence disabled")
     sampler = TelemetrySampler(persistence, session_id, interval_sec=1.0)
+    path_recorder = PathRecorder(persistence, session_id, min_distance_m=5.0)
     lifecycle_logger = TelemetryLifecycleLogger(persistence, session_id)
 
     def _end_session() -> None:
@@ -215,6 +220,7 @@ def main() -> None:
                 store,
                 source,
                 sampler,
+                path_recorder,
                 lifecycle_logger,
                 name="telemetry",
             )
