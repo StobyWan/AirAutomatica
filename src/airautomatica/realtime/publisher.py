@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections import deque
 from typing import TYPE_CHECKING, Optional
 
 import socketio
@@ -15,6 +16,9 @@ if TYPE_CHECKING:
     from airautomatica.services.state_store import StateStore
 
 logger = logging.getLogger(__name__)
+
+_HEARTBEAT_BUFFER_MAX = 60
+_THROTTLE_INTERVAL = 5
 
 
 def _build_health_payload(
@@ -97,6 +101,8 @@ class DashboardPublisher:
         self._telemetry_backend = telemetry_backend
         self._sio = sio
         self._interval_sec = interval_sec
+        self._heartbeat_buffer: deque[dict] = deque(maxlen=_HEARTBEAT_BUFFER_MAX)
+        self._loop_count = 0
 
     async def run(self) -> None:
         """Emit updates at interval. Runs until cancelled."""
@@ -109,6 +115,17 @@ class DashboardPublisher:
                     if self._persistence is not None
                     else None
                 )
+
+                # Update heartbeat buffer for sparklines
+                if state is not None:
+                    hb = nan_to_none(state.heartbeat_age_s)
+                    if hb is not None:
+                        self._heartbeat_buffer.append(
+                            {
+                                "timestamp": state.timestamp.isoformat(),
+                                "heartbeat_age_s": hb,
+                            }
+                        )
 
                 health = _build_health_payload(
                     state,
@@ -133,9 +150,70 @@ class DashboardPublisher:
 
                 sessions: list[dict] = []
                 if self._persistence is not None:
-                    sessions = self._persistence.get_recent_sessions(limit=10)
+                    sessions = self._persistence.get_recent_sessions(
+                        limit=10, include_detection_count=True
+                    )
                 sessions_payload = _build_sessions_payload(sessions, self._session_id)
                 await self._sio.emit("sessions_update", sessions_payload)
+
+                # Throttled events (every 5s)
+                self._loop_count += 1
+                if self._loop_count % _THROTTLE_INTERVAL == 0:
+                    events: list[dict] = []
+                    if self._persistence is not None:
+                        events = self._persistence.get_recent_system_events(limit=30)
+                    await self._sio.emit("events_update", {"events": events})
+
+                    path: list[dict] = []
+                    current_position = None
+                    if self._persistence is not None and self._session_id is not None:
+                        path = self._persistence.get_session_path(
+                            self._session_id, limit=500
+                        )
+                    if state is not None:
+                        lat = nan_to_none(state.lat)
+                        lon = nan_to_none(state.lon)
+                        if lat is not None and lon is not None:
+                            current_position = {
+                                "lat": lat,
+                                "lon": lon,
+                                "rel_alt_m": nan_to_none(state.rel_alt_m),
+                            }
+                    path_payload = {
+                        "path": path,
+                        "current_position": current_position,
+                        "detections": detections,
+                        "session_id": self._session_id,
+                    }
+                    await self._sio.emit("telemetry_path_update", path_payload)
+
+                    # Trends: telemetry from DB + heartbeat from buffer
+                    voltage: list[float] = []
+                    rel_alt_m_list: list[float] = []
+                    groundspeed_m_s: list[float] = []
+                    heartbeat_age_s: list[float] = []
+                    if self._persistence is not None and self._session_id is not None:
+                        samples = self._persistence.get_recent_telemetry_samples(
+                            self._session_id, limit=30
+                        )
+                        # Samples are newest first; reverse for oldest-first
+                        for s in reversed(samples):
+                            v = s.get("voltage_v")
+                            voltage.append(v if v is not None else 0.0)
+                            a = s.get("rel_alt_m")
+                            rel_alt_m_list.append(a if a is not None else 0.0)
+                            g = s.get("groundspeed_m_s")
+                            groundspeed_m_s.append(g if g is not None else 0.0)
+                    hb_list = list(self._heartbeat_buffer)[-30:]
+                    for h in reversed(hb_list):
+                        heartbeat_age_s.append(h["heartbeat_age_s"])
+                    trends_payload = {
+                        "voltage": voltage,
+                        "rel_alt_m": rel_alt_m_list,
+                        "groundspeed_m_s": groundspeed_m_s,
+                        "heartbeat_age_s": heartbeat_age_s,
+                    }
+                    await self._sio.emit("trends_update", trends_payload)
 
             except asyncio.CancelledError:
                 raise

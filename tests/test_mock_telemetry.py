@@ -1,5 +1,6 @@
 """Tests for mock telemetry and state store."""
 
+import math
 from datetime import datetime, timezone
 
 import pytest
@@ -7,6 +8,24 @@ import pytest
 from airautomatica.models.state import AircraftState
 from airautomatica.services.state_store import StateStore
 from airautomatica.telemetry.mock import MockTelemetry
+
+
+@pytest.mark.asyncio
+async def test_mock_heartbeat_age_increases() -> None:
+    """Mock telemetry heartbeat_age_s increases between simulated heartbeats."""
+    source = MockTelemetry(interval_sec=0.05, heartbeat_interval_sec=0.2)
+    states: list[AircraftState] = []
+    async for state in source.stream():
+        states.append(state)
+        if len(states) >= 6:
+            break
+    # First state: heartbeat just received, age ~0
+    assert states[0].heartbeat_age_s < 0.1
+    # Subsequent states: age should increase until next heartbeat at ~0.2s
+    ages = [s.heartbeat_age_s for s in states]
+    assert all(not math.isnan(a) for a in ages)
+    # Age should generally increase (or reset after heartbeat)
+    assert max(ages) > 0.05
 
 
 @pytest.mark.asyncio

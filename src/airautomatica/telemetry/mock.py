@@ -2,6 +2,7 @@
 
 import asyncio
 import math
+import time
 from datetime import datetime, timezone
 from typing import AsyncIterator
 
@@ -12,16 +13,36 @@ from airautomatica.telemetry.base import TelemetrySource
 class MockTelemetry(TelemetrySource):
     """Simulates changing flight data for local development.
     Simulates one disconnect after startup so users see what happens when FC is unplugged.
+    Simulates heartbeat at ~1 Hz so heartbeat_age_s increases between heartbeats.
     """
 
-    def __init__(self, interval_sec: float = 0.5) -> None:
+    def __init__(
+        self, interval_sec: float = 0.5, heartbeat_interval_sec: float = 1.0
+    ) -> None:
         self._interval = interval_sec
+        self._heartbeat_interval = heartbeat_interval_sec
         self._heartbeat = 0
+        self._last_heartbeat_time: float | None = None
         self._disconnect_demo_done = False
 
     def _make_connected_state(self, t: float) -> AircraftState:
-        """Build a connected state at time t."""
-        self._heartbeat += 1
+        """Build a connected state at time t. Simulates heartbeat at intervals."""
+        now_mono = time.monotonic()
+        now = datetime.now(timezone.utc)
+
+        # Simulate heartbeat: only "receive" one every heartbeat_interval_sec
+        if self._last_heartbeat_time is None or (
+            now_mono - self._last_heartbeat_time >= self._heartbeat_interval
+        ):
+            self._last_heartbeat_time = now_mono
+            self._heartbeat += 1
+
+        heartbeat_age_s = (
+            now_mono - self._last_heartbeat_time
+            if self._last_heartbeat_time is not None
+            else 0.0
+        )
+
         lat = 37.6213 + 0.0001 * math.sin(t)
         lon = -122.3790 + 0.0001 * math.cos(t)
         rel_alt_m = 50.0 + 10.0 * math.sin(t * 0.5)
@@ -34,7 +55,6 @@ class MockTelemetry(TelemetrySource):
         groundspeed_m_s = 15.0 + 5.0 * math.sin(t * 0.2)
         airspeed_m_s = groundspeed_m_s + 2.0
         mode = "GUIDED" if (self._heartbeat % 20) > 10 else "AUTO"
-        now = datetime.now(timezone.utc)
         return AircraftState(
             connected=True,
             heartbeat=self._heartbeat,
@@ -52,7 +72,7 @@ class MockTelemetry(TelemetrySource):
             airspeed_m_s=round(airspeed_m_s, 2),
             timestamp=now,
             last_heartbeat_at=now,
-            heartbeat_age_s=0.0,
+            heartbeat_age_s=round(heartbeat_age_s, 2),
             telemetry_status="connected",
             reconnect_count=0,
             last_disconnect_reason=None,

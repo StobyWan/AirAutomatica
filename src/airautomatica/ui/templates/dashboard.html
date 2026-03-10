@@ -74,6 +74,25 @@
     .tab-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
     .tab-btn:hover { color: var(--text); }
     .tab-btn.active { color: var(--text); border-bottom-color: var(--connecting); }
+    .chip { display: inline-block; padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .chip-ok { background: var(--connected); color: #000; }
+    .chip-warn { background: var(--stale); color: #000; }
+    .chip-err { background: var(--disconnected); color: #fff; }
+    .detection-card { padding: 0.75rem; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); font-size: 0.875rem; }
+    .detection-cards { display: grid; grid-template-columns: repeat(1, 1fr); gap: 0.5rem; }
+    @media (min-width: 640px) { .detection-cards { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .detection-cards { grid-template-columns: repeat(3, 1fr); } }
+    .event-item { padding: 0.375rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.8125rem; }
+    .event-item:last-child { border-bottom: none; }
+    .path-svg { width: 100%; height: 180px; background: rgba(0,0,0,0.2); border-radius: 6px; }
+    .sparkline { width: 100%; height: 36px; }
+    .trends-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+    @media (min-width: 640px) { .trends-grid { grid-template-columns: repeat(4, 1fr); } }
+    .settings-field { margin-bottom: 1rem; }
+    .settings-field label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .settings-field input, .settings-field select { width: 100%; max-width: 20rem; padding: 0.5rem; border-radius: 6px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: var(--text); font-size: 0.875rem; }
+    .settings-field select { cursor: pointer; }
+    .settings-field input:focus, .settings-field select:focus { outline: none; border-color: var(--connecting); }
   </style>
 </head>
 <body>
@@ -83,6 +102,7 @@
   <nav class="flex gap-1 mb-4 border-b border-gray-700/50">
     <button type="button" class="tab-btn active" data-tab="main">Live</button>
     <button type="button" class="tab-btn" data-tab="sessions">Session History</button>
+    <button type="button" class="tab-btn" data-tab="settings">Settings</button>
   </nav>
 
   <div id="tab-main" class="tab-panel active">
@@ -115,8 +135,27 @@
   </div>
 
   <div class="card">
+    <h2>Flight Path</h2>
+    <div id="path-container">
+      <svg id="path-svg" class="path-svg" viewBox="0 0 200 180" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="path-empty" class="hidden text-center py-8 text-slate-500 text-sm">No path data</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Trends</h2>
+    <div id="trends-container" class="trends-grid"></div>
+    <div id="trends-empty" class="hidden text-center py-4 text-slate-500 text-sm">No trend data</div>
+  </div>
+
+  <div class="card">
     <h2>Recent Detections</h2>
-    <div id="detections-list"></div>
+    <div id="detections-list" class="detection-cards"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent Events</h2>
+    <div id="events-list" class="max-h-48 overflow-y-auto"></div>
   </div>
 
   <div class="card">
@@ -132,6 +171,58 @@
   </div>
   </div>
 
+  <div id="tab-settings" class="tab-panel">
+  <div class="card">
+    <h2>Settings</h2>
+    <p class="text-sm text-slate-400 mb-4">Changes are saved to <code class="text-slate-500">~/.airautomatica/settings.json</code>. Restart the app to apply.</p>
+    <form id="settings-form" class="max-w-xl">
+      <div class="settings-field">
+        <label for="TELEMETRY_BACKEND">Telemetry backend</label>
+        <select id="TELEMETRY_BACKEND" name="TELEMETRY_BACKEND">
+          <option value="mock">mock</option>
+          <option value="serial">serial</option>
+        </select>
+      </div>
+      <div class="settings-field">
+        <label for="AI_MODE">AI mode</label>
+        <select id="AI_MODE" name="AI_MODE">
+          <option value="mock">mock</option>
+          <option value="lmstudio">lmstudio</option>
+          <option value="aihat">aihat</option>
+        </select>
+      </div>
+      <div class="settings-field">
+        <label for="SERIAL_PORT">Serial port</label>
+        <input type="text" id="SERIAL_PORT" name="SERIAL_PORT" placeholder="/dev/ttyACM0" />
+      </div>
+      <div class="settings-field">
+        <label for="SERIAL_BAUD">Serial baud rate</label>
+        <input type="number" id="SERIAL_BAUD" name="SERIAL_BAUD" placeholder="921600" min="9600" max="2000000" />
+      </div>
+      <div class="settings-field">
+        <label for="LM_STUDIO_BASE_URL">LM Studio base URL</label>
+        <input type="text" id="LM_STUDIO_BASE_URL" name="LM_STUDIO_BASE_URL" placeholder="http://localhost:1234" />
+      </div>
+      <div class="settings-field">
+        <label for="LM_STUDIO_MODEL">LM Studio model name</label>
+        <input type="text" id="LM_STUDIO_MODEL" name="LM_STUDIO_MODEL" placeholder="local-model" />
+      </div>
+      <div class="settings-field">
+        <label for="AI_MIN_CONFIDENCE">AI min confidence (0–1)</label>
+        <input type="number" id="AI_MIN_CONFIDENCE" name="AI_MIN_CONFIDENCE" placeholder="0.5" min="0" max="1" step="0.1" />
+      </div>
+      <div class="settings-field">
+        <label for="AI_DUPLICATE_WINDOW_SEC">AI duplicate window (seconds)</label>
+        <input type="number" id="AI_DUPLICATE_WINDOW_SEC" name="AI_DUPLICATE_WINDOW_SEC" placeholder="30" min="1" />
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button type="submit" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm">Save</button>
+        <span id="settings-status" class="text-sm text-slate-500 self-center"></span>
+      </div>
+    </form>
+  </div>
+  </div>
+
   <script>
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -140,11 +231,39 @@
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('tab-' + tab).classList.add('active');
+        if (tab === 'settings') loadSettingsForm();
       });
+    });
+
+    function loadSettingsForm() {
+      fetch('/settings').then(r => r.json()).then(d => {
+        const s = d.settings || {};
+        ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LM_STUDIO_BASE_URL','LM_STUDIO_MODEL','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
+          const el = document.getElementById(k);
+          if (el && s[k] !== undefined) el.value = s[k];
+        });
+      }).catch(() => {});
+    }
+
+    document.getElementById('settings-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const updates = {};
+      ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LM_STUDIO_BASE_URL','LM_STUDIO_MODEL','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
+        const el = document.getElementById(k);
+        if (el && el.value) updates[k] = el.value;
+      });
+      const statusEl = document.getElementById('settings-status');
+      statusEl.textContent = 'Saving…';
+      fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+        .then(r => r.json())
+        .then(() => { statusEl.textContent = 'Saved. Restart the app to apply.'; })
+        .catch(() => { statusEl.textContent = 'Save failed.'; });
     });
   </script>
   <script>
     const socket = io();
+
     const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
     const fmtNum = (v) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : String(v);
     const fmtNumPrec = (v, decimals) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(decimals);
@@ -163,6 +282,41 @@
 
     socket.on('connect', () => {
       document.getElementById('connection-status').textContent = 'Connected';
+      fetch('/recent-events').then(r => r.json()).then(d => {
+        const list = (d.events || []).slice(0, 20);
+        const el = document.getElementById('events-list');
+        if (list.length === 0) el.innerHTML = '<span class="na">No events</span>';
+        else {
+          const fmtTs = (ts) => ts ? new Date(ts).toLocaleTimeString() : '—';
+          el.innerHTML = list.map(e => `<div class="event-item"><span class="text-slate-500 font-mono text-[10px]">${fmtTs(e.timestamp)}</span> <span class="text-slate-400">${fmt(e.event_type)}</span> <span class="text-slate-300">${fmt(e.message)}</span></div>`).join('');
+        }
+      }).catch(() => {});
+      fetch('/sessions').then(r => r.json()).then(d => {
+        const list = d.sessions || [];
+        const currentId = d.current_session_id;
+        const el = document.getElementById('sessions-list');
+        if (list.length === 0) el.innerHTML = '<span class="na">No sessions</span>';
+        else {
+          const fmtDate = (s) => s ? new Date(s).toLocaleString() : '—';
+          const fmtDuration = (started, ended) => {
+            if (!started || !ended) return '—';
+            const a = new Date(started).getTime();
+            const b = new Date(ended).getTime();
+            const sec = Math.round((b - a) / 1000);
+            if (sec < 60) return sec + ' s';
+            if (sec < 3600) return Math.floor(sec / 60) + ' m';
+            return Math.floor(sec / 3600) + ' h ' + Math.floor((sec % 3600) / 60) + ' m';
+          };
+          el.innerHTML = list.map(s => {
+            const isCurrent = s.id === currentId;
+            const badge = isCurrent ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/30 text-blue-300 border border-blue-500/40">current</span>' : '';
+            const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="text-emerald-400/80">active</span>';
+            const duration = fmtDuration(s.started_at, s.ended_at);
+            const detCount = s.detection_count != null ? s.detection_count : '—';
+            return `<a href="/dashboard/sessions/${s.id}" class="session-item block border border-transparent hover:border-slate-600/50"><div class="flex items-center gap-2 flex-wrap"><span class="font-semibold text-cyan-400">#${s.id}</span>${badge} <span class="text-slate-400">·</span> <span class="text-slate-300">${s.telemetry_backend}</span> <span class="text-slate-500">/</span> <span class="text-slate-300">${s.ai_backend}</span></div><div class="text-xs text-slate-500 mt-1.5">Started ${fmtDate(s.started_at)} · Ended ${ended} · Duration ${duration} · ${detCount} detections</div></a>`;
+          }).join('');
+        }
+      }).catch(() => {});
     });
     socket.on('disconnect', () => {
       document.getElementById('connection-status').textContent = 'Disconnected';
@@ -236,10 +390,17 @@
         el.innerHTML = '<span class="na">No detections</span>';
         return;
       }
+      const fmtTs = (ts) => ts ? new Date(ts).toLocaleString() : '—';
       el.innerHTML = list.map(d => `
-        <div class="detection-item">
-          <strong>${fmt(d.label)}</strong> ${(d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '')}
-          ${d.summary ? ' — ' + d.summary : ''}
+        <div class="detection-card">
+          <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
+          <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmt(d.source_backend)}</div>
+          ${d.summary ? `<div class="mt-1 text-slate-300">${d.summary}</div>` : ''}
+          <div class="mt-1.5 text-xs text-slate-500 font-mono">
+            ${fmtTs(d.timestamp)}
+            ${d.lat != null && d.lon != null ? ` · ${Number(d.lat).toFixed(5)}, ${Number(d.lon).toFixed(5)}` : ''}
+            ${d.rel_alt_m != null ? ` · ${Number(d.rel_alt_m).toFixed(1)} m` : ''}
+          </div>
         </div>
       `).join('');
     });
@@ -261,10 +422,25 @@
           return s;
         }
       };
+      const fmtDuration = (started, ended) => {
+        if (!started || !ended) return '<span class="na">—</span>';
+        try {
+          const a = new Date(started).getTime();
+          const b = new Date(ended).getTime();
+          const sec = Math.round((b - a) / 1000);
+          if (sec < 60) return sec + ' s';
+          if (sec < 3600) return Math.floor(sec / 60) + ' m';
+          return Math.floor(sec / 3600) + ' h ' + Math.floor((sec % 3600) / 60) + ' m';
+        } catch {
+          return '—';
+        }
+      };
       el.innerHTML = list.map(s => {
         const isCurrent = s.id === currentId;
         const badge = isCurrent ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/30 text-blue-300 border border-blue-500/40">current</span>' : '';
         const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="text-emerald-400/80">active</span>';
+        const duration = fmtDuration(s.started_at, s.ended_at);
+        const detCount = s.detection_count != null ? s.detection_count : '—';
         return `<a href="/dashboard/sessions/${s.id}" class="session-item block border border-transparent hover:border-slate-600/50">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-semibold text-cyan-400">#${s.id}</span>${badge}
@@ -273,8 +449,122 @@
             <span class="text-slate-500">/</span>
             <span class="text-slate-300">${s.ai_backend}</span>
           </div>
-          <div class="text-xs text-slate-500 mt-1.5">Started ${fmtDate(s.started_at)} · Ended ${ended}</div>
+          <div class="text-xs text-slate-500 mt-1.5">Started ${fmtDate(s.started_at)} · Ended ${ended} · Duration ${duration} · ${detCount} detections</div>
         </a>`;
+      }).join('');
+    });
+
+    socket.on('events_update', (d) => {
+      const list = (d.events || []).slice(0, 20);
+      const el = document.getElementById('events-list');
+      if (list.length === 0) {
+        el.innerHTML = '<span class="na">No events</span>';
+        return;
+      }
+      const fmtTs = (ts) => ts ? new Date(ts).toLocaleTimeString() : '—';
+      el.innerHTML = list.map(e => `
+        <div class="event-item">
+          <span class="text-slate-500 font-mono text-[10px]">${fmtTs(e.timestamp)}</span>
+          <span class="text-slate-400">${fmt(e.event_type)}</span>
+          <span class="text-slate-300">${fmt(e.message)}</span>
+        </div>
+      `).join('');
+    });
+
+    socket.on('telemetry_path_update', (d) => {
+      const path = d.path || [];
+      const current = d.current_position;
+      const detections = d.detections || [];
+      const svgEl = document.getElementById('path-svg');
+      const emptyEl = document.getElementById('path-empty');
+      if (path.length === 0 && !current) {
+        svgEl.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      svgEl.classList.remove('hidden');
+      emptyEl.classList.add('hidden');
+      const points = path.map(p => ({ lat: p.lat, lon: p.lon }));
+      if (current && current.lat != null && current.lon != null) {
+        points.push({ lat: current.lat, lon: current.lon });
+      }
+      if (points.length === 0) return;
+      const lats = points.map(p => p.lat).filter(x => x != null);
+      const lons = points.map(p => p.lon).filter(x => x != null);
+      if (lats.length === 0 || lons.length === 0) return;
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLon = Math.min(...lons);
+      const maxLon = Math.max(...lons);
+      const padLat = (maxLat - minLat) * 0.1 || 0.0001;
+      const padLon = (maxLon - minLon) * 0.1 || 0.0001;
+      const w = 200;
+      const h = 180;
+      const margin = 8;
+      const plotW = w - 2 * margin;
+      const plotH = h - 2 * margin;
+      const toX = (lon) => margin + ((lon - (minLon - padLon)) / ((maxLon + padLon) - (minLon - padLon))) * plotW;
+      const toY = (lat) => h - margin - ((lat - (minLat - padLat)) / ((maxLat + padLat) - (minLat - padLat))) * plotH;
+      const pathD = path.filter(p => p.lat != null && p.lon != null)
+        .map((p, i) => (i === 0 ? 'M' : 'L') + toX(p.lon) + ' ' + toY(p.lat))
+        .join(' ');
+      let svg = `<path d="${pathD}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+      path.filter(p => p.lat != null && p.lon != null).forEach((p, i) => {
+        if (i === path.length - 1 && current) return;
+        svg += `<circle cx="${toX(p.lon)}" cy="${toY(p.lat)}" r="2" fill="#3b82f6"/>`;
+      });
+      if (current && current.lat != null && current.lon != null) {
+        svg += `<circle cx="${toX(current.lon)}" cy="${toY(current.lat)}" r="4" fill="#22c55e" stroke="#fff" stroke-width="1"/>`;
+      }
+      detections.filter(d => d.lat != null && d.lon != null).forEach(d => {
+        svg += `<circle cx="${toX(d.lon)}" cy="${toY(d.lat)}" r="3" fill="#ef4444" opacity="0.8"/>`;
+      });
+      svgEl.innerHTML = svg;
+    });
+
+    socket.on('trends_update', (d) => {
+      const voltage = d.voltage || [];
+      const relAlt = d.rel_alt_m || [];
+      const groundspeed = d.groundspeed_m_s || [];
+      const heartbeat = d.heartbeat_age_s || [];
+      const container = document.getElementById('trends-container');
+      const emptyEl = document.getElementById('trends-empty');
+      const hasData = voltage.length > 0 || relAlt.length > 0 || groundspeed.length > 0 || heartbeat.length > 0;
+      if (!hasData) {
+        container.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      container.classList.remove('hidden');
+      emptyEl.classList.add('hidden');
+      function sparkPoints(arr, minVal, maxVal) {
+        if (arr.length === 0) return '';
+        const m = minVal ?? Math.min(...arr);
+        const M = maxVal ?? Math.max(...arr);
+        const range = M - m || 1;
+        const w = 140;
+        const h = 32;
+        return arr.map((v, i) => {
+          const x = (i / (arr.length - 1 || 1)) * w;
+          const y = h - ((v - m) / range) * h;
+          return x + ',' + y;
+        }).join(' ');
+      }
+      container.innerHTML = [
+        ['Voltage (V)', voltage, 0, 20],
+        ['Alt (m)', relAlt, 0],
+        ['Groundspeed (m/s)', groundspeed, 0],
+        ['Heartbeat age (s)', heartbeat, 0],
+      ].map(([label, arr, minV, maxV]) => {
+        const pts = sparkPoints(arr, minV, maxV);
+        return pts ? `
+          <div class="flex flex-col gap-0.5">
+            <span class="text-xs text-slate-500">${label}</span>
+            <svg class="sparkline" viewBox="0 0 140 32" preserveAspectRatio="none">
+              <polyline fill="none" stroke="#3b82f6" stroke-width="1" points="${pts}"/>
+            </svg>
+          </div>
+        ` : `<div><span class="text-xs text-slate-500">${label}</span><div class="text-slate-600 text-xs">—</div></div>`;
       }).join('');
     });
   </script>

@@ -129,9 +129,14 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 | `GET /health` | Health check |
 | `GET /state` | Current aircraft state (JSON) |
 | `GET /recent-detections` | Recent persisted detections (current session, limit 20) |
+| `GET /recent-events` | Recent system events for dashboard |
+| `GET /sessions` | Recent flight sessions with detection counts |
+| `GET /sessions/{id}/path` | Flight path JSON (lat, lon, rel_alt_m, timestamp) |
+| `GET /sessions/{id}/telemetry-samples` | Recent telemetry samples for path/sparklines |
+| `GET /settings` | Current settings (telemetry, AI, serial, etc.) |
+| `POST /settings` | Save settings (restart required to apply) |
 | `GET /dashboard` | Real-time flight dashboard (HTML + Socket.IO) |
 | `GET /dashboard/sessions/{id}` | Session detail page with flight path (lat/lon) |
-| `GET /sessions/{id}/path` | Flight path JSON (lat, lon, rel_alt_m, timestamp) |
 
 ## Live Dashboard
 
@@ -140,11 +145,15 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 **Features:**
 - **System Health** — Telemetry status, backend info, heartbeat age, reconnect count
 - **Aircraft State** — Mode, lat/lon, altitude, heading (with compass), voltage, speed
-- **Recent Detections** — AI detections for the current session
-- **Session History** — List of recent flight sessions; click a session to view its path
+- **Flight Path** — SVG plot of recent flight breadcrumb, current position, and detection markers
+- **Trends** — Sparklines for voltage, altitude, groundspeed, heartbeat age
+- **Recent Detections** — Card layout with label, confidence, summary, timestamp, position, source
+- **Event Log** — Recent system events (telemetry lifecycle, app shutdown)
+- **Session History** — Sessions with duration, detection count; click to view path
 - **Session Detail** — `GET /dashboard/sessions/{id}` shows the flight path (lat/lon points) for a session
+- **Settings** — Configure telemetry backend, AI mode, serial port, LM Studio URL, etc. Saves to `~/.airautomatica/settings.json`; restart required to apply
 
-Uses Socket.IO for live updates. Read-only, non-flight-critical. Works with persistence disabled.
+Uses Socket.IO for live updates. Read-only, non-flight-critical. Works with persistence disabled. See [docs/dashboard.md](docs/dashboard.md) for details.
 
 ## Project Structure
 
