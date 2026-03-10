@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import HTMLResponse
 
 from airautomatica.config import get_ai_mode, get_sqlite_db_path, get_telemetry_backend
@@ -13,6 +13,7 @@ from airautomatica.logging_config import setup_logging
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
+from airautomatica.settings import get_settings, save_settings
 from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
 
 
@@ -95,6 +96,43 @@ def create_app(
             return {"path": [], "session_id": sid}
         path = persistence.get_session_path(sid)
         return {"path": path, "session_id": sid}
+
+    @app.get("/recent-events")
+    def get_recent_events() -> dict:
+        """Return recent system events for dashboard. Degrades to [] when persistence disabled."""
+        if persistence is None:
+            return {"events": []}
+        events = persistence.get_recent_system_events(limit=50)
+        return {"events": events}
+
+    @app.get("/sessions/{sid:int}/telemetry-samples")
+    def get_session_telemetry_samples(sid: int) -> dict:
+        """Return recent telemetry samples for a session (path + sparklines)."""
+        if persistence is None:
+            return {"samples": [], "session_id": sid}
+        samples = persistence.get_recent_telemetry_samples(sid, limit=60)
+        return {"samples": samples, "session_id": sid}
+
+    @app.get("/sessions")
+    def get_sessions() -> dict:
+        """Return recent flight sessions with detection counts. For dashboard initial load."""
+        if persistence is None:
+            return {"sessions": [], "current_session_id": session_id}
+        sessions = persistence.get_recent_sessions(
+            limit=10, include_detection_count=True
+        )
+        return {"sessions": sessions, "current_session_id": session_id}
+
+    @app.get("/settings")
+    def get_settings_endpoint() -> dict:
+        """Return current settings (telemetry, AI, serial, etc.)."""
+        return {"settings": get_settings(), "restart_required": True}
+
+    @app.post("/settings")
+    def post_settings(updates: dict = Body(...)) -> dict:
+        """Save settings to file. Restart the app to apply changes."""
+        save_settings(updates)
+        return {"ok": True, "message": "Settings saved. Restart the app to apply."}
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:

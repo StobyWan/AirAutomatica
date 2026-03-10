@@ -8,10 +8,16 @@ import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from airautomatica.db.base import get_engine
-from airautomatica.db.models import Detection, FlightSession, PathPoint, TelemetrySample
+from airautomatica.db.models import (
+    Detection,
+    FlightSession,
+    PathPoint,
+    SystemEvent,
+    TelemetrySample,
+)
 from airautomatica.db.session import get_session
 from airautomatica.models.state import nan_to_none
 
@@ -278,34 +284,68 @@ class PersistenceService:
             logger.exception("get_session_path failed: %s", e)
             return []
 
-    def get_recent_sessions(self, limit: int = 10) -> list[dict]:
-        """Fetch recent flight sessions, newest first. Returns [] when DB disabled or on error."""
+    def get_recent_sessions(
+        self,
+        limit: int = 10,
+        include_detection_count: bool = True,
+    ) -> list[dict]:
+        """Fetch recent flight sessions, newest first. Returns [] when DB disabled or on error.
+
+        When include_detection_count is True, each session dict includes detection_count.
+        """
         if get_engine() is None:
             return []
         try:
             with get_session() as session:
                 if session is None:
                     return []
+                if include_detection_count:
+                    stmt = (
+                        select(
+                            FlightSession,
+                            func.count(Detection.id).label("detection_count"),
+                        )
+                        .outerjoin(Detection, Detection.session_id == FlightSession.id)
+                        .group_by(FlightSession.id)
+                        .order_by(FlightSession.started_at.desc())
+                        .limit(limit)
+                    )
+                    result = session.execute(stmt)
+                    rows = result.all()
+                    out: list[dict] = []
+                    for row in rows:
+                        fs, det_count = row
+                        out.append(
+                            {
+                                "id": fs.id,
+                                "started_at": fs.started_at.isoformat(),
+                                "ended_at": (
+                                    fs.ended_at.isoformat() if fs.ended_at else None
+                                ),
+                                "telemetry_backend": fs.telemetry_backend,
+                                "ai_backend": fs.ai_backend,
+                                "detection_count": det_count or 0,
+                            }
+                        )
+                    return out
                 result = session.execute(
                     select(FlightSession)
                     .order_by(FlightSession.started_at.desc())
                     .limit(limit)
                 )
                 rows = result.scalars().all()
-                out: list[dict] = []
-                for row in rows:
-                    out.append(
-                        {
-                            "id": row.id,
-                            "started_at": row.started_at.isoformat(),
-                            "ended_at": (
-                                row.ended_at.isoformat() if row.ended_at else None
-                            ),
-                            "telemetry_backend": row.telemetry_backend,
-                            "ai_backend": row.ai_backend,
-                        }
-                    )
-                return out
+                return [
+                    {
+                        "id": row.id,
+                        "started_at": row.started_at.isoformat(),
+                        "ended_at": (
+                            row.ended_at.isoformat() if row.ended_at else None
+                        ),
+                        "telemetry_backend": row.telemetry_backend,
+                        "ai_backend": row.ai_backend,
+                    }
+                    for row in rows
+                ]
         except Exception as e:
             self._record_error(str(e))
             logger.exception("get_recent_sessions failed: %s", e)
@@ -323,8 +363,6 @@ class PersistenceService:
         if get_engine() is None:
             return
         try:
-            from airautomatica.db.models import SystemEvent
-
             metadata_json = json.dumps(metadata) if metadata else None
             with get_session() as session:
                 if session is None:
@@ -341,6 +379,80 @@ class PersistenceService:
         except Exception as e:
             self._record_error(str(e))
             logger.exception("insert_system_event failed: %s", e)
+
+    def get_recent_system_events(self, limit: int = 50) -> list[dict]:
+        """Fetch recent system events, newest first. Returns [] when DB disabled or on error."""
+        if get_engine() is None:
+            return []
+        try:
+            with get_session() as session:
+                if session is None:
+                    return []
+                result = session.execute(
+                    select(SystemEvent)
+                    .order_by(SystemEvent.timestamp.desc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                out: list[dict] = []
+                for row in rows:
+                    try:
+                        meta = (
+                            json.loads(row.metadata_json) if row.metadata_json else {}
+                        )
+                    except json.JSONDecodeError:
+                        meta = {}
+                    out.append(
+                        {
+                            "id": row.id,
+                            "session_id": row.session_id,
+                            "timestamp": row.timestamp.isoformat(),
+                            "level": row.level,
+                            "event_type": row.event_type,
+                            "message": row.message,
+                            "metadata": meta,
+                        }
+                    )
+                return out
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_recent_system_events failed: %s", e)
+            return []
+
+    def get_recent_telemetry_samples(
+        self,
+        session_id: int | None,
+        limit: int = 60,
+    ) -> list[dict]:
+        """Fetch recent telemetry samples for session, newest first. Returns [] when DB disabled or on error."""
+        if get_engine() is None or session_id is None:
+            return []
+        try:
+            with get_session() as session:
+                if session is None:
+                    return []
+                result = session.execute(
+                    select(TelemetrySample)
+                    .where(TelemetrySample.session_id == session_id)
+                    .order_by(TelemetrySample.timestamp.desc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                return [
+                    {
+                        "timestamp": r.timestamp.isoformat(),
+                        "lat": r.lat,
+                        "lon": r.lon,
+                        "rel_alt_m": r.rel_alt_m,
+                        "voltage_v": r.voltage_v,
+                        "groundspeed_m_s": r.groundspeed_m_s,
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_recent_telemetry_samples failed: %s", e)
+            return []
 
     def insert_command_sent(
         self,

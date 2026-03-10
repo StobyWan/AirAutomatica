@@ -1,5 +1,6 @@
 """Tests for API endpoints."""
 
+import json
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -338,6 +339,155 @@ def test_get_session_path_empty_when_no_persistence(client: TestClient) -> None:
     data = r.json()
     assert data["session_id"] == 1
     assert data["path"] == []
+
+
+def test_recent_events_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /recent-events returns 200 and list of events."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        persistence.insert_system_event(
+            session_id,
+            "info",
+            "telemetry_status_transition",
+            "Test event",
+            {"from": "connected", "to": "disconnected"},
+        )
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
+        r = client.get("/recent-events")
+        assert r.status_code == 200
+        data = r.json()
+        assert "events" in data
+        assert len(data["events"]) >= 1
+        assert data["events"][0]["event_type"] == "telemetry_status_transition"
+
+
+def test_recent_events_empty_when_no_persistence(client: TestClient) -> None:
+    """GET /recent-events returns empty list when persistence not configured."""
+    r = client.get("/recent-events")
+    assert r.status_code == 200
+    assert r.json() == {"events": []}
+
+
+def test_sessions_telemetry_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /sessions/{id}/telemetry-samples returns 200 and list of samples."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        now = datetime.now(timezone.utc)
+        state = AircraftState(
+            connected=True,
+            heartbeat=1,
+            mode="GUIDED",
+            lat=37.5,
+            lon=-122.2,
+            rel_alt_m=100.0,
+            heading_deg=90.0,
+            roll_rad=0.0,
+            pitch_rad=0.0,
+            yaw_rad=0.0,
+            voltage_v=12.5,
+            current_a=2.0,
+            groundspeed_m_s=10.0,
+            airspeed_m_s=12.0,
+            timestamp=now,
+            telemetry_status="connected",
+        )
+        persistence.insert_telemetry_sample(session_id, state)
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
+        r = client.get(f"/sessions/{session_id}/telemetry-samples")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["session_id"] == session_id
+        assert "samples" in data
+        assert len(data["samples"]) == 1
+        assert data["samples"][0]["voltage_v"] == 12.5
+
+
+def test_sessions_telemetry_empty_when_no_persistence(client: TestClient) -> None:
+    """GET /sessions/{id}/telemetry-samples returns empty when persistence not configured."""
+    r = client.get("/sessions/1/telemetry-samples")
+    assert r.status_code == 200
+    assert r.json() == {"samples": [], "session_id": 1}
+
+
+def test_sessions_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /sessions returns 200 and list of sessions with detection_count."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        client = TestClient(
+            create_app(store, persistence=persistence, session_id=session_id)
+        )
+        r = client.get("/sessions")
+        assert r.status_code == 200
+        data = r.json()
+        assert "sessions" in data
+        assert data["current_session_id"] == session_id
+        assert len(data["sessions"]) >= 1
+        assert "detection_count" in data["sessions"][0]
+
+
+def test_sessions_empty_when_no_persistence(client: TestClient) -> None:
+    """GET /sessions returns empty when persistence not configured."""
+    r = client.get("/sessions")
+    assert r.status_code == 200
+    assert r.json() == {"sessions": [], "current_session_id": None}
+
+
+def test_get_settings(client: TestClient) -> None:
+    """GET /settings returns current settings."""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    data = r.json()
+    assert "settings" in data
+    s = data["settings"]
+    assert "TELEMETRY_BACKEND" in s
+    assert "AI_MODE" in s
+    assert s["TELEMETRY_BACKEND"] in ("mock", "serial")
+    assert s["AI_MODE"] in ("mock", "lmstudio", "aihat")
+
+
+def test_post_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /settings saves and returns success."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        settings_file = settings_dir / "settings.json"
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_FILE", settings_file)
+
+        store = StateStore()
+        client = TestClient(create_app(store))
+        r = client.post(
+            "/settings",
+            json={"TELEMETRY_BACKEND": "mock", "AI_MODE": "lmstudio"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("ok") is True
+        assert "restart" in data.get("message", "").lower()
+        assert settings_file.exists()
+        with open(settings_file) as f:
+            saved = json.load(f)
+        assert saved.get("TELEMETRY_BACKEND") == "mock"
+        assert saved.get("AI_MODE") == "lmstudio"
 
 
 def test_get_session_path_returns_path(monkeypatch: pytest.MonkeyPatch) -> None:

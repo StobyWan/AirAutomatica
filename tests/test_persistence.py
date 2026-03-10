@@ -141,6 +141,125 @@ def test_get_recent_detections_empty_when_no_engine() -> None:
         assert persistence.get_recent_detections(1) == []
 
 
+def test_get_recent_system_events() -> None:
+    """get_recent_system_events returns events newest first, empty when no DB."""
+    with patch("airautomatica.services.persistence.get_engine", return_value=None):
+        persistence = PersistenceService()
+        assert persistence.get_recent_system_events(limit=10) == []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        persistence.insert_system_event(
+            session_id,
+            "info",
+            "telemetry_status_transition",
+            "Telemetry connected -> disconnected",
+            {"from": "connected", "to": "disconnected"},
+        )
+        persistence.insert_system_event(
+            session_id, "info", "app_shutdown", "Application shutdown", None
+        )
+
+        events = persistence.get_recent_system_events(limit=10)
+        assert len(events) == 2
+        assert events[0]["event_type"] == "app_shutdown"
+        assert events[1]["event_type"] == "telemetry_status_transition"
+        assert "timestamp" in events[0]
+        assert "metadata" in events[0]
+        assert events[1]["metadata"] == {"from": "connected", "to": "disconnected"}
+
+
+def test_get_recent_telemetry_samples() -> None:
+    """get_recent_telemetry_samples returns samples for session, empty when no DB/session."""
+    with patch("airautomatica.services.persistence.get_engine", return_value=None):
+        persistence = PersistenceService()
+        assert persistence.get_recent_telemetry_samples(1, limit=10) == []
+
+    persistence = PersistenceService()
+    assert persistence.get_recent_telemetry_samples(None, limit=10) == []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        now = datetime.now(timezone.utc)
+        state = AircraftState(
+            connected=True,
+            heartbeat=1,
+            mode="GUIDED",
+            lat=37.5,
+            lon=-122.2,
+            rel_alt_m=100.0,
+            heading_deg=90.0,
+            roll_rad=0.0,
+            pitch_rad=0.0,
+            yaw_rad=0.0,
+            voltage_v=12.5,
+            current_a=2.0,
+            groundspeed_m_s=10.0,
+            airspeed_m_s=12.0,
+            timestamp=now,
+            telemetry_status="connected",
+        )
+        persistence.insert_telemetry_sample(session_id, state)
+
+        samples = persistence.get_recent_telemetry_samples(session_id, limit=10)
+        assert len(samples) == 1
+        assert samples[0]["lat"] == 37.5
+        assert samples[0]["lon"] == -122.2
+        assert samples[0]["voltage_v"] == 12.5
+        assert samples[0]["groundspeed_m_s"] == 10.0
+        assert "timestamp" in samples[0]
+
+
+def test_get_recent_sessions_includes_detection_count() -> None:
+    """get_recent_sessions includes detection_count when include_detection_count=True."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        from airautomatica.ai.models import AiResult
+
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        persistence.insert_detection(
+            session_id,
+            AiResult(
+                "person", 0.9, "Person detected", "mock", datetime.now(timezone.utc)
+            ),
+            37.0,
+            -122.0,
+            100.0,
+        )
+        persistence.insert_detection(
+            session_id,
+            AiResult("vehicle", 0.8, "Vehicle", "mock", datetime.now(timezone.utc)),
+            37.0,
+            -122.0,
+            100.0,
+        )
+
+        sessions = persistence.get_recent_sessions(
+            limit=10, include_detection_count=True
+        )
+        assert len(sessions) >= 1
+        assert sessions[0]["detection_count"] == 2
+
+        sessions_no_count = persistence.get_recent_sessions(
+            limit=10, include_detection_count=False
+        )
+        assert "detection_count" not in sessions_no_count[0]
+
+
 def test_get_recent_sessions_returns_sessions() -> None:
     """get_recent_sessions returns sessions newest first with expected fields."""
     with tempfile.TemporaryDirectory() as tmp:
