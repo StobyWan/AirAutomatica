@@ -10,14 +10,24 @@ from airautomatica.ai.lmstudio_service import LmStudioAiService
 from airautomatica.ai.mock_service import MockAiService
 from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
+from airautomatica.ai.ollama_task_service import OllamaTaskService
+from airautomatica.ai.ollama_tasks import (
+    EventClassificationResult,
+    OllamaTaskType,
+    TelemetrySummaryResult,
+)
 from airautomatica.ai.service import AiService
 
 __all__ = [
     "AiService",
     "AiResult",
     "ComposedAiService",
+    "EventClassificationResult",
     "MockAiService",
     "OllamaAiService",
+    "OllamaTaskService",
+    "OllamaTaskType",
+    "TelemetrySummaryResult",
     "LmStudioAiService",
     "AiHatAiService",
 ]
