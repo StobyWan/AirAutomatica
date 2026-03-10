@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -46,10 +46,20 @@ class TelemetrySample(Base):
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     rel_alt_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     heading_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    roll_rad: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pitch_rad: Mapped[float | None] = mapped_column(Float, nullable=True)
+    yaw_rad: Mapped[float | None] = mapped_column(Float, nullable=True)
     voltage_v: Mapped[float | None] = mapped_column(Float, nullable=True)
     current_a: Mapped[float | None] = mapped_column(Float, nullable=True)
     groundspeed_m_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     airspeed_m_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    heartbeat_age_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    heartbeat: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reconnect_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_disconnect_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    connected: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     session = relationship("FlightSession", back_populates="telemetry_samples")
 
