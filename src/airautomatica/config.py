@@ -67,7 +67,9 @@ def get_telemetry_backend() -> str:
 
 
 def get_serial_port() -> str:
-    """Serial port for MAVLink. Default: /dev/ttyACM0."""
+    """Serial port for MAVLink. Default: /dev/ttyACM0.
+    CP2102/FTDI adapters typically use /dev/ttyUSB0; native USB often uses /dev/ttyACM0.
+    See docs/example_hardware.md for a reference setup."""
     return os.environ.get("SERIAL_PORT", "/dev/ttyACM0")
 
 

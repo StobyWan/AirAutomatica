@@ -93,6 +93,12 @@
     const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
     const fmtNum = (v) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : String(v);
     const fmtNumPrec = (v, decimals) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(decimals);
+    const fmtHeading = (v) => {
+      if (v == null || (typeof v === 'number' && isNaN(v))) return '<span class="na">—</span>';
+      const n = Number(v);
+      if (n < 0 || n > 360 || !isFinite(n) || Math.abs(n) > 1e6) return '<span class="na">—</span>';
+      return n.toFixed(0);
+    };
 
     function statusClass(s) {
       const m = { connected: 'status-connected', stale: 'status-stale', disconnected: 'status-disconnected',
@@ -138,7 +144,7 @@
         ['lat', fmtNumPrec(s.lat, 6)],
         ['lon', fmtNumPrec(s.lon, 6)],
         ['rel_alt_m', fmtNumPrec(s.rel_alt_m, 1)],
-        ['heading_deg', fmtNumPrec(s.heading_deg, 0)],
+        ['heading_deg', fmtHeading(s.heading_deg)],
         ['voltage_v', fmtNumPrec(s.voltage_v, 2)],
         ['current_a', fmtNumPrec(s.current_a, 2)],
         ['groundspeed_m_s', fmtNumPrec(s.groundspeed_m_s, 1)],

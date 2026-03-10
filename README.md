@@ -198,12 +198,16 @@ pytest
 
 CI runs format, lint, typecheck, and tests on push/PR.
 
+## Example Hardware / Bench Setup
+
+See [docs/example_hardware.md](docs/example_hardware.md) for a documented reference setup: Matek F405-WING V2, Raspberry Pi 5, CP2102 USB-to-TTL adapter, and power components. It is an example only — the software works with other ArduPilot FCs and serial adapters.
+
 ## Future: Raspberry Pi Serial Mode
 
 On Raspberry Pi:
 
-1. Connect Matek flight controller via USB (or CP2102/FTDI adapter).
-2. Identify serial device: `ls /dev/ttyACM*` or `ls /dev/ttyUSB*`.
+1. Connect flight controller via USB (or CP2102/FTDI adapter).
+2. Identify serial device: `ls /dev/ttyACM*` or `ls /dev/ttyUSB*` (CP2102/FTDI → `/dev/ttyUSB0`).
 3. Add user to `dialout` group: `sudo usermod -a -G dialout $USER`.
 4. Set `TELEMETRY_BACKEND=serial` and `SERIAL_PORT` accordingly.
 
