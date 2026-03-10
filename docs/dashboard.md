@@ -42,6 +42,17 @@ Recent system events: `telemetry_status_transition`, `app_shutdown`, etc. Newest
 
 Recent flight sessions with started_at, ended_at, duration (computed client-side), detection_count. Links to session detail page. Newest first.
 
+### Settings
+
+Configure telemetry, AI provider, AI HAT, and mission logic. Grouped into:
+
+- **Telemetry**: Backend (mock/serial), serial port, baud rate. Default port `/dev/ttyUSB0` for CP2102/USB-TTL; `/dev/ttyACM0` for native USB.
+- **AI Provider**: mock or ollama. Ollama URL/model/timeout shown when ollama selected.
+- **AI HAT**: Additive checkbox; runs alongside the selected provider on Pi 5, not instead of it.
+- **Advanced** (collapsible): Min confidence, duplicate window.
+
+Settings are saved to `~/.airautomatica/settings.json`; restart required to apply. The UI uses canonical keys only (`LOCAL_LLM_PROVIDER`, `AI_HAT_ENABLED`, etc.).
+
 ## Data Sources
 
 | Panel         | Source                                      |

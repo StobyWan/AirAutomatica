@@ -61,7 +61,7 @@ def test_health_payload_builder_with_state() -> None:
     )
     payload = _build_health_payload(
         state=state,
-        ai_mode="lmstudio",
+        ai_mode="mock",
         telemetry_backend="serial",
         session_id=42,
         persistence_enabled=True,
@@ -142,7 +142,7 @@ def test_sessions_payload_with_sessions() -> None:
             "started_at": "2025-03-09T18:30:00.000Z",
             "ended_at": None,
             "telemetry_backend": "mock",
-            "ai_backend": "lmstudio",
+            "ai_backend": "mock",
         },
     ]
     payload = _build_sessions_payload(sessions, 20)

@@ -84,7 +84,7 @@ if [ ! -f "$ENV_FILE" ] && [ -f "$APP_DIR/.env.example" ]; then
 fi
 
 if [ -f "$ENV_FILE" ]; then
-  echo "==> Writing safe default mock settings into .env ..."
+  echo "==> Writing safe default settings into .env ..."
   python3 - <<'PY'
 from pathlib import Path
 env_path = Path(".env")
@@ -92,7 +92,8 @@ text = env_path.read_text() if env_path.exists() else ""
 
 defaults = {
     "TELEMETRY_BACKEND": "mock",
-    "AI_MODE": "mock",
+    "LOCAL_LLM_PROVIDER": "ollama",
+    "AI_HAT_ENABLED": "0",
     "API_HOST": "0.0.0.0",
     "API_PORT": "8000",
     "SQLITE_DB_PATH": "~/.airautomatica/airautomatica.db",
@@ -136,7 +137,7 @@ echo
 echo "Project directory:"
 echo "  $APP_DIR"
 echo
-echo "To start mock mode:"
+echo "To run (default: ollama; set LOCAL_LLM_PROVIDER=mock for no-setup testing):"
 echo "  cd $APP_DIR"
 echo "  source .venv/bin/activate"
 echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
@@ -149,7 +150,7 @@ echo "  http://<pi-ip>:8000/dashboard"
 echo
 echo "For serial mode later, update .env or export:"
 echo "  TELEMETRY_BACKEND=serial"
-echo "  SERIAL_PORT=/dev/ttyUSB0   # or /dev/ttyACM0"
+echo "  SERIAL_PORT=/dev/ttyUSB0   # default; use /dev/ttyACM0 for native USB"
 echo "  SERIAL_BAUD=921600"
 echo
 echo "Helpful checks:"
