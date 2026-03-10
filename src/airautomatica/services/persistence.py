@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 
 from airautomatica.db.base import get_engine
 from airautomatica.db.models import (
+    CommandSent,
     Detection,
     FlightSession,
     PathPoint,
@@ -483,8 +484,6 @@ class PersistenceService:
         if get_engine() is None:
             return
         try:
-            from airautomatica.db.models import CommandSent
-
             metadata_json = json.dumps(metadata) if metadata else None
             with get_session() as session:
                 if session is None:

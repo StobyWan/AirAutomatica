@@ -57,6 +57,9 @@ def _build_health_payload(
             "reconnect_count": state.reconnect_count,
             "last_disconnect_reason": state.last_disconnect_reason,
             "heartbeat_age_s": nan_to_none(state.heartbeat_age_s),
+            "last_heartbeat_at": (
+                state.last_heartbeat_at.isoformat() if state.last_heartbeat_at else None
+            ),
         }
     if capabilities is not None:
         payload["capabilities"] = capabilities

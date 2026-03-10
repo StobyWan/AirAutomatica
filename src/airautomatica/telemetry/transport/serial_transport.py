@@ -1,7 +1,10 @@
 """Serial transport for MAVLink over USB/UART."""
 
 import logging
+import os
 from typing import Any
+
+from pymavlink import mavutil
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +19,7 @@ class SerialTransport:
 
     def connect(self) -> None:
         """Open serial connection."""
-        import os
-
         os.environ.setdefault("MAVLINK20", "1")
-
-        from pymavlink import mavutil
-
         self._conn = mavutil.mavlink_connection(self._port, baud=self._baud)
         logger.debug(
             "Serial transport connected: port=%s baud=%s", self._port, self._baud

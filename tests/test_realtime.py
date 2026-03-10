@@ -72,6 +72,7 @@ def test_health_payload_builder_with_state() -> None:
     assert payload["telemetry"]["reconnect_count"] == 2
     assert payload["telemetry"]["last_disconnect_reason"] == "timeout"
     assert payload["telemetry"]["heartbeat_age_s"] == 0.5
+    assert payload["telemetry"]["last_heartbeat_at"] == now.isoformat()
 
 
 def test_state_payload_builder_null() -> None:
