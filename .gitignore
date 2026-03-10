@@ -33,3 +33,4 @@ airautomatica.db
 *.db-shm
 *.db-wal
 .airautomatica/
+.cursor/.DS_Store
