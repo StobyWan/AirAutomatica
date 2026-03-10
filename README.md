@@ -70,12 +70,13 @@ python -m airautomatica.main
 
 ```bash
 export TELEMETRY_BACKEND=serial
-export SERIAL_PORT=/dev/ttyACM0  # or /dev/ttyUSB0
-export SERIAL_BAUD=57600
+export SERIAL_PORT=/dev/ttyUSB0  # CP2102; use /dev/ttyACM0 for native USB
+export SERIAL_BAUD=921600        # match FC
+
 python -m airautomatica.main
 ```
 
-The API server runs at `http://localhost:8000` by default.
+The API server runs at `http://localhost:8000` by default. Ctrl+C and SIGTERM trigger graceful shutdown (session ended, loops stopped). See [docs/persistence.md](docs/persistence.md#shutdown) for details.
 
 ## Local Database
 

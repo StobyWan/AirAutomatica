@@ -48,6 +48,7 @@ export AIHAT_DEVICE=auto
    ```bash
    AI_MODE=lmstudio LM_STUDIO_MODEL=your-model python -m airautomatica.main
    ```
+   LM Studio mode is intended to simulate **perception-style outputs** (e.g. person, vehicle, object), not aircraft status or system summaries. Mission logic rejects mode/status labels (GUIDED, AUTO, device_status, battery, etc.) so only detection-like results are persisted.
 
 ## What AI HAT Mode Really Means
 

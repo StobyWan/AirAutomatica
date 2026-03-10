@@ -155,6 +155,66 @@ def test_placeholder_label_lmstudio_ignored() -> None:
     persistence.insert_detection.assert_not_called()
 
 
+def test_guided_label_ignored() -> None:
+    """Result with label='GUIDED' (ArduPilot mode) is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="GUIDED",
+        confidence=0.9,
+        summary="In guided mode",
+        source_backend="lmstudio",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
+def test_device_status_label_ignored() -> None:
+    """Result with label='device_status' is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="device_status",
+        confidence=0.9,
+        summary="Device status update",
+        source_backend="lmstudio",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
+def test_battery_label_ignored() -> None:
+    """Result with label='battery' is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="battery",
+        confidence=0.9,
+        summary="Battery level",
+        source_backend="lmstudio",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
 def test_duplicate_suppressed() -> None:
     """Same label within window is suppressed; insert_detection called once."""
     persistence = MagicMock()

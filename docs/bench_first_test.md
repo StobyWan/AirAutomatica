@@ -1,28 +1,39 @@
-# First Bench Test: Matek F405-WING V2 + CP2102 + Pi 5
+# First Bench Test: Pi 5 + CP2102 + Matek F405-WING V2
 
-## Pre-flight
+## 1. Confirm device
 
-- [ ] Pi 5 set up, Python 3.12+, deps installed
-- [ ] User in dialout: `groups` shows dialout
-- [ ] FC powered, ArduPilot loaded, SERIAL0 (or telem port) configured for MAVLink
-- [ ] CP2102 connected: `ls /dev/ttyUSB*` shows device (e.g. /dev/ttyUSB0)
-- [ ] Baud match: SERIAL_BAUD matches FC (921600 or 115200)
+- [ ] `ls /dev/ttyUSB*` shows device (e.g. /dev/ttyUSB0) for CP2102
+- [ ] `groups` includes dialout; if not: `sudo usermod -a -G dialout $USER` then re-login
 
-## Env
+## 2. Env
 
 - [ ] TELEMETRY_BACKEND=serial
-- [ ] SERIAL_PORT=/dev/ttyUSB0  # or ttyACM0 for native USB
-- [ ] SERIAL_BAUD=921600        # match FC
+- [ ] SERIAL_PORT=/dev/ttyUSB0  # CP2102; use /dev/ttyACM0 for native USB
+- [ ] SERIAL_BAUD=921600       # match FC
 
-## Run
+## 3. Run
 
 - [ ] Start app; logs show "Serial telemetry: port=... baud=..."
-- [ ] Logs show "Heartbeat from system X component Y" within ~10s
-- [ ] Logs show "Requested MAVLink message rates..."
+- [ ] Within ~10s: "Heartbeat from system X component Y" and "Requested MAVLink message rates..."
 
-## Verify
+## 4. Verify /health
 
-- [ ] curl localhost:8000/health → telemetry_status=connected, connected=true
-- [ ] curl localhost:8000/state → state has lat, lon, mode, voltage, etc.
-- [ ] Unplug USB; /health shows disconnected then backoff; replug → reconnects
-- [ ] system_events table has telemetry_status_transition rows (if DB enabled)
+- [ ] curl localhost:8000/health
+- [ ] telemetry_backend=serial, telemetry_status=connected, connected=true
+- [ ] persistence_enabled, session_id present
+
+## 5. Verify /state
+
+- [ ] curl localhost:8000/state
+- [ ] state has lat, lon, mode, voltage, etc.
+
+## 6. Session + SQLite
+
+- [ ] sqlite3 ~/.airautomatica/airautomatica.db "SELECT id, started_at, ended_at FROM flight_sessions ORDER BY id DESC LIMIT 3"
+- [ ] system_events has telemetry_status_transition rows
+
+## 7. Unplug/replug
+
+- [ ] Unplug CP2102; poll /health until telemetry_status in (disconnected, backoff)
+- [ ] Replug; poll until telemetry_status=connected
+- [ ] Ctrl+C; verify session ended_at in DB

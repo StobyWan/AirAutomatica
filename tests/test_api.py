@@ -34,6 +34,7 @@ def test_health(client: TestClient) -> None:
     assert data["status"] == "ok"
     assert "ai_mode" in data
     assert data["ai_mode"] in ("mock", "lmstudio", "aihat")
+    assert data["telemetry_backend"] in ("mock", "serial")
     assert data["telemetry"]["telemetry_status"] == "disconnected"
     assert data["telemetry"]["connected"] is False
     assert "persistence" in data

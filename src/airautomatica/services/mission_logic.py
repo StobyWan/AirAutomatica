@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 # Generic placeholder labels (LM Studio best-effort, error fallback) — not real detections.
 _PLACEHOLDER_LABELS: frozenset[str] = frozenset({"error", "lmstudio"})
 
+# Mode/status/system labels — not perception detections. Reject these. (Uppercase for case-insensitive check.)
+_NON_PERCEPTION_LABELS: frozenset[str] = frozenset({
+    "GUIDED", "AUTO", "LOITER", "RTL", "QLOITER", "QRTL", "STABILIZE", "UNKNOWN",
+    "DEVICE_STATUS", "BATTERY", "TELEMETRY", "STATE", "MODE",
+})
+
 
 def _fmt(x: float, fmt: str = "%.1f") -> str:
     """Format float, or 'N/A' if NaN."""
@@ -63,6 +69,8 @@ class MissionLogic:
             return False
         if result.metadata is not None and result.metadata.get("raw_length") == 0:
             return False
+        if (result.label or "").strip().upper() in _NON_PERCEPTION_LABELS:
+            return False
         return True
 
     def _get_ignore_reason(self, result: AiResult) -> str:
@@ -78,6 +86,8 @@ class MissionLogic:
             return "no_response"
         if result.metadata is not None and result.metadata.get("raw_length") == 0:
             return "raw_length_zero"
+        if (result.label or "").strip().upper() in _NON_PERCEPTION_LABELS:
+            return "non_perception_label"
         return "unknown"
 
     def _is_duplicate(self, result: AiResult) -> bool:

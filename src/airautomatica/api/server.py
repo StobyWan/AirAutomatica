@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import FastAPI
 
-from airautomatica.config import get_ai_mode, get_sqlite_db_path
+from airautomatica.config import get_ai_mode, get_sqlite_db_path, get_telemetry_backend
 from airautomatica.db.base import get_engine
 from airautomatica.logging_config import setup_logging
 from airautomatica.models.state import AircraftState, nan_to_none
@@ -37,6 +37,7 @@ def create_app(
         health_data: dict = {
             "status": "ok",
             "ai_mode": get_ai_mode(),
+            "telemetry_backend": get_telemetry_backend(),
             "persistence": {
                 "persistence_enabled": persistence_enabled,
                 "sqlite_db_path": get_sqlite_db_path() if persistence_enabled else None,

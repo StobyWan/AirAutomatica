@@ -3,6 +3,8 @@
 import asyncio
 import atexit
 import logging
+import signal
+import sys
 
 import uvicorn
 
@@ -36,6 +38,26 @@ from airautomatica.services.state_store import StateStore
 from airautomatica.telemetry import MockTelemetry, SerialMavlinkTelemetry, TelemetrySource
 
 logger = logging.getLogger(__name__)
+
+
+def _shutdown_cleanup(
+    persistence: PersistenceService,
+    session_ref: list[int | None],
+    log_shutdown: bool = True,
+) -> None:
+    """End current session and optionally log app_shutdown. Idempotent."""
+    if log_shutdown:
+        logger.info("Shutdown requested")
+    sid = session_ref[0]
+    if sid is not None:
+        persistence.insert_system_event(
+            session_id=sid,
+            level="info",
+            event_type="app_shutdown",
+            message="Application shutdown",
+        )
+        persistence.end_session(sid)
+        session_ref[0] = None
 
 
 def _create_telemetry_source() -> TelemetrySource:
@@ -101,6 +123,7 @@ def main() -> None:
         telemetry_backend=get_telemetry_backend(),
         ai_backend=get_ai_mode(),
     )
+    session_ref: list[int | None] = [session_id]
     if session_id is not None:
         logger.info("Session: id=%s", session_id)
     else:
@@ -109,8 +132,10 @@ def main() -> None:
     lifecycle_logger = TelemetryLifecycleLogger(persistence, session_id)
 
     def _end_session() -> None:
-        if session_id is not None:
-            persistence.end_session(session_id)
+        try:
+            _shutdown_cleanup(persistence, session_ref, log_shutdown=False)
+        except (KeyboardInterrupt, Exception):
+            pass  # Avoid "Exception ignored in atexit callback" traceback
 
     atexit.register(_end_session)
 
@@ -131,11 +156,44 @@ def main() -> None:
     )
 
     async def run_all() -> None:
-        await asyncio.gather(
-            server.serve(),
-            _telemetry_loop(store, source, sampler, lifecycle_logger),
-            mission_logic.run(),
+        shutdown_event = asyncio.Event()
+
+        def _on_signal(signum: int, frame) -> None:
+            shutdown_event.set()
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                signal.signal(sig, _on_signal)
+            except (ValueError, OSError):
+                pass
+
+        server_task = asyncio.create_task(server.serve())
+        telemetry_task = asyncio.create_task(
+            _telemetry_loop(store, source, sampler, lifecycle_logger)
         )
+        mission_task = asyncio.create_task(mission_logic.run())
+        shutdown_waiter = asyncio.create_task(shutdown_event.wait())
+
+        done, pending = await asyncio.wait(
+            [server_task, shutdown_waiter],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+
+        _shutdown_cleanup(persistence, session_ref)
+
+        for t in (server_task, telemetry_task, mission_task):
+            if not t.done():
+                t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
 
     logger.info(
         "Starting AIRAUTOMATICA (telemetry=%s ai=%s)",
@@ -148,4 +206,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)

@@ -60,3 +60,7 @@ SQLite runs in [WAL (Write-Ahead Logging)](https://www.sqlite.org/wal.html) mode
 ## Recent Detections
 
 `GET /recent-detections` returns up to 20 most recent persisted detections for the current flight session (newest first). Useful for bench testing AI detection flow. Returns empty list when DB is disabled or no session exists.
+
+## Shutdown
+
+Ctrl+C and SIGTERM trigger graceful shutdown. The app logs "Shutdown requested", ends the current flight session (sets `ended_at`), and logs an `app_shutdown` system event. Background loops (telemetry, mission logic) stop cleanly. Shutdown is idempotent—repeated signals do not cause duplicate cleanup. `atexit` backs up session end if the async path does not run.
