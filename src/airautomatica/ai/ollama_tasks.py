@@ -107,8 +107,9 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
         ctx = "; ".join(ctx_parts) if ctx_parts else "no data"
         return (
             "Return only valid JSON. No markdown. No explanation.\n"
+            "List fields must always be arrays. Use [] when empty. Never use null for list fields.\n"
             f"Schema: {_SCHEMA_TELEMETRY}\n"
-            f"Use empty arrays when none. Context: {ctx}"
+            f"Context: {ctx}"
         )
 
     if task_type == OllamaTaskType.EVENT_CLASSIFICATION:
@@ -123,8 +124,9 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
             ctx = "; ".join(parts)
         return (
             "Return only valid JSON. No markdown. No explanation.\n"
+            "List fields must always be arrays. Use [] when empty. Never use null for list fields.\n"
             f"Schema: {_SCHEMA_EVENT}\n"
-            f"Use empty arrays when none. Context: {ctx}"
+            f"Context: {ctx}"
         )
 
     return "Return only valid JSON: {}"
@@ -145,8 +147,12 @@ def _safe_str(v: Any) -> str:
 
 
 def _safe_str_list(v: Any) -> tuple[str, ...]:
+    """Normalize list-like fields: null->(), string->(s,), list->coerced tuple."""
     if v is None:
         return ()
+    if isinstance(v, str):
+        s = v.strip()
+        return (s,) if s else ()
     if not isinstance(v, (list, tuple)):
         return ()
     out = []
