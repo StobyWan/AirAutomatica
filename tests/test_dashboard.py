@@ -24,3 +24,12 @@ def test_dashboard_route_exists(client: TestClient) -> None:
     assert "text/html" in r.headers.get("content-type", "")
     assert "AIRAUTOMATICA" in r.text
     assert "dashboard" in r.text.lower()
+
+
+def test_session_detail_route_exists(client: TestClient) -> None:
+    """GET /dashboard/sessions/{id} returns 200 and HTML with path list."""
+    r = client.get("/dashboard/sessions/1")
+    assert r.status_code == 200
+    assert "text/html" in r.headers.get("content-type", "")
+    assert "AIRAUTOMATICA" in r.text
+    assert "path-list" in r.text

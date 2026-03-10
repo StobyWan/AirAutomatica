@@ -62,18 +62,30 @@
     }
     .detection-item:last-child { border-bottom: none; }
     .session-item {
-      padding: 0.5rem;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
       font-size: 0.875rem;
+      transition: background 0.15s, border-color 0.15s;
     }
-    .session-item:last-child { border-bottom: none; }
+    .session-item:hover { background: rgba(255,255,255,0.04); }
     .na { color: var(--muted); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .tab-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--connecting); }
   </style>
 </head>
 <body>
   <h1>AIRAUTOMATICA Dashboard</h1>
   <div class="connection-status" id="connection-status">Connecting…</div>
 
+  <nav class="flex gap-1 mb-4 border-b border-gray-700/50">
+    <button type="button" class="tab-btn active" data-tab="main">Live</button>
+    <button type="button" class="tab-btn" data-tab="sessions">Session History</button>
+  </nav>
+
+  <div id="tab-main" class="tab-panel active">
   <div class="card">
     <h2>System Health</h2>
     <div id="telemetry-status"></div>
@@ -111,12 +123,26 @@
     <h2>Session / Persistence</h2>
     <div class="grid" id="session-fields"></div>
   </div>
-
-  <div class="card">
-    <h2>Session History</h2>
-    <div id="sessions-list"></div>
   </div>
 
+  <div id="tab-sessions" class="tab-panel">
+  <div class="card">
+    <h2>Session History</h2>
+    <div id="sessions-list" class="flex flex-col gap-2"></div>
+  </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+      });
+    });
+  </script>
   <script>
     const socket = io();
     const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
@@ -237,12 +263,18 @@
       };
       el.innerHTML = list.map(s => {
         const isCurrent = s.id === currentId;
-        const badge = isCurrent ? '<span class="status-badge status-connecting text-[10px] ml-1">current</span>' : '';
-        const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="na">active</span>';
-        return `<div class="session-item">
-          <strong>#${s.id}</strong>${badge} — ${s.telemetry_backend} / ${s.ai_backend}
-          <div class="text-xs text-gray-500 mt-0.5">Started: ${fmtDate(s.started_at)} · Ended: ${ended}</div>
-        </div>`;
+        const badge = isCurrent ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/30 text-blue-300 border border-blue-500/40">current</span>' : '';
+        const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="text-emerald-400/80">active</span>';
+        return `<a href="/dashboard/sessions/${s.id}" class="session-item block border border-transparent hover:border-slate-600/50">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-cyan-400">#${s.id}</span>${badge}
+            <span class="text-slate-400">·</span>
+            <span class="text-slate-300">${s.telemetry_backend}</span>
+            <span class="text-slate-500">/</span>
+            <span class="text-slate-300">${s.ai_backend}</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-1.5">Started ${fmtDate(s.started_at)} · Ended ${ended}</div>
+        </a>`;
       }).join('');
     });
   </script>

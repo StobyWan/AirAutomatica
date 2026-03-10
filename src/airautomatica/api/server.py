@@ -13,7 +13,7 @@ from airautomatica.logging_config import setup_logging
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
-from airautomatica.ui.dashboard import get_dashboard_html
+from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
 
 
 @asynccontextmanager
@@ -100,5 +100,10 @@ def create_app(
     def dashboard() -> HTMLResponse:
         """Serve the real-time flight dashboard."""
         return HTMLResponse(content=get_dashboard_html())
+
+    @app.get("/dashboard/sessions/{sid:int}", response_class=HTMLResponse)
+    def session_detail(sid: int) -> HTMLResponse:
+        """Serve session detail page with lat/lon path."""
+        return HTMLResponse(content=get_session_detail_html())
 
     return app

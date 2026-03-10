@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session — AIRAUTOMATICA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap');
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <nav class="mb-8">
+      <a href="/dashboard" class="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors text-sm font-medium">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+        Back to dashboard
+      </a>
+    </nav>
+
+    <header class="mb-8">
+      <h1 class="text-2xl font-semibold tracking-tight text-white">
+        Session <span id="session-id" class="text-cyan-400 font-mono">—</span>
+      </h1>
+      <p class="text-slate-500 text-sm mt-1">Flight path coordinates</p>
+    </header>
+
+    <div id="loading" class="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
+      <div class="inline-flex items-center gap-2 text-slate-400">
+        <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Loading path…
+      </div>
+    </div>
+
+    <div id="content" class="hidden">
+      <div id="stats" class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4"></div>
+      <div class="rounded-xl bg-slate-900/50 border border-slate-800 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-800">
+          <h2 class="text-sm font-medium text-slate-400 uppercase tracking-wider">Lat / Lon</h2>
+        </div>
+        <div id="path-list" class="divide-y divide-slate-800/80 max-h-[60vh] overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <div id="error" class="hidden rounded-xl bg-red-950/30 border border-red-900/50 p-6 text-red-200 text-sm">
+      <span id="error-msg"></span>
+    </div>
+  </div>
+
+  <script>
+    const sessionId = parseInt(window.location.pathname.split('/').pop(), 10);
+    document.getElementById('session-id').textContent = sessionId;
+    document.title = 'Session ' + sessionId + ' — AIRAUTOMATICA';
+
+    fetch(`/sessions/${sessionId}/path`)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('loading').classList.add('hidden');
+        const path = data.path || [];
+        const contentEl = document.getElementById('content');
+        const pathListEl = document.getElementById('path-list');
+        const statsEl = document.getElementById('stats');
+
+        if (path.length === 0) {
+          contentEl.classList.remove('hidden');
+          pathListEl.innerHTML = `
+            <div class="px-6 py-12 text-center text-slate-500">
+              <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10V4l-6 3"/>
+              </svg>
+              <p>No path points for this session</p>
+            </div>
+          `;
+          statsEl.innerHTML = '<div class="col-span-full text-slate-500 text-sm">No data</div>';
+          return;
+        }
+
+        contentEl.classList.remove('hidden');
+        statsEl.innerHTML = `
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Points</span>
+            <p class="text-lg font-semibold text-white mt-0.5 font-mono">${path.length}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">First</span>
+            <p class="text-sm font-mono text-slate-200 mt-0.5 truncate">${path[0]?.lat?.toFixed(6) ?? '—'}, ${path[0]?.lon?.toFixed(6) ?? '—'}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Last</span>
+            <p class="text-sm font-mono text-slate-200 mt-0.5 truncate">${path[path.length-1]?.lat?.toFixed(6) ?? '—'}, ${path[path.length-1]?.lon?.toFixed(6) ?? '—'}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Altitude</span>
+            <p class="text-sm font-mono text-slate-200 mt-0.5">${path[0]?.rel_alt_m != null ? path[0].rel_alt_m.toFixed(1) + ' m' : '—'} → ${path[path.length-1]?.rel_alt_m != null ? path[path.length-1].rel_alt_m.toFixed(1) + ' m' : '—'}</p>
+          </div>
+        `;
+
+        pathListEl.innerHTML = path.map((p, i) => {
+          const ts = p.timestamp ? new Date(p.timestamp).toLocaleString() : '—';
+          const lat = p.lat != null ? p.lat.toFixed(6) : '—';
+          const lon = p.lon != null ? p.lon.toFixed(6) : '—';
+          const alt = p.rel_alt_m != null ? p.rel_alt_m.toFixed(1) + ' m' : '—';
+          return `
+            <div class="px-6 py-3 hover:bg-slate-800/30 transition-colors flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span class="text-slate-500 text-xs font-mono w-8">${String(i + 1).padStart(3)}</span>
+              <span class="font-mono text-sm text-cyan-400">${lat}</span>
+              <span class="font-mono text-sm text-cyan-400">${lon}</span>
+              ${p.rel_alt_m != null ? `<span class="text-slate-400 text-sm">${alt}</span>` : ''}
+              <span class="text-slate-500 text-xs ml-auto">${ts}</span>
+            </div>
+          `;
+        }).join('');
+      })
+      .catch(err => {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('error').classList.remove('hidden');
+        document.getElementById('error-msg').textContent = 'Failed to load path: ' + err.message;
+      });
+  </script>
+</body>
+</html>
