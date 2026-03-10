@@ -384,6 +384,7 @@ def test_sessions_telemetry_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
         store = StateStore()
         persistence = PersistenceService()
         session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
         now = datetime.now(timezone.utc)
         state = AircraftState(
             connected=True,
