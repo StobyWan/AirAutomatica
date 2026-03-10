@@ -327,3 +327,50 @@ async def test_run_calls_process_result() -> None:
         pass
     assert ai_service.infer.called
     assert persistence.insert_detection.called
+
+
+@pytest.mark.asyncio
+async def test_mission_loop_survives_ai_exception() -> None:
+    """Mission loop continues after AI inference raises; infer is called again."""
+    store = StateStore()
+    state = _make_state()
+    store.update(state)
+
+    ai_result = AiResult(
+        label="person",
+        confidence=0.9,
+        summary="Person",
+        source_backend="mock",
+        timestamp=datetime.now(timezone.utc),
+    )
+    call_count = 0
+
+    async def infer_raise_then_ok(_state):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RuntimeError("AI backend timeout")
+        return ai_result
+
+    ai_service = MagicMock()
+    ai_service.infer = AsyncMock(side_effect=infer_raise_then_ok)
+
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=store,
+        ai_service=ai_service,
+        persistence=persistence,
+        session_id=1,
+        interval_sec=0.05,
+        ai_interval_sec=0.05,
+        min_confidence=0.5,
+    )
+    task = asyncio.create_task(logic.run())
+    await asyncio.sleep(0.25)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    assert call_count >= 2
+    assert persistence.insert_detection.called

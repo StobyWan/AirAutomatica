@@ -166,8 +166,11 @@ class MissionLogic:
                 now = time.monotonic()
                 if now - self._last_ai_time >= self._ai_interval:
                     self._last_ai_time = now
-                    result = await self._ai_service.infer(state)
-                    self.process_result(state, result)
+                    try:
+                        result = await self._ai_service.infer(state)
+                        self.process_result(state, result)
+                    except Exception as e:
+                        logger.exception("AI inference failed, continuing: %s", e)
 
             await asyncio.sleep(self._interval)
 

@@ -110,6 +110,7 @@ class SerialMavlinkTelemetry(TelemetrySource):
         )
 
         while True:
+            conn = None
             try:
                 conn = mavutil.mavlink_connection(self._port, baud=self._baud)
 
@@ -199,6 +200,12 @@ class SerialMavlinkTelemetry(TelemetrySource):
             except Exception as e:
                 last_disconnect_reason = str(e)
                 logger.exception("Connection failed: %s", e)
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception as e:
+                        logger.debug("Close MAVLink connection: %s", e)
 
             reconnect_count += 1
 
