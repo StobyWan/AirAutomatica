@@ -92,6 +92,7 @@
     const socket = io();
     const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
     const fmtNum = (v) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : String(v);
+    const fmtNumPrec = (v, decimals) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(decimals);
 
     function statusClass(s) {
       const m = { connected: 'status-connected', stale: 'status-stale', disconnected: 'status-disconnected',
@@ -132,17 +133,19 @@
         document.getElementById('state-fields').innerHTML = '<span class="na">No state yet</span>';
         return;
       }
-      document.getElementById('state-fields').innerHTML = [
-        ['mode', s.mode],
-        ['lat', s.lat != null ? s.lat.toFixed(6) : null],
-        ['lon', s.lon != null ? s.lon.toFixed(6) : null],
-        ['rel_alt_m', s.rel_alt_m],
-        ['heading_deg', s.heading_deg],
-        ['voltage_v', s.voltage_v],
-        ['current_a', s.current_a],
-        ['groundspeed_m_s', s.groundspeed_m_s],
-        ['airspeed_m_s', s.airspeed_m_s],
-      ].map(([k, v]) => `<div class="field"><label>${k}</label><span>${fmtNum(v)}</span></div>`).join('');
+      const stateFields = [
+        ['mode', fmt(s.mode)],
+        ['lat', fmtNumPrec(s.lat, 6)],
+        ['lon', fmtNumPrec(s.lon, 6)],
+        ['rel_alt_m', fmtNumPrec(s.rel_alt_m, 1)],
+        ['heading_deg', fmtNumPrec(s.heading_deg, 0)],
+        ['voltage_v', fmtNumPrec(s.voltage_v, 2)],
+        ['current_a', fmtNumPrec(s.current_a, 2)],
+        ['groundspeed_m_s', fmtNumPrec(s.groundspeed_m_s, 1)],
+        ['airspeed_m_s', fmtNumPrec(s.airspeed_m_s, 1)],
+      ];
+      document.getElementById('state-fields').innerHTML = stateFields
+        .map(([k, v]) => `<div class="field"><label>${k}</label><span>${v}</span></div>`).join('');
     });
 
     socket.on('detections_update', (d) => {
