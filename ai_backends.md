@@ -2,30 +2,36 @@
 
 AIRAUTOMATICA uses a single AI service abstraction with mode-based implementations. Mission logic consumes only normalized `AiResult`—it does not depend on which mode produced it.
 
-## Why One AI Service
+## Architecture: Local LLM + Optional AI HAT
 
-- **Simpler**: One interface (`AiService.infer`), one result contract (`AiResult`).
-- **Mode-based**: `mock`, `lmstudio`, `aihat`—no always-on reasoning + perception layers.
-- **Flight target**: Matek/ArduPilot = flight control; AI HAT = onboard perception; mission logic = rules. No LLM reasoning onboard in phase 1.
+Local LLM provider (mock or ollama) and AI HAT are **complementary**, not mutually exclusive:
+
+- **Local LLM provider**: Handles inference/text reasoning (mock or ollama).
+- **AI HAT**: Optional hardware-accelerated vision layer; runs **alongside** the local provider when enabled.
+- **ComposedAiService**: When AI HAT is enabled, composes both. AI HAT result is used when meaningful; otherwise the local provider's result is used.
 
 ## Modes
 
 | Mode | Purpose | Environment |
 |------|---------|-------------|
 | **mock** | Deterministic fake results for tests and early development. No network or hardware. | macOS, Raspberry Pi |
-| **lmstudio** | Local inference via [LM Studio](https://lmstudio.ai/) HTTP API. Simulates AI HAT-like outputs for macOS development. | macOS |
-| **aihat** | Raspberry Pi AI HAT+ onboard perception. Vision/detection only—not LLM reasoning. | Raspberry Pi 5 |
+| **ollama** | Local inference via [Ollama](https://ollama.com/) HTTP API (POST /api/generate). Simulates AI HAT-like outputs for development. | macOS, Linux |
+| **aihat** | Raspberry Pi AI HAT+ onboard perception. Vision/detection only—runs **with** mock or ollama, not instead. | Raspberry Pi 5 |
 
 ## Configuration
 
 ```bash
 # Mode selection (default: mock). AI_BACKEND supported for legacy.
-export AI_MODE=mock|lmstudio|aihat
+export AI_MODE=mock|ollama|aihat
 
-# LM Studio (when AI_MODE=lmstudio)
-export LM_STUDIO_BASE_URL=http://localhost:1234
-export LM_STUDIO_MODEL=local-model
-export LM_STUDIO_TIMEOUT=30
+# Local LLM (when AI_MODE=ollama or LOCAL_LLM_PROVIDER=ollama)
+export LOCAL_LLM_PROVIDER=mock
+export LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
+export LOCAL_LLM_MODEL=gemma3:1b
+export LOCAL_LLM_TIMEOUT=30
+
+# AI HAT: enable alongside local provider (AI_HAT_ENABLED=1 or AI_MODE=aihat)
+export AI_HAT_ENABLED=0
 
 # Mission logic filtering (all modes): min confidence to persist; duplicate window (sec)
 export AI_MIN_CONFIDENCE=0.5
@@ -37,34 +43,35 @@ export AIHAT_MODEL_NAME=default
 export AIHAT_DEVICE=auto
 ```
 
-## Local Development (macOS)
+## Local Development (macOS / Linux)
 
 1. **Mock mode** (default): No setup. AI results are deterministic fakes.
    ```bash
    AI_MODE=mock python -m airautomatica.main
    ```
 
-2. **LM Studio mode**: Install [LM Studio](https://lmstudio.ai/), load a model, start the local server. LM Studio simulates AI outputs at the contract level—useful for testing mission logic without hardware.
+2. **Ollama mode**: Install [Ollama](https://ollama.com/), pull a model (`ollama pull gemma3:1b`), start the server (runs automatically). Ollama simulates AI outputs at the contract level—useful for testing mission logic without hardware.
    ```bash
-   AI_MODE=lmstudio LM_STUDIO_MODEL=your-model python -m airautomatica.main
+   make setup-ollama
+   AI_MODE=ollama python -m airautomatica.main
    ```
-   LM Studio mode is intended to simulate **perception-style outputs** (e.g. person, vehicle, object), not aircraft status or system summaries. Mission logic rejects mode/status labels (GUIDED, AUTO, device_status, battery, etc.) so only detection-like results are persisted.
+   Ollama mode is intended to simulate **perception-style outputs** (e.g. person, vehicle, object), not aircraft status or system summaries. Mission logic rejects mode/status labels (GUIDED, AUTO, device_status, battery, etc.) so only detection-like results are persisted.
 
 ## What AI HAT Mode Really Means
 
 AI HAT mode = **onboard vision perception** on Raspberry Pi 5 + AI HAT+.
 
 - **Hardware**: Hailo-8/8L NPU on PCIe. Object detection, segmentation, pose.
-- **Not**: An LLM, a drop-in for LM Studio, or general "AI reasoning."
+- **Not**: An LLM, a drop-in for Ollama, or general "AI reasoning."
 - **Input**: Camera frames (rpicam). **Output**: Detections (label, confidence, bbox).
 - **In this project**: Mission logic gets AiResult; applies rules. Non-flight-critical.
-- **LM Studio**: Simulates the AiResult *contract* on macOS. Same JSON shape, different engine.
+- **Ollama**: Simulates the AiResult *contract* on macOS/Linux. Same JSON shape, different engine.
 
 ## AI HAT Mode: Onboard Perception
 
 In flight, AI HAT mode provides **onboard perception** (vision, object detection), not LLM reasoning. The mission logic interprets `AiResult` and applies action rules. Phase 1 does not run an LLM onboard.
 
-To switch from LM Studio (macOS) to AI HAT (Raspberry Pi 5):
+To switch from Ollama (dev) to AI HAT (Raspberry Pi 5):
 
 1. Set `AI_MODE=aihat` and configure `AIHAT_MODEL_NAME`, `AIHAT_DEVICE`.
 2. Complete the `AiHatAiService` implementation using Hailo SDK or Pi AI Kit.
@@ -79,7 +86,7 @@ All modes produce the same normalized `AiResult`. Mission logic is backend-agnos
 | `label` | str | yes | Detection/inference label | Non-empty; default `"unknown"` |
 | `confidence` | float | yes | 0.0–1.0 | Clamped to [0, 1] |
 | `summary` | str | yes | Human-readable summary | Default `""` |
-| `source_backend` | str | yes | `mock`, `lmstudio`, or `aihat` | Set by service |
+| `source_backend` | str | yes | `mock`, `ollama`, or `aihat` | Set by service |
 | `timestamp` | datetime | yes | When produced | UTC |
 | `bbox` | tuple \| None | no | (x, y, w, h) for detections | 4 floats or None |
 | `action` | str \| None | no | Optional suggested action | None if empty |
@@ -91,10 +98,10 @@ All modes produce the same normalized `AiResult`. Mission logic is backend-agnos
 
 | Key | Backend | When |
 |-----|---------|------|
-| `error` | lmstudio | True when inference failed |
-| `parse_error` | lmstudio | `"json"` or `"content"` when parsing failed |
-| `error_type` | lmstudio | `"timeout"`, `"http"`, or `"network"` |
-| `raw_length` | lmstudio | Length of raw LLM response |
+| `error` | ollama | True when inference failed |
+| `parse_error` | ollama | `"json"` or `"content"` when parsing failed |
+| `error_type` | ollama | `"timeout"`, `"http"`, or `"network"` |
+| `raw_length` | ollama | Length of raw LLM response |
 | `call_count` | mock | Incrementing call index |
 | `mode` | mock | Aircraft mode from state |
 | `model_name` | aihat | Model name from config |

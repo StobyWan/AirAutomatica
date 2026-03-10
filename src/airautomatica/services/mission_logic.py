@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Generic placeholder labels (LM Studio best-effort, error fallback) — not real detections.
-_PLACEHOLDER_LABELS: frozenset[str] = frozenset({"error", "lmstudio"})
+# Generic placeholder labels (unparseable output, error fallback) — not real detections.
+_PLACEHOLDER_LABELS: frozenset[str] = frozenset({"error", "lmstudio", "ollama"})
 
 # Mode/status/system labels — not perception detections. Reject these. (Uppercase for case-insensitive check.)
 _NON_PERCEPTION_LABELS: frozenset[str] = frozenset(

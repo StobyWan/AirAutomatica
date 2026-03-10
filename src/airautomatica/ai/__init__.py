@@ -1,15 +1,23 @@
-"""AI service. One abstraction for mock, lmstudio, and aihat modes."""
+"""AI service. One abstraction for mock, ollama, and aihat modes.
+
+LmStudioAiService is deprecated; use OllamaAiService or MockAiService instead.
+ComposedAiService composes a base provider (mock/ollama) with optional AI HAT layer.
+"""
 
 from airautomatica.ai.aihat_service import AiHatAiService
+from airautomatica.ai.composed_service import ComposedAiService
 from airautomatica.ai.lmstudio_service import LmStudioAiService
 from airautomatica.ai.mock_service import MockAiService
 from airautomatica.ai.models import AiResult
+from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.service import AiService
 
 __all__ = [
     "AiService",
     "AiResult",
+    "ComposedAiService",
     "MockAiService",
+    "OllamaAiService",
     "LmStudioAiService",
     "AiHatAiService",
 ]

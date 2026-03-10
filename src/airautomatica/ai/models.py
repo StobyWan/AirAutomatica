@@ -44,12 +44,12 @@ def _normalize_bbox(v: Any) -> tuple[float, float, float, float] | None:
 
 @dataclass(frozen=True)
 class AiResult:
-    """Normalized AI result. Mission logic consumes this regardless of source (mock, lmstudio, aihat)."""
+    """Normalized AI result. Mission logic consumes this regardless of source (mock, ollama, aihat)."""
 
     label: str  # Detection/inference label. Required.
     confidence: float  # 0.0–1.0. Clamped on parse.
     summary: str  # Human-readable summary. Required.
-    source_backend: str  # "mock", "lmstudio", or "aihat".
+    source_backend: str  # "mock", "ollama", or "aihat".
     timestamp: datetime  # When produced.
     bbox: tuple[float, float, float, float] | None = (
         None  # (x, y, w, h) for detections; optional.
@@ -72,7 +72,7 @@ class AiResult:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any], source_backend: str) -> "AiResult":
-        """Parse dict (e.g. from LM Studio JSON) into normalized AiResult. Missing fields use defaults."""
+        """Parse dict (e.g. from Ollama/LM Studio JSON) into normalized AiResult. Missing fields use defaults."""
         if not isinstance(d, dict):
             d = {}
         label = str(d.get("label", "unknown")).strip() or "unknown"

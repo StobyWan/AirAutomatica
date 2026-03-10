@@ -1,4 +1,4 @@
-"""AI service interface. One abstraction for mock, lmstudio, and aihat modes."""
+"""AI service interface. One abstraction for mock, ollama, and aihat modes."""
 
 from abc import ABC, abstractmethod
 from typing import Optional

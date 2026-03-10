@@ -4,7 +4,7 @@ import os
 
 
 def get_ai_mode() -> str:
-    """AI mode: 'mock', 'lmstudio', or 'aihat'. Default: mock.
+    """AI mode: 'mock', 'lmstudio', 'ollama', or 'aihat'. Default: mock.
     Env: AI_MODE or AI_BACKEND (legacy)."""
     return os.environ.get("AI_MODE", os.environ.get("AI_BACKEND", "mock")).lower()
 
@@ -25,9 +25,67 @@ def get_lm_studio_model() -> str:
 
 
 def get_lm_studio_timeout() -> float:
-    """LM Studio request timeout in seconds. Default: 30.0."""
+    """LM Studio request timeout in seconds. Default: 30.0.
+    Deprecated: use get_local_llm_timeout() for Ollama."""
     try:
         return float(os.environ.get("LM_STUDIO_TIMEOUT", "30.0"))
+    except ValueError:
+        return 30.0
+
+
+def get_local_llm_provider() -> str:
+    """Local LLM provider: 'mock', 'ollama', or 'lmstudio' (deprecated).
+    When LOCAL_LLM_PROVIDER is set and in (mock, ollama, lmstudio), use it.
+    Else use AI_MODE if mock/ollama/lmstudio; when AI_MODE=aihat (legacy), default to mock.
+    """
+    provider = os.environ.get("LOCAL_LLM_PROVIDER", "").lower()
+    if provider in ("mock", "ollama", "lmstudio"):
+        return provider
+    mode = get_ai_mode()
+    if mode in ("mock", "ollama", "lmstudio"):
+        return mode
+    # Legacy AI_MODE=aihat no longer means exclusive; use mock as base provider
+    return "mock"
+
+
+def get_ai_hat_enabled() -> bool:
+    """True if AI HAT layer should be enabled alongside local LLM provider.
+    Env: AI_HAT_ENABLED (1/true/yes) or legacy AI_MODE=aihat."""
+    explicit = os.environ.get("AI_HAT_ENABLED", "").lower()
+    if explicit in ("1", "true", "yes"):
+        return True
+    if explicit in ("0", "false", "no"):
+        return False
+    return get_ai_mode() == "aihat"
+
+
+def get_effective_ai_backend() -> str:
+    """Return effective AI backend(s) for session/logging/health.
+    Format: 'mock', 'ollama', 'mock+aihat', or 'ollama+aihat'."""
+    base = get_local_llm_provider()
+    if get_ai_hat_enabled():
+        return f"{base}+aihat"
+    return base
+
+
+def get_local_llm_base_url(provider: str) -> str:
+    """Base URL for local LLM. For ollama default http://127.0.0.1:11434; for mock unused."""
+    if provider == "ollama":
+        return os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434")
+    return ""
+
+
+def get_local_llm_model(provider: str) -> str:
+    """Model name for local LLM. For ollama default gemma3:1b; for mock unused."""
+    if provider == "ollama":
+        return os.environ.get("LOCAL_LLM_MODEL", "gemma3:1b")
+    return ""
+
+
+def get_local_llm_timeout() -> float:
+    """Local LLM request timeout in seconds. Default: 30.0."""
+    try:
+        return float(os.environ.get("LOCAL_LLM_TIMEOUT", "30.0"))
     except ValueError:
         return 30.0
 

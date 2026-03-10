@@ -202,7 +202,7 @@
         <label for="AI_MODE">AI mode</label>
         <select id="AI_MODE" name="AI_MODE">
           <option value="mock">mock</option>
-          <option value="lmstudio">lmstudio</option>
+          <option value="ollama">ollama</option>
           <option value="aihat">aihat</option>
         </select>
       </div>
@@ -215,12 +215,16 @@
         <input type="number" id="SERIAL_BAUD" name="SERIAL_BAUD" placeholder="921600" min="9600" max="2000000" />
       </div>
       <div class="settings-field">
-        <label for="LM_STUDIO_BASE_URL">LM Studio base URL</label>
-        <input type="text" id="LM_STUDIO_BASE_URL" name="LM_STUDIO_BASE_URL" placeholder="http://localhost:1234" />
+        <label for="LOCAL_LLM_BASE_URL">Ollama base URL</label>
+        <input type="text" id="LOCAL_LLM_BASE_URL" name="LOCAL_LLM_BASE_URL" placeholder="http://127.0.0.1:11434" />
       </div>
       <div class="settings-field">
-        <label for="LM_STUDIO_MODEL">LM Studio model name</label>
-        <input type="text" id="LM_STUDIO_MODEL" name="LM_STUDIO_MODEL" placeholder="local-model" />
+        <label for="LOCAL_LLM_MODEL">Ollama model name</label>
+        <input type="text" id="LOCAL_LLM_MODEL" name="LOCAL_LLM_MODEL" placeholder="gemma3:1b" />
+      </div>
+      <div class="settings-field">
+        <label for="LOCAL_LLM_TIMEOUT">Local LLM timeout (seconds)</label>
+        <input type="number" id="LOCAL_LLM_TIMEOUT" name="LOCAL_LLM_TIMEOUT" placeholder="30" min="1" />
       </div>
       <div class="settings-field">
         <label for="AI_MIN_CONFIDENCE">AI min confidence (0–1)</label>
@@ -253,7 +257,7 @@
     function loadSettingsForm() {
       fetch('/settings').then(r => r.json()).then(d => {
         const s = d.settings || {};
-        ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LM_STUDIO_BASE_URL','LM_STUDIO_MODEL','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
+        ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
           const el = document.getElementById(k);
           if (el && s[k] !== undefined) el.value = s[k];
         });
@@ -264,7 +268,7 @@
       e.preventDefault();
       const form = e.target;
       const updates = {};
-      ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LM_STUDIO_BASE_URL','LM_STUDIO_MODEL','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
+      ['TELEMETRY_BACKEND','AI_MODE','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'].forEach(k => {
         const el = document.getElementById(k);
         if (el && el.value) updates[k] = el.value;
       });
