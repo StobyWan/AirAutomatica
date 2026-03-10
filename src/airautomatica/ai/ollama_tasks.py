@@ -1,5 +1,6 @@
 """Ollama task types, prompts, and defensive parsers. Schema-first, no trust of LLM output."""
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -7,6 +8,8 @@ from typing import Any, TypedDict
 
 from airautomatica.ai.models import AiResult
 from airautomatica.models.state import AircraftState
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaTaskType(str, Enum):
@@ -64,13 +67,14 @@ class EventClassificationContext(TypedDict, total=False):
 
 
 # --- Prompt builders (short, schema-first) ---
+# Use example values, not "str" - small models (gemma3:1b) output "str" literally.
 
 _SCHEMA_TELEMETRY = (
-    '{"status":"str","summary":"str","concerns":["str"],"recommendations":["str"]}'
+    '{"status":"ok","summary":"Brief summary.","concerns":[],"recommendations":[]}'
 )
 _SCHEMA_EVENT = (
-    '{"severity":"str","category":"str","summary":"str",'
-    '"likely_causes":["str"],"recommended_checks":["str"]}'
+    '{"severity":"info","category":"general","summary":"Brief summary.",'
+    '"likely_causes":[],"recommended_checks":[]}'
 )
 _SCHEMA_PERCEPTION = (
     '{"label":"str","confidence":0-1,"summary":"str","bbox":[x,y,w,h],"action":"str"}'
@@ -107,8 +111,8 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
         ctx = "; ".join(ctx_parts) if ctx_parts else "no data"
         return (
             "Return only valid JSON. No markdown. No explanation.\n"
-            "List fields must always be arrays. Use [] when empty. Never use null for list fields.\n"
-            f"Schema: {_SCHEMA_TELEMETRY}\n"
+            "status: ok|warn|error. List fields must be arrays. Use [] when empty. Never null.\n"
+            f"Example: {_SCHEMA_TELEMETRY}\n"
             f"Context: {ctx}"
         )
 
@@ -124,8 +128,8 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
             ctx = "; ".join(parts)
         return (
             "Return only valid JSON. No markdown. No explanation.\n"
-            "List fields must always be arrays. Use [] when empty. Never use null for list fields.\n"
-            f"Schema: {_SCHEMA_EVENT}\n"
+            "severity: info|warning|error|critical. List fields must be arrays. Use [] when empty. Never null.\n"
+            f"Example: {_SCHEMA_EVENT}\n"
             f"Context: {ctx}"
         )
 
@@ -146,19 +150,30 @@ def _safe_str(v: Any) -> str:
     return s[:2000] if len(s) > 2000 else s
 
 
-def _safe_str_list(v: Any) -> tuple[str, ...]:
+def _safe_str_list(v: Any, field_name: str = "") -> tuple[str, ...]:
     """Normalize list-like fields: null->(), string->(s,), list->coerced tuple."""
     if v is None:
+        logger.debug("List field %s: null -> []", field_name or "?")
         return ()
     if isinstance(v, str):
         s = v.strip()
-        return (s,) if s else ()
+        # Filter model schema leakage: gemma3:1b sometimes outputs literal "str"
+        result = (s,) if s and s.lower() != "str" else ()
+        logger.debug(
+            "List field %s: str %r -> %d item(s)",
+            field_name or "?",
+            v[:80],
+            len(result),
+        )
+        return result
     if not isinstance(v, (list, tuple)):
+        logger.debug("List field %s: %s -> []", field_name or "?", type(v).__name__)
         return ()
     out = []
     for x in v:
         s = _safe_str(x)
-        if s:
+        # Filter model schema leakage: gemma3:1b sometimes outputs literal "str"
+        if s and s.lower() != "str":
             out.append(s[:500])
     return tuple(out)
 
@@ -177,12 +192,19 @@ def parse_telemetry_summary_response(
 ) -> TelemetrySummaryResult:
     """Parse telemetry summary. Never trust Ollama; coerce and default."""
     if raw is None or not isinstance(raw, dict):
+        logger.debug(
+            "Telemetry summary parser: raw=%s, using empty dict",
+            type(raw).__name__ if raw is not None else "None",
+        )
         raw = {}
+    status = _safe_str(raw.get("status")) or "unknown"
+    if status.lower() == "str":
+        status = "unknown"
     return TelemetrySummaryResult(
-        status=_safe_str(raw.get("status")) or "unknown",
+        status=status,
         summary=_safe_str(raw.get("summary")) or "",
-        concerns=_safe_str_list(raw.get("concerns")),
-        recommendations=_safe_str_list(raw.get("recommendations")),
+        concerns=_safe_str_list(raw.get("concerns"), "concerns"),
+        recommendations=_safe_str_list(raw.get("recommendations"), "recommendations"),
     )
 
 
@@ -191,14 +213,25 @@ def parse_event_classification_response(
 ) -> EventClassificationResult:
     """Parse event classification. Never trust Ollama; coerce and default."""
     if raw is None or not isinstance(raw, dict):
+        logger.debug(
+            "Event classification parser: raw=%s, using empty dict",
+            type(raw).__name__ if raw is not None else "None",
+        )
         raw = {}
     severity = _safe_str(raw.get("severity")) or "info"
-    if severity.lower() not in ("info", "warning", "error", "critical"):
+    if severity.lower() == "str" or severity.lower() not in (
+        "info",
+        "warning",
+        "error",
+        "critical",
+    ):
         severity = "info"
     return EventClassificationResult(
         severity=severity,
         category=_safe_str(raw.get("category")) or "general",
         summary=_safe_str(raw.get("summary")) or "",
-        likely_causes=_safe_str_list(raw.get("likely_causes")),
-        recommended_checks=_safe_str_list(raw.get("recommended_checks")),
+        likely_causes=_safe_str_list(raw.get("likely_causes"), "likely_causes"),
+        recommended_checks=_safe_str_list(
+            raw.get("recommended_checks"), "recommended_checks"
+        ),
     )
