@@ -1,13 +1,48 @@
 # AIRAUTOMATICA
 
-Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an ArduPilot Matek flight controller over serial/USB, maintains shared aircraft state, and exposes a local FastAPI server.
+Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an ArduPilot flight controller over serial/USB, maintains shared aircraft state, and exposes a local FastAPI server. Designed for future onboard AI perception (Raspberry Pi AI HAT+); today it runs in mock or LM Studio mode for development.
+
+**Disclaimer:** This software is **not flight-critical**. It does not send commands to the flight controller. It reads telemetry and logs detections. Use at your own risk.
+
+## What Works Today
+
+- **Mock mode**: Simulated telemetry and AI. No hardware. Run locally for development.
+- **LM Studio mode**: Local LLM simulates perception-style outputs. Useful for testing mission logic on macOS.
+- **Serial MAVLink mode**: Real telemetry from ArduPilot over USB/serial (Matek F405-WING, CP2102, etc.).
+- **API**: `/health`, `/state`, `/recent-detections`. SQLite persistence for sessions and detections.
+- **Graceful shutdown**: Ctrl+C ends session cleanly.
+
+## What Is Mock vs Real
+
+| Component | Mock | Real |
+|-----------|------|------|
+| Telemetry | Simulated orbit/state | MAVLink over serial |
+| AI | Deterministic fake or LM Studio | Raspberry Pi AI HAT+ (scaffold only) |
+| Persistence | SQLite (optional) | Same |
+
+AI HAT mode exists as a scaffold; real Hailo integration is not yet implemented.
+
+## Quick Start (Mock Mode)
+
+No hardware or `.env` needed:
+
+```bash
+git clone <your-repo-url>
+cd AirAutomatica
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+python -m airautomatica.main
+# or: uv run airautomatica
+```
+
+Then open `http://localhost:8000/health` and `http://localhost:8000/state`.
 
 ## Requirements
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (recommended) or standard venv
 
-## Local Setup (macOS)
+## Local Setup
 
 ```bash
 # Clone or navigate to project
@@ -141,3 +176,9 @@ On Raspberry Pi:
 4. Set `TELEMETRY_BACKEND=serial` and `SERIAL_PORT` accordingly.
 
 See [docs/bench_first_test.md](docs/bench_first_test.md) for a first hardware bring-up checklist.
+
+## Status and Roadmap
+
+- **Current**: Mock and LM Studio modes work. Serial MAVLink works with ArduPilot. Persistence, shutdown, and API are functional.
+- **Next**: Raspberry Pi 5 bench validation; AI HAT+ Hailo integration (vision only).
+- **Not planned**: Flight-critical command sending; LLM reasoning onboard.
