@@ -56,7 +56,23 @@ class OllamaTaskService:
         except Exception as e:
             logger.warning("Ollama generate_raw failed: %s", e)
             return _fallback_result(task_type, str(e))
+        raw_preview = (content or "").strip()
+        logger.debug(
+            "Ollama raw response task=%s len=%d: %s%s",
+            task_type.value,
+            len(raw_preview),
+            raw_preview[:200],
+            "..." if len(raw_preview) > 200 else "",
+        )
         raw = extract_json(content)
+        if raw is None:
+            logger.warning(
+                "Ollama JSON extraction failed task=%s len=%d: %s%s",
+                task_type.value,
+                len(raw_preview),
+                raw_preview[:300],
+                "..." if len(raw_preview) > 300 else "",
+            )
         return _parse_task_result(task_type, raw)
 
 

@@ -206,6 +206,20 @@ def test_parse_telemetry_summary_malformed_non_list() -> None:
     assert result.concerns == ()
 
 
+def test_parse_telemetry_summary_str_schema_leakage() -> None:
+    """Model schema leakage: literal 'str' for status or list items is filtered."""
+    raw: dict[str, Any] = {
+        "status": "str",
+        "summary": "x",
+        "concerns": ["str"],
+        "recommendations": [],
+    }
+    result = parse_telemetry_summary_response(raw)
+    assert result.status == "unknown"
+    assert result.concerns == ()
+    assert result.recommendations == ()
+
+
 # --- Event classification parser ---
 
 
@@ -278,6 +292,20 @@ def test_parse_event_classification_malformed_list() -> None:
     raw: dict[str, Any] = {"severity": "info", "likely_causes": 123}
     result = parse_event_classification_response(raw)
     assert result.likely_causes == ()
+
+
+def test_parse_event_classification_str_schema_leakage() -> None:
+    """Model schema leakage: literal 'str' for severity or list items is filtered."""
+    raw: dict[str, Any] = {
+        "severity": "str",
+        "category": "x",
+        "likely_causes": ["str"],
+        "recommended_checks": [],
+    }
+    result = parse_event_classification_response(raw)
+    assert result.severity == "info"
+    assert result.likely_causes == ()
+    assert result.recommended_checks == ()
 
 
 # --- Mock-path: OllamaTaskService with provider=mock ---
