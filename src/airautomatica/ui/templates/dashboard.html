@@ -62,11 +62,12 @@
     }
     .detection-item:last-child { border-bottom: none; }
     .session-item {
-      padding: 0.5rem;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
       font-size: 0.875rem;
+      transition: background 0.15s, border-color 0.15s;
     }
-    .session-item:last-child { border-bottom: none; }
+    .session-item:hover { background: rgba(255,255,255,0.04); }
     .na { color: var(--muted); }
   </style>
 </head>
@@ -114,7 +115,7 @@
 
   <div class="card">
     <h2>Session History</h2>
-    <div id="sessions-list"></div>
+    <div id="sessions-list" class="flex flex-col gap-2"></div>
   </div>
 
   <script>
@@ -237,12 +238,18 @@
       };
       el.innerHTML = list.map(s => {
         const isCurrent = s.id === currentId;
-        const badge = isCurrent ? '<span class="status-badge status-connecting text-[10px] ml-1">current</span>' : '';
-        const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="na">active</span>';
-        return `<div class="session-item">
-          <a href="/dashboard/sessions/${s.id}" class="hover:underline"><strong>#${s.id}</strong></a>${badge} — ${s.telemetry_backend} / ${s.ai_backend}
-          <div class="text-xs text-gray-500 mt-0.5">Started: ${fmtDate(s.started_at)} · Ended: ${ended}</div>
-        </div>`;
+        const badge = isCurrent ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/30 text-blue-300 border border-blue-500/40">current</span>' : '';
+        const ended = s.ended_at ? fmtDate(s.ended_at) : '<span class="text-emerald-400/80">active</span>';
+        return `<a href="/dashboard/sessions/${s.id}" class="session-item block border border-transparent hover:border-slate-600/50">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-cyan-400">#${s.id}</span>${badge}
+            <span class="text-slate-400">·</span>
+            <span class="text-slate-300">${s.telemetry_backend}</span>
+            <span class="text-slate-500">/</span>
+            <span class="text-slate-300">${s.ai_backend}</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-1.5">Started ${fmtDate(s.started_at)} · Ended ${ended}</div>
+        </a>`;
       }).join('');
     });
   </script>
