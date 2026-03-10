@@ -3,6 +3,7 @@
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 
@@ -22,8 +23,11 @@ class OllamaAiService(AiService):
         self._model = model
         self._timeout = httpx.Timeout(timeout_sec)
 
-    async def generate_raw(self, prompt: str) -> str:
+    async def generate_raw(
+        self, prompt: str, *, format: str | dict[str, Any] | None = None
+    ) -> str:
         """POST to /api/generate, return raw response content. Raises on failure."""
+        fmt = format if format is not None else "json"
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             r = await client.post(
                 f"{self._base_url}/api/generate",
@@ -31,7 +35,7 @@ class OllamaAiService(AiService):
                     "model": self._model,
                     "prompt": prompt,
                     "stream": False,
-                    "format": "json",
+                    "format": fmt,
                 },
             )
             r.raise_for_status()

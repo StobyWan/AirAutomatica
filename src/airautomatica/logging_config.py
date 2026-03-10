@@ -23,3 +23,5 @@ def setup_logging(level: int | None = None, force: bool = False) -> None:
     )
     # Reduce noise from third-party libs
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.INFO)
+    logging.getLogger("httpcore").setLevel(logging.INFO)

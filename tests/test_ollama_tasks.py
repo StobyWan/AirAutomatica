@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -10,10 +10,13 @@ from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
+    SCHEMA_EVENT_OBJ,
+    SCHEMA_TELEMETRY_OBJ,
     EventClassificationResult,
     OllamaTaskType,
     TelemetrySummaryResult,
     build_prompt,
+    get_format_for_task,
     parse_event_classification_response,
     parse_perception_response,
     parse_telemetry_summary_response,
@@ -59,23 +62,56 @@ def test_build_prompt_perception_with_state() -> None:
 
 
 def test_build_prompt_telemetry_summary() -> None:
-    """Telemetry summary prompt is schema-first and non-empty."""
+    """Telemetry summary prompt is short and factual; schema comes from API format."""
     prompt = build_prompt(OllamaTaskType.TELEMETRY_SUMMARY, {})
     assert len(prompt) > 0
-    assert "status" in prompt
-    assert "summary" in prompt
-    assert "concerns" in prompt
-    assert "recommendations" in prompt
+    assert "JSON" in prompt
+    assert "Context" in prompt
 
 
 def test_build_prompt_event_classification() -> None:
-    """Event classification prompt is schema-first and non-empty."""
+    """Event classification prompt is short and factual; schema comes from API format."""
     prompt = build_prompt(OllamaTaskType.EVENT_CLASSIFICATION, {})
     assert len(prompt) > 0
-    assert "severity" in prompt
-    assert "category" in prompt
-    assert "likely_causes" in prompt
-    assert "recommended_checks" in prompt
+    assert "JSON" in prompt
+    assert "Context" in prompt
+
+
+# --- get_format_for_task ---
+
+
+def test_get_format_for_task_returns_schema_for_telemetry_summary() -> None:
+    """get_format_for_task returns schema dict with type, properties, required, additionalProperties."""
+    result = get_format_for_task(OllamaTaskType.TELEMETRY_SUMMARY)
+    assert isinstance(result, dict)
+    assert result == SCHEMA_TELEMETRY_OBJ
+    assert result["type"] == "object"
+    assert "properties" in result
+    assert "required" in result
+    assert result.get("additionalProperties") is False
+    assert "status" in result["properties"]
+    assert "summary" in result["properties"]
+    assert "concerns" in result["properties"]
+    assert "recommendations" in result["properties"]
+
+
+def test_get_format_for_task_returns_schema_for_event_classification() -> None:
+    """get_format_for_task returns schema dict for event_classification."""
+    result = get_format_for_task(OllamaTaskType.EVENT_CLASSIFICATION)
+    assert isinstance(result, dict)
+    assert result == SCHEMA_EVENT_OBJ
+    assert result["type"] == "object"
+    assert result.get("additionalProperties") is False
+    assert "severity" in result["properties"]
+    assert "category" in result["properties"]
+    assert "likely_causes" in result["properties"]
+    assert "recommended_checks" in result["properties"]
+
+
+def test_get_format_for_task_returns_json_for_perception() -> None:
+    """get_format_for_task returns 'json' for perception_detection."""
+    result = get_format_for_task(OllamaTaskType.PERCEPTION_DETECTION)
+    assert result == "json"
 
 
 # --- Perception parser ---
@@ -383,6 +419,42 @@ async def test_task_service_ollama_event_classification() -> None:
 
 
 @pytest.mark.asyncio
+async def test_task_service_ollama_sends_schema_in_format_for_telemetry_summary() -> (
+    None
+):
+    """Ollama task service passes schema dict in format when calling generate_raw for telemetry."""
+    ollama = OllamaAiService(
+        base_url="http://127.0.0.1:11434", model="test", timeout_sec=5.0
+    )
+    with patch.object(ollama, "generate_raw", new_callable=AsyncMock) as mock_gen:
+        mock_gen.return_value = (
+            '{"status":"ok","summary":"x","concerns":[],"recommendations":[]}'
+        )
+        svc = OllamaTaskService(provider="ollama", ollama_service=ollama)
+        await svc.infer_task(OllamaTaskType.TELEMETRY_SUMMARY, {})
+    mock_gen.assert_called_once()
+    _, kwargs = mock_gen.call_args
+    assert kwargs["format"] == SCHEMA_TELEMETRY_OBJ
+
+
+@pytest.mark.asyncio
+async def test_task_service_ollama_sends_schema_in_format_for_event_classification() -> (
+    None
+):
+    """Ollama task service passes schema dict in format when calling generate_raw for events."""
+    ollama = OllamaAiService(
+        base_url="http://127.0.0.1:11434", model="test", timeout_sec=5.0
+    )
+    with patch.object(ollama, "generate_raw", new_callable=AsyncMock) as mock_gen:
+        mock_gen.return_value = '{"severity":"info","category":"x","summary":"","likely_causes":[],"recommended_checks":[]}'
+        svc = OllamaTaskService(provider="ollama", ollama_service=ollama)
+        await svc.infer_task(OllamaTaskType.EVENT_CLASSIFICATION, {})
+    mock_gen.assert_called_once()
+    _, kwargs = mock_gen.call_args
+    assert kwargs["format"] == SCHEMA_EVENT_OBJ
+
+
+@pytest.mark.asyncio
 async def test_task_service_ollama_malformed_degrades_safely() -> None:
     """Malformed Ollama output returns valid struct, never crashes."""
     ollama = OllamaAiService(
@@ -410,3 +482,31 @@ async def test_task_service_ollama_exception_returns_fallback() -> None:
     assert isinstance(result, EventClassificationResult)
     assert result.severity == "warning"
     assert "Connection refused" in result.summary
+
+
+# --- generate_raw backward-compat ---
+
+
+@pytest.mark.asyncio
+async def test_generate_raw_format_none_defaults_to_json() -> None:
+    """generate_raw(prompt) or generate_raw(prompt, format=None) sends format 'json' in POST body."""
+    captured_body: list[dict[str, Any]] = []
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"response": "{}", "done": True}
+
+    async def capture_post(*args: Any, **kwargs: Any) -> Any:
+        captured_body.append(kwargs.get("json", {}))
+        return mock_response
+
+    mock_instance = AsyncMock()
+    mock_instance.post = capture_post
+    with patch("airautomatica.ai.ollama_service.httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__.return_value = mock_instance
+        mock_client.return_value.__aexit__.return_value = None
+        service = OllamaAiService(
+            base_url="http://127.0.0.1:11434", model="test", timeout_sec=5.0
+        )
+        await service.generate_raw("test prompt")
+    assert len(captured_body) == 1
+    assert captured_body[0]["format"] == "json"
