@@ -70,14 +70,14 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TELEMETRY_BACKEND` | `mock` | `mock` or `serial` |
-| `SERIAL_PORT` | `/dev/ttyACM0` | Serial device for MAVLink |
+| `SERIAL_PORT` | `/dev/ttyACM0` | Serial device (e.g. `/dev/ttyUSB0` for CP2102; `/dev/ttyACM0` for native USB) |
 | `SERIAL_BAUD` | `921600` | Baud rate (57600 for telemetry radios) |
 | `AI_MODE` | `mock` | `mock`, `lmstudio`, or `aihat` (`AI_BACKEND` legacy) |
 | `LM_STUDIO_BASE_URL` | `http://localhost:1234` | LM Studio API URL |
 | `LM_STUDIO_MODEL` | `local-model` | LM Studio model name |
 | `AI_MIN_CONFIDENCE` | `0.5` | Min confidence to persist detection (0–1) |
 | `AI_DUPLICATE_WINDOW_SEC` | `30` | Seconds to suppress same-label duplicate |
-| `AIHAT_MODEL_NAME` | `default` | AI HAT model (when `AI_BACKEND=aihat`) |
+| `AIHAT_MODEL_NAME` | `default` | AI HAT model (when `AI_MODE=aihat`) |
 | `AIHAT_DEVICE` | `auto` | Placeholder; AI HAT+ uses HailoRT auto-discovery |
 | `API_HOST` | `0.0.0.0` | API bind host |
 | `API_PORT` | `8000` | API port |
@@ -89,7 +89,7 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 
 ```bash
 export TELEMETRY_BACKEND=mock
-export AI_BACKEND=mock
+export AI_MODE=mock
 python -m airautomatica.main
 # or: airautomatica
 # or with uv: uv run airautomatica
@@ -99,7 +99,7 @@ python -m airautomatica.main
 
 ```bash
 # Start LM Studio, load a model, enable local server
-export AI_BACKEND=lmstudio
+export AI_MODE=lmstudio
 export LM_STUDIO_BASE_URL=http://localhost:1234
 export LM_STUDIO_MODEL=your-model
 python -m airautomatica.main
