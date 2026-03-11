@@ -25,13 +25,26 @@ if [ ! -f "$ETC_DIR/airautomatica.env" ]; then
   fi
 fi
 
-# Create venv on target and install wheel (no prebuilt venv in package)
-if [ ! -d "$OPT_DIR/venv" ]; then
+# Create or validate venv and install wheel (no prebuilt venv in package)
+# Validate: both python and pip must exist and be executable (broken upgrades may leave incomplete venv)
+venv_valid=false
+if [ -d "$OPT_DIR/venv" ] && [ -x "$OPT_DIR/venv/bin/python" ] && [ -x "$OPT_DIR/venv/bin/pip" ]; then
+  venv_valid=true
+fi
+
+if [ "$venv_valid" = true ]; then
+  echo "airautomatica postinst: reusing existing venv"
+  "$OPT_DIR/venv/bin/pip" install --upgrade "$OPT_DIR/wheels"/airautomatica-*.whl
+else
+  if [ -d "$OPT_DIR/venv" ]; then
+    echo "airautomatica postinst: venv broken or incomplete, rebuilding"
+    rm -rf "$OPT_DIR/venv"
+  else
+    echo "airautomatica postinst: creating venv"
+  fi
   python3 -m venv "$OPT_DIR/venv"
   "$OPT_DIR/venv/bin/pip" install --upgrade pip
   "$OPT_DIR/venv/bin/pip" install "$OPT_DIR/wheels"/airautomatica-*.whl
-else
-  "$OPT_DIR/venv/bin/pip" install --upgrade "$OPT_DIR/wheels"/airautomatica-*.whl
 fi
 
 # Set ownership
