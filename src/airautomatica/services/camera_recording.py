@@ -67,7 +67,7 @@ class CameraRecordingService:
     """Manages rpicam-vid or libcamera-vid subprocess for video recording."""
 
     def __init__(self, recordings_dir: Optional[str] = None) -> None:
-        self._recordings_dir = Path(recordings_dir or get_recordings_dir())
+        self._recordings_dir = Path(recordings_dir or get_recordings_dir()).resolve()
         self._lock = threading.Lock()
         cam_cmd = get_camera_video_command()
         ffmpeg_cmd = get_ffmpeg_command()
@@ -187,6 +187,10 @@ class CameraRecordingService:
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
             ext = "mp4" if cmd == "rpicam-vid" else "h264"
             self._output_path = self._recordings_dir / f"{ts}_cam.{ext}"
+            logger.info(
+                "Recording output path (absolute): %s",
+                str(self._output_path.resolve()),
+            )
             try:
                 ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
                 if ffmpeg_cmd is not None:
@@ -429,7 +433,14 @@ class CameraRecordingService:
                 self._muxer_process = None
             if basename:
                 self._last_recorded_file = basename
-                logger.info("Recording stopped: %s", basename)
+                full_path = self._recordings_dir / basename
+                size_bytes = full_path.stat().st_size if full_path.is_file() else None
+                logger.info(
+                    "Recording stopped: %s path=%s size=%s",
+                    basename,
+                    str(full_path.resolve()),
+                    f"{size_bytes} bytes" if size_bytes is not None else "missing",
+                )
             self._process = None
             self._output_path = None
             self._started_at = None

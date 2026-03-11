@@ -897,3 +897,38 @@ def test_get_recording_file_serves_file(
     r = client.get("/recordings/test_rec.mp4")
     assert r.status_code == 200
     assert r.content == b"fake video content"
+
+
+def test_get_recording_file_cwd_independent(
+    store: StateStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /recordings/{filename} serves file when cwd is / (systemd-like). Path resolution must not depend on cwd."""
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / "cwd_test.mp4").write_bytes(b"fake video")
+    # Use absolute path for recordings_dir, simulate systemd cwd
+    monkeypatch.chdir("/")
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir.resolve()))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/recordings/cwd_test.mp4")
+    assert r.status_code == 200
+    assert r.content == b"fake video"
+
+
+def test_recordings_path_resolution_absolute(
+    store: StateStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """API serves from recordings_dir when it is absolute, regardless of cwd."""
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / "abs_test.mp4").write_bytes(b"content")
+    monkeypatch.chdir("/tmp")  # Different cwd
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir.resolve()))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/recordings/abs_test.mp4")
+    assert r.status_code == 200
+    assert r.content == b"content"
