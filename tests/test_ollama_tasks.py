@@ -17,6 +17,7 @@ from airautomatica.ai.ollama_tasks import (
     TelemetrySummaryResult,
     build_prompt,
     get_format_for_task,
+    get_telemetry_summary_counts,
     parse_event_classification_response,
     parse_perception_response,
     parse_telemetry_summary_response,
@@ -379,6 +380,44 @@ def test_parse_telemetry_summary_neutral_nominal_accepted() -> None:
         }
         result = parse_telemetry_summary_response(raw)
         assert result.summary == neutral
+
+
+def test_telemetry_summary_counters_accepted_meaningful() -> None:
+    """Valid summary increments accepted_meaningful."""
+    before = get_telemetry_summary_counts()
+    parse_telemetry_summary_response(
+        {
+            "status": "ok",
+            "summary": "Vehicle in AUTO with stable battery.",
+            "concerns": [],
+            "recommendations": [],
+        }
+    )
+    after = get_telemetry_summary_counts()
+    assert (
+        after.get("accepted_meaningful", 0) - before.get("accepted_meaningful", 0) == 1
+    )
+
+
+def test_telemetry_summary_counters_normalized_to_nominal() -> None:
+    """Weak summary increments normalized_to_nominal."""
+    before = get_telemetry_summary_counts()
+    parse_telemetry_summary_response(
+        {"status": "ok", "summary": "10", "concerns": [], "recommendations": []}
+    )
+    after = get_telemetry_summary_counts()
+    assert (
+        after.get("normalized_to_nominal", 0) - before.get("normalized_to_nominal", 0)
+        == 1
+    )
+
+
+def test_telemetry_summary_counters_parse_error() -> None:
+    """None raw increments parse_error."""
+    before = get_telemetry_summary_counts()
+    parse_telemetry_summary_response(None)
+    after = get_telemetry_summary_counts()
+    assert after.get("parse_error", 0) - before.get("parse_error", 0) == 1
 
 
 # --- Event classification parser ---

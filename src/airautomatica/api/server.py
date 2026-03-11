@@ -13,6 +13,7 @@ from airautomatica.ai.ollama_tasks import (
     EventClassificationResult,
     OllamaTaskType,
     TelemetrySummaryResult,
+    get_telemetry_summary_counts,
 )
 from airautomatica.config import (
     get_effective_ai_backend,
@@ -69,6 +70,8 @@ def create_app(
                 ),
             },
         }
+        if task_service is not None:
+            health_data["telemetry_summary_counts"] = get_telemetry_summary_counts()
         if state is None:
             health_data["telemetry"] = {
                 "telemetry_status": "disconnected",

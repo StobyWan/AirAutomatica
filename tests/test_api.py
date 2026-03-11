@@ -51,6 +51,23 @@ def test_health(client: TestClient) -> None:
     assert "sqlite_db_path" in data["persistence"]
     assert "session_id" in data["persistence"]
     assert "last_persistence_error" in data["persistence"]
+    assert "telemetry_summary_counts" not in data
+
+
+def test_health_includes_telemetry_summary_counts_when_task_service_exists(
+    store: StateStore,
+) -> None:
+    """GET /health includes telemetry_summary_counts when task_service is provided."""
+    task_service = OllamaTaskService(provider="mock", ollama_service=None)
+    client = TestClient(create_app(store, task_service=task_service))
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert "telemetry_summary_counts" in data
+    counts = data["telemetry_summary_counts"]
+    assert "accepted_meaningful" in counts
+    assert "normalized_to_nominal" in counts
+    assert "parse_error" in counts
 
 
 def test_health_with_connected_state(client: TestClient, store: StateStore) -> None:
