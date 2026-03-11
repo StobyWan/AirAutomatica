@@ -9,7 +9,10 @@ import pytest
 
 from airautomatica.ai.models import AiResult
 from airautomatica.models.state import AircraftState
-from airautomatica.services.mission_logic import MissionLogic
+from airautomatica.services.mission_logic import (
+    MissionLogic,
+    _normalize_label,
+)
 from airautomatica.services.state_store import StateStore
 
 
@@ -232,6 +235,135 @@ def test_battery_label_ignored() -> None:
         confidence=0.9,
         summary="Battery level",
         source_backend="lmstudio",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
+def test_normalize_label_spaces_underscores_hyphens() -> None:
+    """Normalization collapses spaces, underscores, hyphens to single underscore."""
+    assert _normalize_label("ground vehicle") == "GROUND_VEHICLE"
+    assert _normalize_label("ground_vehicle") == "GROUND_VEHICLE"
+    assert _normalize_label("ground-vehicle") == "GROUND_VEHICLE"
+    assert _normalize_label("  person  ") == "PERSON"
+    assert _normalize_label("") == ""
+
+
+def test_none_label_not_persisted() -> None:
+    """Result with label='none' (valid no-detection) is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.9,
+    )
+    result = AiResult(
+        label="none",
+        confidence=0.9,
+        summary="No detection",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
+def test_heading_label_ignored() -> None:
+    """Result with label='heading' (telemetry term) is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="heading",
+        confidence=0.9,
+        summary="Heading value",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
+def test_altitude_label_ignored() -> None:
+    """Result with label='altitude' (telemetry term) is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="altitude",
+        confidence=0.9,
+        summary="Altitude value",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
+def test_unknown_label_rejected() -> None:
+    """Result with label not in allowed vocabulary is not persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="cow",
+        confidence=0.9,
+        summary="Random label",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_not_called()
+
+
+def test_ground_vehicle_normalized_accepted() -> None:
+    """Result with label 'ground vehicle' (spaces) normalizes and is persisted."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="ground vehicle",
+        confidence=0.8,
+        summary="Ground vehicle detected",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_called_once()
+
+
+def test_empty_label_no_response() -> None:
+    """Result with empty label is not persisted (no_response)."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="",
+        confidence=0.9,
+        summary="Something",
+        source_backend="ollama",
         timestamp=datetime.now(timezone.utc),
     )
     logic.process_result(_make_state(), result)

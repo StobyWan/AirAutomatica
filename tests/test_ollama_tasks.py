@@ -27,17 +27,21 @@ from airautomatica.models.state import AircraftState
 
 
 def test_build_prompt_perception_empty_context() -> None:
-    """Perception prompt with no state produces non-empty prompt with schema."""
+    """Perception prompt is compact, no telemetry context."""
     prompt = build_prompt(OllamaTaskType.PERCEPTION_DETECTION, {})
     assert len(prompt) > 0
     assert "JSON" in prompt
     assert "label" in prompt
     assert "confidence" in prompt
-    assert "mode=unknown" in prompt
+    assert "Perception classifier" in prompt
+    assert "vehicle" in prompt
+    assert "none" in prompt
+    assert "mode=" not in prompt
+    assert "Context:" not in prompt
 
 
-def test_build_prompt_perception_with_state() -> None:
-    """Perception prompt with state includes aircraft context."""
+def test_build_prompt_perception_ignores_state() -> None:
+    """Perception prompt does not include aircraft context (avoids label parroting)."""
     state = AircraftState(
         connected=True,
         heartbeat=1,
@@ -56,9 +60,9 @@ def test_build_prompt_perception_with_state() -> None:
         timestamp=datetime.now(timezone.utc),
     )
     prompt = build_prompt(OllamaTaskType.PERCEPTION_DETECTION, {"state": state})
-    assert "AUTO" in prompt
-    assert "100" in prompt
-    assert "12.5" in prompt
+    assert "AUTO" not in prompt
+    assert "100" not in prompt
+    assert "12.5" not in prompt
 
 
 def test_build_prompt_telemetry_summary() -> None:
