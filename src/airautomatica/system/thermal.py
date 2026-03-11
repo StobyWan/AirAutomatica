@@ -1,9 +1,10 @@
-"""Raspberry Pi thermal state. Uses vcgencmd when available; fails safe to NORMAL."""
+"""Raspberry Pi thermal state. Uses vcgencmd when available; sysfs fallback on Linux."""
 
 import logging
 import re
 import subprocess
 from enum import Enum
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,8 @@ _TEMP_HOT_MAX = 84.0
 # Current throttling bits (0-3). Any set = actively throttled.
 _THROTTLED_CURRENT_MASK = 0x0F
 
+_SYSFS_TEMP = Path("/sys/class/thermal/thermal_zone0/temp")
+
 
 class ThermalState(str, Enum):
     """Thermal state for scheduler backoff."""
@@ -27,7 +30,8 @@ class ThermalState(str, Enum):
 
 
 def read_temperature_c() -> float | None:
-    """Read CPU temperature via vcgencmd measure_temp. Returns None if unavailable."""
+    """Read CPU temperature. Tries vcgencmd first (Pi), then sysfs (Linux). Returns None if unavailable."""
+    # Raspberry Pi: vcgencmd measure_temp
     try:
         result = subprocess.run(
             ["vcgencmd", "measure_temp"],
@@ -35,16 +39,21 @@ def read_temperature_c() -> float | None:
             text=True,
             timeout=2.0,
         )
-        if result.returncode != 0 or not result.stdout:
-            return None
-        # Format: temp=45.2'C
-        match = re.search(r"temp=([\d.]+)", result.stdout.strip())
-        if match:
-            return float(match.group(1))
-        return None
+        if result.returncode == 0 and result.stdout:
+            match = re.search(r"temp=([\d.]+)", result.stdout.strip())
+            if match:
+                return float(match.group(1))
     except (FileNotFoundError, subprocess.TimeoutExpired, ValueError) as e:
-        logger.debug("Could not read temperature: %s", e)
-        return None
+        logger.debug("vcgencmd measure_temp unavailable: %s", e)
+
+    # Linux fallback: /sys/class/thermal/thermal_zone0/temp (millidegrees)
+    try:
+        if _SYSFS_TEMP.exists():
+            raw = _SYSFS_TEMP.read_text().strip()
+            return float(raw) / 1000.0
+    except (OSError, ValueError) as e:
+        logger.debug("sysfs thermal read failed: %s", e)
+    return None
 
 
 def read_throttled_flags() -> int | None:

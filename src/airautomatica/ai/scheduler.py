@@ -8,15 +8,13 @@ from typing import Any, TypeVar
 from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.service import AiService
+from airautomatica.config import get_ai_scheduler_cooldown_sec
 from airautomatica.models.state import AircraftState
 from airautomatica.system.thermal import ThermalState, get_thermal_state
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-
-# Fixed cooldown between completed jobs (seconds). Phase 1 base; Phase 2 scales by thermal.
-_COOLDOWN_SEC = 4.0
 
 # Thermal backoff: extra delay when HOT, pause duration for background when THROTTLED.
 _COOLDOWN_WARM_MULT = 2.0
@@ -29,8 +27,9 @@ _BACKGROUND_PAUSE_WHEN_HOT_SEC = 15.0
 class AiInferenceScheduler:
     """Serializes Ollama inference: one job at a time with cooldown and thermal backoff."""
 
-    def __init__(self, cooldown_sec: float = _COOLDOWN_SEC) -> None:
+    def __init__(self, cooldown_sec: float | None = None) -> None:
         self._cooldown_sec = cooldown_sec
+        self._use_config_cooldown = cooldown_sec is None
         self._queue: asyncio.Queue[
             tuple[Callable[[], Awaitable[Any]], asyncio.Future[Any], bool]
         ] = asyncio.Queue()
@@ -45,7 +44,10 @@ class AiInferenceScheduler:
 
     def _get_cooldown_sec(self, thermal: ThermalState) -> float:
         """Cooldown after job completion, scaled by thermal state."""
-        base = self._cooldown_sec
+        if self._use_config_cooldown:
+            base = get_ai_scheduler_cooldown_sec()
+        else:
+            base = self._cooldown_sec if self._cooldown_sec is not None else 0.0
         if thermal == ThermalState.NORMAL:
             return base
         if thermal == ThermalState.WARM:

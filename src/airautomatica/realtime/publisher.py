@@ -10,6 +10,7 @@ import socketio
 from airautomatica.config import get_sqlite_db_path
 from airautomatica.db.base import get_engine
 from airautomatica.models.state import AircraftState, nan_to_none
+from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 
 if TYPE_CHECKING:
     from airautomatica.services.persistence import PersistenceService
@@ -36,6 +37,10 @@ def _build_health_payload(
         "ai_mode": ai_mode,
         "telemetry_backend": telemetry_backend,
         "session_id": session_id,
+        "thermal": {
+            "temp_c": read_temperature_c(),
+            "state": get_thermal_state().value,
+        },
         "persistence": {
             "persistence_enabled": persistence_enabled,
             "sqlite_db_path": get_sqlite_db_path() if persistence_enabled else None,
