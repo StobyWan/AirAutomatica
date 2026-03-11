@@ -128,6 +128,14 @@ def get_ai_duplicate_window_sec() -> float:
         return 30.0
 
 
+def get_ai_scheduler_cooldown_sec() -> float:
+    """Base cooldown between Ollama jobs (seconds). Default: 8. Applies without restart when changed via Settings."""
+    try:
+        return max(0.0, float(os.environ.get("AI_SCHEDULER_COOLDOWN_SEC", "8.0")))
+    except ValueError:
+        return 8.0
+
+
 def get_telemetry_backend() -> str:
     """Telemetry backend: 'mock' or 'serial'. Default: mock."""
     return os.environ.get("TELEMETRY_BACKEND", "mock").lower()

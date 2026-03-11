@@ -25,6 +25,7 @@ from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
 from airautomatica.settings import get_settings, save_settings
+from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
 
 
@@ -53,6 +54,10 @@ def create_app(
             "status": "ok",
             "ai_mode": get_effective_ai_backend(),
             "telemetry_backend": get_telemetry_backend(),
+            "thermal": {
+                "temp_c": read_temperature_c(),
+                "state": get_thermal_state().value,
+            },
             "persistence": {
                 "persistence_enabled": persistence_enabled,
                 "sqlite_db_path": get_sqlite_db_path() if persistence_enabled else None,

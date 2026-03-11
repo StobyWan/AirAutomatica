@@ -24,6 +24,7 @@ CANONICAL_SETTINGS_KEYS = [
     "AI_HAT_ENABLED",
     "AI_MIN_CONFIDENCE",
     "AI_DUPLICATE_WINDOW_SEC",
+    "AI_SCHEDULER_COOLDOWN_SEC",
 ]
 
 # Legacy keys accepted when loading from file or in POST body; never persisted.
@@ -104,6 +105,7 @@ def get_settings() -> dict:
         "AI_HAT_ENABLED": "0",
         "AI_MIN_CONFIDENCE": "0.5",
         "AI_DUPLICATE_WINDOW_SEC": "30",
+        "AI_SCHEDULER_COOLDOWN_SEC": "8",
     }
     result: dict[str, str] = {}
     for k in CANONICAL_SETTINGS_KEYS:
@@ -119,7 +121,8 @@ def get_settings() -> dict:
 def save_settings(updates: dict) -> None:
     """Merge updates into settings file. Writes canonical keys only.
     Accepts legacy keys (AI_MODE, AI_BACKEND) in updates and maps to canonical;
-    never persists legacy keys. Does not affect running app; restart required."""
+    never persists legacy keys. Updates os.environ for runtime changes (e.g. AI_SCHEDULER_COOLDOWN_SEC).
+    """
     _SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
     current: dict = {}
     if _SETTINGS_FILE.exists():
@@ -138,7 +141,9 @@ def save_settings(updates: dict) -> None:
         if k in CANONICAL_SETTINGS_KEYS:
             if v is None or v == "":
                 current.pop(k, None)
+                os.environ.pop(k, None)
             else:
                 current[k] = str(v).strip()
+                os.environ[k] = current[k]
     with open(_SETTINGS_FILE, "w") as f:
         json.dump(current, f, indent=2)

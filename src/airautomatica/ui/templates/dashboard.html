@@ -287,6 +287,11 @@
             <label for="AI_DUPLICATE_WINDOW_SEC">AI duplicate window (seconds)</label>
             <input type="number" id="AI_DUPLICATE_WINDOW_SEC" name="AI_DUPLICATE_WINDOW_SEC" placeholder="30" min="1" />
           </div>
+          <div class="settings-field">
+            <label for="AI_SCHEDULER_COOLDOWN_SEC">AI scheduler cooldown (seconds)</label>
+            <input type="number" id="AI_SCHEDULER_COOLDOWN_SEC" name="AI_SCHEDULER_COOLDOWN_SEC" placeholder="8" min="0" step="0.5" />
+            <span class="text-xs text-slate-500 mt-1 block">Delay between Ollama jobs. Applies immediately without restart.</span>
+          </div>
         </div>
       </div>
 
@@ -299,7 +304,7 @@
   </div>
 
   <script>
-    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC'];
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
 
     function updateProviderVisibility() {
       const p = document.getElementById('LOCAL_LLM_PROVIDER').value;
@@ -526,9 +531,13 @@
       } else {
         bannerEl.classList.add('hidden');
       }
+      const thermal = d.thermal || {};
+      const tempStr = thermal.temp_c != null ? thermal.temp_c.toFixed(1) + ' °C' : null;
+      const thermalStr = tempStr ? `${tempStr} (${thermal.state || 'normal'})` : (thermal.state || null);
       document.getElementById('health-fields').innerHTML = [
         ['telemetry_backend', d.telemetry_backend],
         ['ai_mode', d.ai_mode],
+        ['thermal', thermalStr],
         ['heartbeat_age_s', tel.heartbeat_age_s != null ? tel.heartbeat_age_s.toFixed(1) + ' s' : null],
         ['reconnect_count', tel.reconnect_count],
         ['last_disconnect_reason', tel.last_disconnect_reason],
