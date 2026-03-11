@@ -1,0 +1,5 @@
+airautomatica (0.1.0) unstable; urgency=medium
+
+  * Initial Debian package.
+
+ -- AirAutomatica <https://github.com/StobyWan/AirAutomatica>  Wed, 01 Jan 2025 00:00:00 +0000

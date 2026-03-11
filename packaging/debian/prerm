@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+# Stop service before upgrade/removal
+systemctl stop airautomatica 2>/dev/null || true

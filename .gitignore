@@ -25,6 +25,10 @@ ENV/
 .coverage
 htmlcov/
 
+# Build
+build/
+airautomatica_*_all.deb
+
 # Local
 *.log
 .env
@@ -34,3 +38,4 @@ airautomatica.db
 *.db-wal
 .airautomatica/
 .cursor/.DS_Store
+build/

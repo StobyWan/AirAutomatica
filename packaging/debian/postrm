@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+# Reload systemd after removal
+systemctl daemon-reload 2>/dev/null || true
