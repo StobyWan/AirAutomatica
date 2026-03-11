@@ -218,7 +218,7 @@ def test_is_available_neither(
 def test_start_recording_uses_rpicam_vid_mp4(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:
-    """When rpicam-vid is used, output is .mp4 and Popen gets rpicam-vid."""
+    """When rpicam-vid is used, output is .mp4 and command uses Pi 5 baseline (no --codec libav)."""
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
     with patch(
@@ -238,7 +238,31 @@ def test_start_recording_uses_rpicam_vid_mp4(
     assert state.output_file.endswith(".mp4")
     call_args = mock_popen.call_args[0][0]
     assert call_args[0] == "rpicam-vid"
-    assert "--codec" in call_args and "libav" in call_args
+    assert "-t" in call_args and "0" in call_args
+    assert "-o" in call_args
+    assert "--codec" not in call_args
+
+
+def test_rpicam_vid_command_omit_codec_libav(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Regression: rpicam-vid must not use --codec libav (Pi 5 baseline)."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ) as mock_popen:
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                svc.start_recording()
+    call_args = mock_popen.call_args[0][0]
+    assert "libav" not in call_args
+    assert "--codec" not in call_args
 
 
 def test_start_recording_logs_command(
