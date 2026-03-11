@@ -535,6 +535,7 @@
       document.getElementById('connection-status').textContent = 'Disconnected';
     });
 
+    let lastDisplayedVideoFile = null;
     socket.on('health_update', (d) => {
       const tel = d.telemetry || {};
       const status = tel.telemetry_status || 'disconnected';
@@ -635,11 +636,15 @@
                 (dir ? ' <span class="text-slate-500">(' + dir + ')</span>' : '') +
                 ' <a href="/recordings/' + encodeURIComponent(lastFile) + '" target="_blank" class="text-cyan-400 hover:text-cyan-300 underline ml-1">Preview</a>';
               previewEl.classList.remove('hidden');
-              videoEl.src = '/recordings/' + encodeURIComponent(lastFile);
+              if (lastFile !== lastDisplayedVideoFile) {
+                lastDisplayedVideoFile = lastFile;
+                videoEl.src = '/recordings/' + encodeURIComponent(lastFile);
+              }
             } else {
               lastEl.classList.add('hidden');
               lastEl.innerHTML = '';
               previewEl.classList.add('hidden');
+              lastDisplayedVideoFile = null;
               videoEl.src = '';
             }
           }
@@ -684,11 +689,13 @@
             lastEl.innerHTML = 'Last recorded: <span class="font-mono text-cyan-400">' + lastFile + '</span>' +
               ' <a href="/recordings/' + encodeURIComponent(lastFile) + '" target="_blank" class="text-cyan-400 hover:text-cyan-300 underline ml-1">Preview</a>';
             previewEl.classList.remove('hidden');
+            lastDisplayedVideoFile = lastFile;
             videoEl.src = '/recordings/' + encodeURIComponent(lastFile);
           } else {
             lastEl.classList.add('hidden');
             lastEl.innerHTML = '';
             previewEl.classList.add('hidden');
+            lastDisplayedVideoFile = null;
             videoEl.src = '';
           }
         } else {
