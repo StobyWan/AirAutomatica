@@ -127,17 +127,12 @@ _SCHEMA_PERCEPTION = (
 def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
     """Build schema-first prompt. Short, deterministic, JSON-only."""
     if task_type == OllamaTaskType.PERCEPTION_DETECTION:
-        state = context.get("state")
-        ctx = "mode=unknown, alt=N/A, heading=N/A, battery=N/A"
-        if state is not None:
-            ctx = (
-                f"mode={state.mode}, alt={state.rel_alt_m}m, "
-                f"heading={state.heading_deg}deg, battery={state.voltage_v}V"
-            )
         return (
-            "Return only valid JSON. No markdown. No explanation.\n"
-            f"Schema: {_SCHEMA_PERCEPTION}\n"
-            f"Context: {ctx}"
+            "Perception classifier. Label ONLY: vehicle, person, building, tree, road, "
+            "obstacle, aircraft, tower, pole, target, ground vehicle, water, structure. "
+            'If nothing: "none".\n'
+            "Return ONLY valid JSON. No markdown.\n"
+            '{"label":"<label>","confidence":<0-1>,"summary":"<sentence>","bbox":[x,y,w,h],"action":"<optional>"}'
         )
 
     if task_type == OllamaTaskType.TELEMETRY_SUMMARY:

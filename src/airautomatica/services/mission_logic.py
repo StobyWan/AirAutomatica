@@ -16,11 +16,25 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Generic placeholder labels (unparseable output, error fallback) — not real detections.
-_PLACEHOLDER_LABELS: frozenset[str] = frozenset({"error", "lmstudio", "ollama"})
 
-# Mode/status/system labels — not perception detections. Reject these. (Uppercase for case-insensitive check.)
-_NON_PERCEPTION_LABELS: frozenset[str] = frozenset(
+def _normalize_label(s: str) -> str:
+    """Trim, uppercase, collapse spaces/underscores/hyphens to single underscore."""
+    if not s:
+        return ""
+    t = s.strip().upper()
+    for sep in (" ", "-"):
+        t = t.replace(sep, "_")
+    while "__" in t:
+        t = t.replace("__", "_")
+    return t.strip("_")
+
+
+# Placeholder labels (unparseable output, error fallback) — not real detections.
+# Use normalized forms for comparison.
+_PLACEHOLDER_LABELS: frozenset[str] = frozenset({"ERROR", "LMSTUDIO", "OLLAMA"})
+
+# Telemetry/status/UI labels — not perception detections. Reject these.
+_DISALLOWED_PERCEPTION_LABELS: frozenset[str] = frozenset(
     {
         "GUIDED",
         "AUTO",
@@ -35,6 +49,37 @@ _NON_PERCEPTION_LABELS: frozenset[str] = frozenset(
         "TELEMETRY",
         "STATE",
         "MODE",
+        "HEADING",
+        "ALTITUDE",
+        "SPEED",
+        "GPS",
+        "VOLTAGE",
+        "UI",
+        "BUTTON",
+        "LABEL",
+        "OVERLAY",
+        "DEBUG",
+        "TEXT",
+    }
+)
+
+# Compact real-world perception vocabulary. Labels not in this set are rejected.
+_ALLOWED_PERCEPTION_LABELS: frozenset[str] = frozenset(
+    {
+        "VEHICLE",
+        "PERSON",
+        "BUILDING",
+        "TREE",
+        "ROAD",
+        "OBSTACLE",
+        "AIRCRAFT",
+        "TOWER",
+        "POLE",
+        "TARGET",
+        "GROUND_VEHICLE",
+        "WATER",
+        "STRUCTURE",
+        "NONE",
     }
 )
 
@@ -71,25 +116,19 @@ class MissionLogic:
         self._last_ai_time: float = 0.0
         self._last_accepted: dict[str, float] = {}
 
-    def _is_meaningful(self, result: AiResult) -> bool:
-        """True if result is worth acting on or persisting."""
-        if result.label in _PLACEHOLDER_LABELS:
-            return False
-        if result.confidence < self._min_confidence:
-            return False
-        summary = (result.summary or "").strip()
-        if not summary or summary == "No response":
-            return False
-        if result.metadata is not None and result.metadata.get("raw_length") == 0:
-            return False
-        if (result.label or "").strip().upper() in _NON_PERCEPTION_LABELS:
-            return False
-        return True
-
     def _get_ignore_reason(self, result: AiResult) -> str:
-        """Reason why a result was ignored."""
-        if result.label in _PLACEHOLDER_LABELS:
+        """Reason why a result was ignored. Empty string means accept."""
+        norm = _normalize_label(result.label or "")
+        if norm == "":
+            return "no_response"
+        if norm in _PLACEHOLDER_LABELS:
             return "placeholder_label"
+        if norm == "NONE":
+            return "no_detection"
+        if norm in _DISALLOWED_PERCEPTION_LABELS:
+            return "non_perception_label"
+        if norm not in _ALLOWED_PERCEPTION_LABELS:
+            return "unknown_label"
         if result.confidence < self._min_confidence:
             return "low_confidence"
         summary = (result.summary or "").strip()
@@ -99,9 +138,11 @@ class MissionLogic:
             return "no_response"
         if result.metadata is not None and result.metadata.get("raw_length") == 0:
             return "raw_length_zero"
-        if (result.label or "").strip().upper() in _NON_PERCEPTION_LABELS:
-            return "non_perception_label"
-        return "unknown"
+        return ""
+
+    def _is_meaningful(self, result: AiResult) -> bool:
+        """True if result is worth acting on or persisting."""
+        return self._get_ignore_reason(result) == ""
 
     def _is_duplicate(self, result: AiResult) -> bool:
         """True if same label was accepted recently."""
@@ -125,12 +166,7 @@ class MissionLogic:
         """Filter, dedupe, log, and persist. Call after infer()."""
         if not self._is_meaningful(result):
             reason = self._get_ignore_reason(result)
-            logger.debug(
-                "ai ignored: reason=%s label=%s confidence=%.2f",
-                reason,
-                result.label,
-                result.confidence,
-            )
+            logger.debug("ai ignored: reason=%s label=%s", reason, result.label)
             return
         if self._is_duplicate(result):
             now = time.monotonic()

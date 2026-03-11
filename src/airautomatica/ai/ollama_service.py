@@ -115,15 +115,11 @@ class OllamaAiService(AiService):
         return await self._infer_from_prompt(prompt)
 
     def _build_prompt(self, state: AircraftState | None) -> str:
-        """Build prompt from aircraft state. Asks for JSON to simulate AI HAT output."""
-        ctx = "mode=unknown, alt=N/A, heading=N/A, battery=N/A"
-        if state is not None:
-            ctx = (
-                f"mode={state.mode}, alt={state.rel_alt_m}m, "
-                f"heading={state.heading_deg}deg, battery={state.voltage_v}V"
-            )
+        """Build compact perception prompt. No telemetry context (avoids label parroting)."""
         return (
-            "Return ONLY valid JSON, no other text. Format:\n"
-            '{"label":"<detection_label>","confidence":<0-1>,"summary":"<one sentence>","bbox":[x,y,w,h],"action":"<optional>"}\n'
-            f"Context: {ctx}."
+            "Perception classifier. Label ONLY: vehicle, person, building, tree, road, "
+            "obstacle, aircraft, tower, pole, target, ground vehicle, water, structure. "
+            'If nothing: "none".\n'
+            "Return ONLY valid JSON. No markdown.\n"
+            '{"label":"<label>","confidence":<0-1>,"summary":"<sentence>","bbox":[x,y,w,h],"action":"<optional>"}'
         )
