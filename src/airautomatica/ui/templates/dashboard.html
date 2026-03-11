@@ -379,6 +379,7 @@
     const socket = io();
 
     const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
+    const fmtRate = (v) => v != null && typeof v === 'number' && isFinite(v) ? (v * 100).toFixed(1) + '%' : null;
     const fmtNum = (v) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : String(v);
     const fmtNumPrec = (v, decimals) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(decimals);
     const fmtHeading = (v) => {
@@ -547,6 +548,8 @@
         ['heartbeat_age_s', tel.heartbeat_age_s != null ? tel.heartbeat_age_s.toFixed(1) + ' s' : null],
         ['reconnect_count', tel.reconnect_count],
         ['last_disconnect_reason', tel.last_disconnect_reason],
+        ['perception_acceptance_rate', fmtRate(d.perception_acceptance_rate)],
+        ['telemetry_meaningful_rate', fmtRate(d.telemetry_meaningful_rate)],
       ].map(([k, v]) => `<div class="field"><label>${k}</label><span>${fmt(v)}</span></div>`).join('');
       const p = d.persistence || {};
       document.getElementById('session-fields').innerHTML = [

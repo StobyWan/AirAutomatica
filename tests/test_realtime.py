@@ -32,6 +32,10 @@ def test_health_payload_builder_null_state() -> None:
     assert payload["telemetry"]["reconnect_count"] == 0
     assert payload["telemetry"]["last_disconnect_reason"] is None
     assert payload["telemetry"]["heartbeat_age_s"] is None
+    assert "perception_counts" in payload
+    assert "telemetry_summary_counts" in payload
+    assert "perception_acceptance_rate" in payload
+    assert "telemetry_meaningful_rate" in payload
 
 
 def test_health_payload_builder_with_state() -> None:
@@ -180,3 +184,7 @@ def test_health_payload_includes_capabilities_with_firmware_and_profile() -> Non
     assert payload["capabilities"]["downgrade_reasons"] == [
         "parameter read probe timeout"
     ]
+    assert "perception_counts" in payload
+    assert "telemetry_summary_counts" in payload
+    assert "perception_acceptance_rate" in payload
+    assert "telemetry_meaningful_rate" in payload

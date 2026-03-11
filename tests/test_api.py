@@ -51,6 +51,70 @@ def test_health(client: TestClient) -> None:
     assert "sqlite_db_path" in data["persistence"]
     assert "session_id" in data["persistence"]
     assert "last_persistence_error" in data["persistence"]
+    assert "telemetry_summary_counts" in data
+    assert "perception_counts" in data
+    assert "perception_acceptance_rate" in data
+    assert "telemetry_meaningful_rate" in data
+    assert data["perception_acceptance_rate"] is None
+    assert data["telemetry_meaningful_rate"] is None
+    counts = data["perception_counts"]
+    assert "accepted" in counts
+    assert "suppressed" in counts
+    assert "no_detection" in counts
+    assert "non_perception_label" in counts
+    assert "unknown_label" in counts
+    assert "parse_error" in counts
+
+
+def test_health_includes_telemetry_summary_counts_when_task_service_exists(
+    store: StateStore,
+) -> None:
+    """GET /health includes telemetry_summary_counts when task_service is provided."""
+    task_service = OllamaTaskService(provider="mock", ollama_service=None)
+    client = TestClient(create_app(store, task_service=task_service))
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert "telemetry_summary_counts" in data
+    counts = data["telemetry_summary_counts"]
+    assert "accepted_meaningful" in counts
+    assert "normalized_to_nominal" in counts
+    assert "parse_error" in counts
+
+
+def test_health_includes_derived_rates(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /health includes perception_acceptance_rate and telemetry_meaningful_rate."""
+    from airautomatica.api import server
+
+    def mock_perception_counts():
+        return {
+            "accepted": 4,
+            "suppressed": 2,
+            "no_detection": 2,
+            "non_perception_label": 0,
+            "unknown_label": 0,
+            "parse_error": 0,
+        }
+
+    def mock_telemetry_summary_counts():
+        return {
+            "accepted_meaningful": 2,
+            "normalized_to_nominal": 2,
+            "parse_error": 0,
+        }
+
+    monkeypatch.setattr(server, "get_perception_counts", mock_perception_counts)
+    monkeypatch.setattr(
+        server, "get_telemetry_summary_counts", mock_telemetry_summary_counts
+    )
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["perception_acceptance_rate"] == 0.5  # 4/8
+    assert data["telemetry_meaningful_rate"] == 0.5  # 2/4
 
 
 def test_health_with_connected_state(client: TestClient, store: StateStore) -> None:
