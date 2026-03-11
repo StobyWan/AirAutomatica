@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=airautomatica
 Group=airautomatica
+SupplementaryGroups=video dialout
 WorkingDirectory=/opt/airautomatica
 Environment=HOME=/var/lib/airautomatica
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
