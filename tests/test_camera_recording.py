@@ -219,7 +219,7 @@ def test_is_available_neither(
 def test_start_recording_uses_rpicam_vid_mp4(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:
-    """When rpicam-vid is used, output is .mp4 and command uses Pi 5 baseline (no --codec libav)."""
+    """When rpicam-vid is used, output is .mp4. With ffmpeg: pipe path; without: direct -o."""
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
     with patch(
@@ -237,11 +237,12 @@ def test_start_recording_uses_rpicam_vid_mp4(
     assert state.recording is True
     assert state.output_file is not None
     assert state.output_file.endswith(".mp4")
-    call_args = mock_popen.call_args[0][0]
-    assert call_args[0] == "rpicam-vid"
-    assert "-t" in call_args and "0" in call_args
-    assert "-o" in call_args
-    assert "--codec" not in call_args
+    # First Popen is camera; second (if any) is ffmpeg. Assert on camera args.
+    calls = mock_popen.call_args_list
+    cam_args = calls[0][0][0]
+    assert cam_args[0] == "rpicam-vid"
+    assert "-t" in cam_args and "0" in cam_args
+    assert "-o" in cam_args
 
 
 def test_rpicam_vid_command_omit_codec_libav(

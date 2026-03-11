@@ -182,8 +182,19 @@ class CameraRecordingService:
             try:
                 ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
                 if ffmpeg_cmd is not None:
-                    # Pipe to ffmpeg for MP4. Fragmented MP4 (moov at start) keeps files playable when pipe closes.
-                    cam_args = [cmd, "-t", "0", "--codec", "h264", "-o", "-"]
+                    # Pipe to ffmpeg for MP4. Pi 5 uses libav for h264; --libav-format required when piping (rpicam-apps #626).
+                    cam_args = [
+                        cmd,
+                        "-t",
+                        "0",
+                        "--codec",
+                        "h264",
+                        "--libav-format",
+                        "h264",
+                        "-o",
+                        "-",
+                    ]
+
                     self._process = subprocess.Popen(
                         cam_args,
                         stdout=subprocess.PIPE,
