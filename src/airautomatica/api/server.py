@@ -297,50 +297,72 @@ def create_app(
             persistence=persistence,
         )
 
+    def _recordings_to_dict(recordings: list) -> list[dict]:
+        return [
+            {
+                "filename": r.filename,
+                "timestamp": r.timestamp_iso,
+                "size_bytes": r.size_bytes,
+                "duration_sec": r.duration_sec,
+            }
+            for r in recordings
+        ]
+
     @app.get("/recordings")
     def get_recordings(
         session_id_query: int | None = Query(None, alias="session_id"),
     ) -> dict:
-        """List recordings. Optional session_id query param filters by session (time-based)."""
+        """List recordings. Optional session_id filters by session. Live tab: allow_fallback when unresolved."""
         if recordings_service is None:
-            return {"recordings": [], "recordings_dir": None}
+            return {
+                "session_id": session_id_query,
+                "session_resolved": False,
+                "fallback_used": False,
+                "count": 0,
+                "recordings": [],
+                "recordings_dir": None,
+            }
         sid = session_id_query
-        recordings = recordings_service.get_recordings(session_id=sid)
+        result = recordings_service.get_recordings(session_id=sid, allow_fallback=True)
         recordings_dir = (
             camera_recording_service.recordings_dir
             if camera_recording_service
             else None
         )
         return {
-            "recordings": [
-                {
-                    "filename": r.filename,
-                    "timestamp": r.timestamp_iso,
-                    "size_bytes": r.size_bytes,
-                    "duration_sec": r.duration_sec,
-                }
-                for r in recordings
-            ],
+            "session_id": result.session_id,
+            "session_resolved": result.session_resolved,
+            "fallback_used": result.fallback_used,
+            "count": result.count,
+            "recordings": _recordings_to_dict(result.recordings),
             "recordings_dir": recordings_dir,
         }
 
     @app.get("/sessions/{sid:int}/recordings")
     def get_session_recordings(sid: int) -> dict:
-        """Return recordings for a session (time-based association)."""
+        """Return recordings for a session. Session detail: no fallback when unresolved."""
         if recordings_service is None:
-            return {"recordings": [], "session_id": sid}
-        recordings = recordings_service.get_recordings(session_id=sid)
+            return {
+                "session_id": sid,
+                "session_resolved": False,
+                "fallback_used": False,
+                "count": 0,
+                "recordings": [],
+                "recordings_dir": None,
+            }
+        result = recordings_service.get_recordings(session_id=sid, allow_fallback=False)
+        recordings_dir = (
+            camera_recording_service.recordings_dir
+            if camera_recording_service
+            else None
+        )
         return {
-            "recordings": [
-                {
-                    "filename": r.filename,
-                    "timestamp": r.timestamp_iso,
-                    "size_bytes": r.size_bytes,
-                    "duration_sec": r.duration_sec,
-                }
-                for r in recordings
-            ],
-            "session_id": sid,
+            "session_id": result.session_id,
+            "session_resolved": result.session_resolved,
+            "fallback_used": result.fallback_used,
+            "count": result.count,
+            "recordings": _recordings_to_dict(result.recordings),
+            "recordings_dir": recordings_dir,
         }
 
     @app.delete("/recordings/{filename}")

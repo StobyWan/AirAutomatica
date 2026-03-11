@@ -106,7 +106,6 @@
 
   <nav class="flex gap-1 mb-4 border-b border-gray-700/50">
     <button type="button" class="tab-btn active" data-tab="main">Live</button>
-    <button type="button" class="tab-btn" data-tab="video">Video</button>
     <button type="button" class="tab-btn" data-tab="sessions">Session History</button>
     <button type="button" class="tab-btn" data-tab="settings">Settings</button>
   </nav>
@@ -205,9 +204,7 @@
     <h2>Session / Persistence</h2>
     <div class="grid" id="session-fields"></div>
   </div>
-  </div>
 
-  <div id="tab-video" class="tab-panel">
   <div class="card">
     <h2 class="text-slate-200 font-semibold tracking-tight">Live Camera Controls</h2>
     <p class="text-xs text-slate-500 mb-3">Pi camera recording. Independent of aircraft armed state.</p>
@@ -230,44 +227,24 @@
         Stop Recording
       </button>
     </div>
-    <div id="video-preview-placeholder" class="mt-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700/50 text-sm text-slate-500">
-      Preview unavailable
-    </div>
   </div>
 
   <div class="card">
-    <h2 class="text-slate-200 font-semibold tracking-tight">Current Session Recordings</h2>
-    <p class="text-xs text-slate-500 mb-3">Recordings for the active flight session</p>
-    <div id="video-session-recordings-loading" class="hidden py-6 text-center">
-      <svg class="animate-spin h-6 w-6 mx-auto text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+    <h2 class="text-slate-200 font-semibold tracking-tight">Recordings for Current Session</h2>
+    <p id="live-recordings-subtitle" class="text-xs text-slate-500 mb-3">Recordings for the active flight session</p>
+    <div id="live-recordings-loading" class="hidden py-4 text-center">
+      <svg class="animate-spin h-5 w-5 mx-auto text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
     </div>
-    <div id="video-session-recordings-empty" class="hidden py-8 text-center">
-      <svg class="w-12 h-12 mx-auto text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-      <p class="text-slate-500 text-sm">No active session or no recordings yet</p>
+    <div id="live-recordings-empty" class="hidden py-4 text-center">
+      <p id="live-recordings-empty-msg" class="text-slate-500 text-sm">No active session or no recordings yet</p>
+      <a href="/dashboard" id="live-recordings-session-history-link" class="hidden mt-2 inline-block text-sm text-cyan-400 hover:text-cyan-300">Session History</a>
     </div>
-    <div id="video-session-recordings-list" class="space-y-2"></div>
-  </div>
-
-  <div class="card">
-    <h2 class="text-slate-200 font-semibold tracking-tight">Recording History</h2>
-    <p class="text-xs text-slate-500 mb-3">All recordings. Click to play.</p>
-    <div id="video-history-loading" class="hidden py-6 text-center">
-      <svg class="animate-spin h-6 w-6 mx-auto text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+    <div id="live-recordings-list" class="space-y-2"></div>
+    <div id="live-recordings-view-session-wrap" class="mt-2 hidden">
+      <a href="#" id="live-recordings-view-session-link" class="text-sm text-cyan-400 hover:text-cyan-300">View full session</a>
     </div>
-    <div id="video-history-empty" class="hidden py-8 text-center">
-      <svg class="w-12 h-12 mx-auto text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-      <p class="text-slate-500 text-sm">No recordings yet</p>
-    </div>
-    <div id="video-history-list" class="space-y-2 max-h-64 overflow-y-auto"></div>
-  </div>
-
-  <div class="card">
-    <h2 class="text-slate-200 font-semibold tracking-tight">Playback</h2>
-    <div id="video-player-container" class="rounded-lg bg-black overflow-hidden hidden">
-      <video id="video-player" controls class="w-full max-w-2xl" preload="metadata"></video>
-    </div>
-    <div id="video-player-empty" class="py-12 text-center text-slate-500 text-sm">
-      Select a recording to play
+    <div id="live-player-container" class="mt-3 rounded-lg bg-black overflow-hidden hidden max-w-md">
+      <video id="live-player" controls class="w-full" preload="metadata"></video>
     </div>
   </div>
   </div>
@@ -279,16 +256,16 @@
   </div>
   </div>
 
-  <div id="video-delete-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div id="live-delete-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
     <div class="flex min-h-screen items-center justify-center p-4">
       <div class="fixed inset-0 bg-black/60" aria-hidden="true"></div>
       <div class="relative rounded-xl bg-slate-800 border border-slate-700 p-6 shadow-xl max-w-md w-full">
         <h3 id="modal-title" class="text-lg font-semibold text-white">Delete recording?</h3>
-        <p id="video-delete-filename" class="mt-2 text-sm text-slate-400 font-mono"></p>
+        <p id="live-delete-filename" class="mt-2 text-sm text-slate-400 font-mono"></p>
         <p class="mt-2 text-sm text-slate-500">This cannot be undone.</p>
         <div class="mt-6 flex gap-3 justify-end">
-          <button type="button" id="video-delete-cancel" class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium">Cancel</button>
-          <button type="button" id="video-delete-confirm" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium">Delete</button>
+          <button type="button" id="live-delete-cancel" class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium">Cancel</button>
+          <button type="button" id="live-delete-confirm" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium">Delete</button>
         </div>
       </div>
     </div>
@@ -419,7 +396,6 @@
         btn.classList.add('active');
         document.getElementById('tab-' + tab).classList.add('active');
         if (tab === 'settings') loadSettingsForm();
-        if (tab === 'video') loadVideoRecordings();
       });
     });
 
@@ -559,6 +535,7 @@
 
     socket.on('connect', () => {
       document.getElementById('connection-status').textContent = 'Connected';
+      refreshRecordingsUI();
       fetch('/recent-events').then(r => r.json()).then(d => {
         const list = (d.events || []).slice(0, 20);
         const el = document.getElementById('events-list');
@@ -604,7 +581,16 @@
       }
     });
 
-    let videoCurrentSessionId = null;
+    let currentSessionId = null;
+    let lastFocusRefreshAt = 0;
+    const FOCUS_REFRESH_DEBOUNCE_MS = 5000;
+    window.addEventListener('focus', () => {
+      const now = Date.now();
+      if (now - lastFocusRefreshAt >= FOCUS_REFRESH_DEBOUNCE_MS) {
+        lastFocusRefreshAt = now;
+        refreshRecordingsUI();
+      }
+    });
     socket.on('health_update', (d) => {
       const tel = d.telemetry || {};
       const status = tel.telemetry_status || 'disconnected';
@@ -667,7 +653,12 @@
       } else {
         btnWrap.classList.add('hidden');
       }
-      videoCurrentSessionId = d.session_id;
+      const prevSessionId = currentSessionId;
+      currentSessionId = d.session_id;
+      if (prevSessionId !== currentSessionId) {
+        lastSessionIdForRefresh = currentSessionId;
+        refreshRecordingsUI();
+      }
       const modeBadge = document.getElementById('video-mode-badge');
       const stateBadge = document.getElementById('video-state-badge');
       const startBtn = document.getElementById('camera-start-btn');
@@ -750,123 +741,138 @@
       try {
         const r = await fetch('/camera/recording/stop', { method: 'POST' });
         const d = await r.json();
-        if (d.ok && document.getElementById('tab-video').classList.contains('active')) {
-          loadVideoRecordings();
-        }
+        if (d.ok) refreshRecordingsUI();
       } catch (e) {}
     });
 
-    let videoSelectedFilename = null;
-    function loadVideoRecordings() {
-      const sessionList = document.getElementById('video-session-recordings-list');
-      const sessionLoading = document.getElementById('video-session-recordings-loading');
-      const sessionEmpty = document.getElementById('video-session-recordings-empty');
-      const historyList = document.getElementById('video-history-list');
-      const historyLoading = document.getElementById('video-history-loading');
-      const historyEmpty = document.getElementById('video-history-empty');
-      const sid = videoCurrentSessionId;
-      sessionList.classList.add('hidden');
-      sessionLoading.classList.remove('hidden');
-      sessionEmpty.classList.add('hidden');
-      historyList.classList.add('hidden');
-      historyLoading.classList.remove('hidden');
-      historyEmpty.classList.add('hidden');
-      Promise.all([
-        sid != null ? fetch('/recordings?session_id=' + sid).then(r => r.json()) : Promise.resolve({ recordings: [] }),
-        fetch('/recordings').then(r => r.json()),
-      ]).then(([sessionData, allData]) => {
-        sessionLoading.classList.add('hidden');
-        historyLoading.classList.add('hidden');
-        const sessionRecs = sessionData.recordings || [];
-        const allRecs = allData.recordings || [];
-        const renderRec = (r, isLast) => {
-          const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
-          const dur = r.duration_sec != null ? Math.round(r.duration_sec) + ' s' : '—';
-          const sz = r.size_bytes != null ? (r.size_bytes < 1024 ? r.size_bytes + ' B' : (r.size_bytes < 1048576 ? (r.size_bytes / 1024).toFixed(1) + ' KB' : (r.size_bytes / 1048576).toFixed(1) + ' MB')) : '—';
-          const border = isLast ? 'border-cyan-500/60 bg-cyan-800/20' : 'border-slate-700/50 hover:border-slate-600';
-          return `<div class="recording-card flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${border} cursor-pointer transition-colors" data-filename="${r.filename}">
-            <div class="min-w-0 flex-1">
-              <div class="font-mono text-sm text-cyan-400 truncate">${r.filename}</div>
-              <div class="text-xs text-slate-500 mt-0.5">${ts} · ${dur} · ${sz}</div>
-            </div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              <a href="/recordings/${encodeURIComponent(r.filename)}" download="${r.filename}" class="p-1.5 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700/50" title="Download" onclick="event.stopPropagation()">↓</a>
-              <button type="button" class="recording-delete-btn p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700/50" title="Delete" data-filename="${r.filename}" onclick="event.stopPropagation()">✕</button>
-            </div>
-          </div>`;
-        };
-        if (sessionRecs.length === 0) {
-          sessionEmpty.classList.remove('hidden');
+    let liveSelectedFilename = null;
+    const LIVE_RECORDINGS_LIMIT = 5;
+
+    function refreshRecordingsUI() {
+      const listEl = document.getElementById('live-recordings-list');
+      const loadingEl = document.getElementById('live-recordings-loading');
+      const emptyEl = document.getElementById('live-recordings-empty');
+      const emptyMsgEl = document.getElementById('live-recordings-empty-msg');
+      const sessionHistoryLink = document.getElementById('live-recordings-session-history-link');
+      const viewSessionWrap = document.getElementById('live-recordings-view-session-wrap');
+      const viewSessionLink = document.getElementById('live-recordings-view-session-link');
+      const subtitleEl = document.getElementById('live-recordings-subtitle');
+
+      listEl.classList.add('hidden');
+      emptyEl.classList.add('hidden');
+      viewSessionWrap.classList.add('hidden');
+      sessionHistoryLink.classList.add('hidden');
+
+      const sid = currentSessionId;
+      if (sid == null) {
+        loadingEl.classList.add('hidden');
+        subtitleEl.textContent = 'Recordings for the active flight session';
+        emptyMsgEl.textContent = 'No active session. Start a flight to record, or view past sessions.';
+        sessionHistoryLink.classList.remove('hidden');
+        sessionHistoryLink.href = '/dashboard';
+        sessionHistoryLink.onclick = (e) => { e.preventDefault(); document.querySelector('[data-tab="sessions"]').click(); };
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+
+      loadingEl.classList.remove('hidden');
+      const url = '/recordings?session_id=' + sid;
+      fetch(url).then(r => r.json()).then(d => {
+        loadingEl.classList.add('hidden');
+        const recordings = (d.recordings || []).slice(0, LIVE_RECORDINGS_LIMIT);
+        const sessionResolved = d.session_resolved !== false;
+        const fallbackUsed = d.fallback_used === true;
+
+        viewSessionWrap.classList.remove('hidden');
+        viewSessionLink.href = '/dashboard/sessions/' + sid;
+
+        if (!sessionResolved && fallbackUsed) {
+          subtitleEl.textContent = 'Recent recordings (session not resolved)';
+          emptyMsgEl.textContent = 'Session could not be resolved. Showing recent recordings as fallback.';
+        } else if (!sessionResolved) {
+          subtitleEl.textContent = 'Recordings for the active flight session';
+          emptyMsgEl.textContent = 'Session could not be resolved. Recordings may appear after persistence sync.';
+          sessionHistoryLink.classList.remove('hidden');
+          sessionHistoryLink.href = '/dashboard';
+          sessionHistoryLink.onclick = (e) => { e.preventDefault(); document.querySelector('[data-tab="sessions"]').click(); };
         } else {
-          sessionList.classList.remove('hidden');
-          sessionList.innerHTML = sessionRecs.map((r, i) => renderRec(r, i === 0)).join('');
+          subtitleEl.textContent = 'Recordings for the active flight session';
+          emptyMsgEl.textContent = 'No recordings for this session yet';
         }
-        if (allRecs.length === 0) {
-          historyEmpty.classList.remove('hidden');
+
+        if (recordings.length === 0) {
+          emptyEl.classList.remove('hidden');
         } else {
-          historyList.classList.remove('hidden');
-          historyList.innerHTML = allRecs.map((r, i) => renderRec(r, i === 0)).join('');
+          listEl.classList.remove('hidden');
+          const renderRec = (r, isFirst) => {
+            const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
+            const dur = r.duration_sec != null ? Math.round(r.duration_sec) + ' s' : '—';
+            const sz = r.size_bytes != null ? (r.size_bytes < 1024 ? r.size_bytes + ' B' : (r.size_bytes < 1048576 ? (r.size_bytes / 1024).toFixed(1) + ' KB' : (r.size_bytes / 1048576).toFixed(1) + ' MB')) : '—';
+            const border = isFirst ? 'border-cyan-500/60 bg-cyan-800/20' : 'border-slate-700/50 hover:border-slate-600';
+            return `<div class="live-recording-card flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${border} cursor-pointer transition-colors" data-filename="${r.filename}">
+              <div class="min-w-0 flex-1">
+                <div class="font-mono text-sm text-cyan-400 truncate">${r.filename}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${ts} · ${dur} · ${sz}</div>
+              </div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <a href="/recordings/${encodeURIComponent(r.filename)}" download="${r.filename}" class="p-1.5 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700/50" title="Download" onclick="event.stopPropagation()">↓</a>
+                <button type="button" class="live-recording-delete-btn p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700/50" title="Delete" data-filename="${r.filename}" onclick="event.stopPropagation()">✕</button>
+              </div>
+            </div>`;
+          };
+          listEl.innerHTML = recordings.map((r, i) => renderRec(r, i === 0)).join('');
+          listEl.querySelectorAll('.live-recording-card').forEach(el => {
+            el.addEventListener('click', () => selectLiveRecording(el.dataset.filename));
+          });
+          listEl.querySelectorAll('.live-recording-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => { e.stopPropagation(); showLiveDeleteModal(btn.dataset.filename); });
+          });
         }
-        sessionList.querySelectorAll('.recording-card').forEach(el => {
-          el.addEventListener('click', () => selectVideoRecording(el.dataset.filename));
-        });
-        sessionList.querySelectorAll('.recording-delete-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => { e.stopPropagation(); showDeleteModal(btn.dataset.filename); });
-        });
-        historyList.querySelectorAll('.recording-card').forEach(el => {
-          el.addEventListener('click', () => selectVideoRecording(el.dataset.filename));
-        });
-        historyList.querySelectorAll('.recording-delete-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => { e.stopPropagation(); showDeleteModal(btn.dataset.filename); });
-        });
       }).catch(() => {
-        sessionLoading.classList.add('hidden');
-        historyLoading.classList.add('hidden');
-        sessionEmpty.classList.remove('hidden');
-        historyEmpty.classList.remove('hidden');
-        sessionEmpty.querySelector('p').textContent = 'Failed to load recordings';
-        historyEmpty.querySelector('p').textContent = 'Failed to load recordings';
+        loadingEl.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
+        emptyMsgEl.textContent = 'Failed to load recordings';
+        sessionHistoryLink.classList.remove('hidden');
+        sessionHistoryLink.href = '/dashboard';
+        sessionHistoryLink.onclick = (e) => { e.preventDefault(); document.querySelector('[data-tab="sessions"]').click(); };
       });
     }
 
-    function selectVideoRecording(filename) {
-      if (videoSelectedFilename === filename) return;
-      videoSelectedFilename = filename;
-      const player = document.getElementById('video-player');
-      const playerEmpty = document.getElementById('video-player-empty');
-      const container = document.getElementById('video-player-container');
+    function selectLiveRecording(filename) {
+      if (liveSelectedFilename === filename) return;
+      liveSelectedFilename = filename;
+      const player = document.getElementById('live-player');
+      const container = document.getElementById('live-player-container');
       player.src = '/recordings/' + encodeURIComponent(filename);
       container.classList.remove('hidden');
-      playerEmpty.classList.add('hidden');
-      document.querySelectorAll('.recording-card').forEach(el => {
+      document.querySelectorAll('.live-recording-card').forEach(el => {
         el.classList.toggle('ring-2 ring-cyan-500', el.dataset.filename === filename);
       });
     }
 
-    function showDeleteModal(filename) {
-      document.getElementById('video-delete-filename').textContent = filename;
-      document.getElementById('video-delete-modal').classList.remove('hidden');
-      document.getElementById('video-delete-confirm').dataset.filename = filename;
+    function showLiveDeleteModal(filename) {
+      document.getElementById('live-delete-filename').textContent = filename;
+      document.getElementById('live-delete-modal').classList.remove('hidden');
+      document.getElementById('live-delete-confirm').dataset.filename = filename;
     }
 
-    document.getElementById('video-delete-cancel').addEventListener('click', () => {
-      document.getElementById('video-delete-modal').classList.add('hidden');
+    document.getElementById('live-delete-cancel').addEventListener('click', () => {
+      document.getElementById('live-delete-modal').classList.add('hidden');
     });
 
-    document.getElementById('video-delete-confirm').addEventListener('click', async () => {
-      const filename = document.getElementById('video-delete-confirm').dataset.filename;
+    document.getElementById('live-delete-confirm').addEventListener('click', async () => {
+      const filename = document.getElementById('live-delete-confirm').dataset.filename;
       if (!filename) return;
       try {
         const r = await fetch('/recordings/' + encodeURIComponent(filename), { method: 'DELETE' });
         if (r.ok) {
-          document.getElementById('video-delete-modal').classList.add('hidden');
-          if (videoSelectedFilename === filename) {
-            videoSelectedFilename = null;
-            document.getElementById('video-player').src = '';
-            document.getElementById('video-player-container').classList.add('hidden');
-            document.getElementById('video-player-empty').classList.remove('hidden');
+          document.getElementById('live-delete-modal').classList.add('hidden');
+          if (liveSelectedFilename === filename) {
+            liveSelectedFilename = null;
+            document.getElementById('live-player').src = '';
+            document.getElementById('live-player-container').classList.add('hidden');
           }
-          loadVideoRecordings();
+          refreshRecordingsUI();
         }
       } catch (e) {}
     });

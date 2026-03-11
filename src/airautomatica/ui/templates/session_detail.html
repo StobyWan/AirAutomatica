@@ -85,7 +85,7 @@
         </div>
         <div id="session-recordings-empty" class="hidden py-8 text-center">
           <svg class="w-12 h-12 mx-auto text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-          <p class="text-slate-500 text-sm">No recordings for this session</p>
+          <p id="session-recordings-empty-msg" class="text-slate-500 text-sm">No recordings for this session</p>
         </div>
         <div id="session-recordings-list" class="space-y-2"></div>
         <div id="session-player-container" class="mt-4 rounded-lg bg-black overflow-hidden hidden">
@@ -203,6 +203,7 @@
       const samples = samplesData.samples || [];
       const detections = detData.detections || [];
       const recordings = recordingsData.recordings || [];
+      const sessionResolved = recordingsData.session_resolved !== false;
       const contentEl = document.getElementById('content');
       contentEl.classList.remove('hidden');
 
@@ -261,11 +262,13 @@
       const recListEl = document.getElementById('session-recordings-list');
       const recLoadingEl = document.getElementById('session-recordings-loading');
       const recEmptyEl = document.getElementById('session-recordings-empty');
+      const recEmptyMsgEl = document.getElementById('session-recordings-empty-msg');
       const recPlayerEl = document.getElementById('session-video-player');
       const recPlayerContainer = document.getElementById('session-player-container');
       recLoadingEl.classList.add('hidden');
       if (recordings.length === 0) {
         recEmptyEl.classList.remove('hidden');
+        recEmptyMsgEl.textContent = sessionResolved ? 'No recordings for this session' : 'Session could not be resolved. Recordings cannot be associated.';
       } else {
         const renderRec = (r, isLast) => {
           const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
