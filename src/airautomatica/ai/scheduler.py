@@ -32,7 +32,7 @@ class AiInferenceScheduler:
     def __init__(self, cooldown_sec: float = _COOLDOWN_SEC) -> None:
         self._cooldown_sec = cooldown_sec
         self._queue: asyncio.Queue[
-            tuple[Callable[[], Awaitable[T]], asyncio.Future[T], bool]
+            tuple[Callable[[], Awaitable[Any]], asyncio.Future[Any], bool]
         ] = asyncio.Queue()
 
     async def submit(
@@ -90,7 +90,7 @@ class AiInferenceScheduler:
                     await asyncio.sleep(_COOLDOWN_THROTTLED_USER_EXTRA_SEC)
 
                 try:
-                    result = await job()
+                    result: Any = await job()
                     future.set_result(result)
                 except Exception as e:
                     future.set_exception(e)

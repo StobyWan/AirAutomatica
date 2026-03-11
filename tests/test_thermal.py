@@ -1,6 +1,6 @@
 """Tests for Raspberry Pi thermal helper."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -69,7 +69,7 @@ def test_read_throttled_returns_none_on_missing() -> None:
 @patch("airautomatica.system.thermal.read_temperature_c")
 @patch("airautomatica.system.thermal.read_throttled_flags")
 def test_get_thermal_state_normal_when_unavailable(
-    mock_flags: object, mock_temp: object
+    mock_flags: MagicMock, mock_temp: MagicMock
 ) -> None:
     """When vcgencmd unavailable, treat as NORMAL (fail-safe)."""
     mock_temp.return_value = None
@@ -79,7 +79,7 @@ def test_get_thermal_state_normal_when_unavailable(
 
 @patch("airautomatica.system.thermal.read_temperature_c")
 @patch("airautomatica.system.thermal.read_throttled_flags")
-def test_get_thermal_state_by_temp(mock_flags: object, mock_temp: object) -> None:
+def test_get_thermal_state_by_temp(mock_flags: MagicMock, mock_temp: MagicMock) -> None:
     """Thermal state derived from temperature thresholds."""
     mock_flags.return_value = 0
     mock_temp.return_value = 65.0
@@ -95,7 +95,7 @@ def test_get_thermal_state_by_temp(mock_flags: object, mock_temp: object) -> Non
 @patch("airautomatica.system.thermal.read_temperature_c")
 @patch("airautomatica.system.thermal.read_throttled_flags")
 def test_get_thermal_state_throttled_flags_override_temp(
-    mock_flags: object, mock_temp: object
+    mock_flags: MagicMock, mock_temp: MagicMock
 ) -> None:
     """Throttled flags (current bits) override temperature."""
     mock_temp.return_value = 65.0

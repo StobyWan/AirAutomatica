@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from airautomatica.ai.ollama_task_service import OllamaTaskService
-from airautomatica.ai.ollama_tasks import OllamaTaskType
+from airautomatica.ai.ollama_tasks import OllamaTaskType, TelemetrySummaryResult
 from airautomatica.ai.scheduler import AiInferenceScheduler, ScheduledOllamaAiService
 from airautomatica.system.thermal import ThermalState
 
@@ -73,12 +73,21 @@ async def test_jobs_serialized_fifo() -> None:
 @pytest.mark.asyncio
 async def test_cooldown_respected() -> None:
     """Cooldown delay occurs between job completions."""
+
+    async def job1() -> int:
+        await asyncio.sleep(0)
+        return 1
+
+    async def job2() -> int:
+        await asyncio.sleep(0)
+        return 2
+
     scheduler = AiInferenceScheduler(cooldown_sec=0.05)
     worker = asyncio.create_task(scheduler.run())
     t0 = asyncio.get_event_loop().time()
     try:
-        await scheduler.submit(lambda: asyncio.sleep(0) or 1)
-        await scheduler.submit(lambda: asyncio.sleep(0) or 2)
+        await scheduler.submit(job1)
+        await scheduler.submit(job2)
         t1 = asyncio.get_event_loop().time()
         elapsed = t1 - t0
         assert elapsed >= 0.05
@@ -142,6 +151,7 @@ async def test_mock_mode_bypasses_scheduler() -> None:
         OllamaTaskType.TELEMETRY_SUMMARY,
         {"state": None, "telemetry_samples": []},
     )
+    assert isinstance(result, TelemetrySummaryResult)
     assert result.status == "ok"
     assert result.summary == "Mock telemetry summary"
 
