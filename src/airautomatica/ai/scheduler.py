@@ -9,41 +9,94 @@ from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.service import AiService
 from airautomatica.models.state import AircraftState
+from airautomatica.system.thermal import ThermalState, get_thermal_state
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
-# Fixed cooldown between completed jobs (seconds). Kept in code for Phase 1.
+# Fixed cooldown between completed jobs (seconds). Phase 1 base; Phase 2 scales by thermal.
 _COOLDOWN_SEC = 2.0
+
+# Thermal backoff: extra delay when HOT, pause duration for background when THROTTLED.
+_COOLDOWN_WARM_MULT = 1.5
+_COOLDOWN_HOT_MULT = 2.0
+_COOLDOWN_THROTTLED_USER_EXTRA_SEC = 5.0
+_BACKGROUND_PAUSE_WHEN_THROTTLED_SEC = 15.0
+_BACKGROUND_PAUSE_WHEN_HOT_SEC = 5.0
 
 
 class AiInferenceScheduler:
-    """Serializes Ollama inference: one job at a time with cooldown between jobs."""
+    """Serializes Ollama inference: one job at a time with cooldown and thermal backoff."""
 
     def __init__(self, cooldown_sec: float = _COOLDOWN_SEC) -> None:
         self._cooldown_sec = cooldown_sec
         self._queue: asyncio.Queue[
-            tuple[Callable[[], Awaitable[T]], asyncio.Future[T]]
+            tuple[Callable[[], Awaitable[T]], asyncio.Future[T], bool]
         ] = asyncio.Queue()
 
-    async def submit(self, job: Callable[[], Awaitable[T]]) -> T:
-        """Submit a job. Returns when the job completes. Jobs run one at a time."""
+    async def submit(
+        self, job: Callable[[], Awaitable[T]], *, user_triggered: bool = False
+    ) -> T:
+        """Submit a job. user_triggered=True for dashboard tasks; False for mission."""
         future: asyncio.Future[T] = asyncio.get_running_loop().create_future()
-        await self._queue.put((job, future))
+        await self._queue.put((job, future, user_triggered))
         return await future
 
+    def _get_cooldown_sec(self, thermal: ThermalState) -> float:
+        """Cooldown after job completion, scaled by thermal state."""
+        base = self._cooldown_sec
+        if thermal == ThermalState.NORMAL:
+            return base
+        if thermal == ThermalState.WARM:
+            return base * _COOLDOWN_WARM_MULT
+        if thermal == ThermalState.HOT:
+            return base * _COOLDOWN_HOT_MULT
+        return base * _COOLDOWN_HOT_MULT  # THROTTLED: same as hot for post-job
+
     async def run(self) -> None:
-        """Worker loop: run jobs one at a time with cooldown. Run as asyncio task."""
+        """Worker loop: run jobs one at a time with thermal-aware cooldown."""
         while True:
             try:
-                job, future = await self._queue.get()
+                job, future, user_triggered = await self._queue.get()
+                thermal = get_thermal_state()
+
+                # THROTTLED: pause background jobs; user jobs run with extra delay
+                if thermal == ThermalState.THROTTLED and not user_triggered:
+                    logger.info(
+                        "Thermal throttled: pausing background job for %ds",
+                        _BACKGROUND_PAUSE_WHEN_THROTTLED_SEC,
+                    )
+                    await self._queue.put((job, future, user_triggered))
+                    await asyncio.sleep(_BACKGROUND_PAUSE_WHEN_THROTTLED_SEC)
+                    continue
+
+                # HOT: defer background jobs briefly
+                if thermal == ThermalState.HOT and not user_triggered:
+                    logger.debug(
+                        "Thermal hot: deferring background job for %ds",
+                        _BACKGROUND_PAUSE_WHEN_HOT_SEC,
+                    )
+                    await self._queue.put((job, future, user_triggered))
+                    await asyncio.sleep(_BACKGROUND_PAUSE_WHEN_HOT_SEC)
+                    continue
+
+                # THROTTLED + user job: extra delay before running
+                if thermal == ThermalState.THROTTLED and user_triggered:
+                    logger.info(
+                        "Thermal throttled: adding %.0fs delay for user-triggered job",
+                        _COOLDOWN_THROTTLED_USER_EXTRA_SEC,
+                    )
+                    await asyncio.sleep(_COOLDOWN_THROTTLED_USER_EXTRA_SEC)
+
                 try:
                     result = await job()
                     future.set_result(result)
                 except Exception as e:
                     future.set_exception(e)
-                await asyncio.sleep(self._cooldown_sec)
+
+                cooldown = self._get_cooldown_sec(get_thermal_state())
+                await asyncio.sleep(cooldown)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -64,7 +117,8 @@ class ScheduledOllamaAiService(AiService):
     async def infer(self, state: AircraftState | None) -> AiResult:
         prompt = self._transport._build_prompt(state)
         return await self._scheduler.submit(
-            lambda: self._transport._infer_from_prompt(prompt)
+            lambda: self._transport._infer_from_prompt(prompt),
+            user_triggered=False,
         )
 
 
@@ -81,5 +135,6 @@ class ScheduledOllamaExecutor:
         self, prompt: str, *, format: str | dict[str, Any] | None = None
     ) -> str:
         return await self._scheduler.submit(
-            lambda: self._transport.generate_raw(prompt, format=format)
+            lambda: self._transport.generate_raw(prompt, format=format),
+            user_triggered=True,
         )

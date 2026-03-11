@@ -1,13 +1,14 @@
-"""Tests for AiInferenceScheduler Phase 1: serialization and cooldown."""
+"""Tests for AiInferenceScheduler Phase 1+2: serialization, cooldown, thermal backoff."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import OllamaTaskType
 from airautomatica.ai.scheduler import AiInferenceScheduler, ScheduledOllamaAiService
+from airautomatica.system.thermal import ThermalState
 
 
 @pytest.mark.asyncio
@@ -143,3 +144,114 @@ async def test_mock_mode_bypasses_scheduler() -> None:
     )
     assert result.status == "ok"
     assert result.summary == "Mock telemetry summary"
+
+
+# --- Phase 2: thermal-aware backoff ---
+
+
+@pytest.mark.asyncio
+@patch("airautomatica.ai.scheduler.get_thermal_state")
+async def test_thermal_normal_runs_immediately(mock_thermal: MagicMock) -> None:
+    """NORMAL thermal state: job runs without extra delay."""
+
+    async def job() -> int:
+        return 42
+
+    mock_thermal.return_value = ThermalState.NORMAL
+    scheduler = AiInferenceScheduler(cooldown_sec=0.0)
+    worker = asyncio.create_task(scheduler.run())
+    try:
+        result = await scheduler.submit(job)
+        assert result == 42
+    finally:
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
+
+
+@pytest.mark.asyncio
+@patch("airautomatica.ai.scheduler._BACKGROUND_PAUSE_WHEN_HOT_SEC", 0.02)
+@patch("airautomatica.ai.scheduler.get_thermal_state")
+async def test_thermal_hot_defers_background_job(mock_thermal: MagicMock) -> None:
+    """HOT + background job: deferred briefly then runs."""
+
+    async def job() -> int:
+        return 99
+
+    # First few calls: HOT, then NORMAL so job eventually runs
+    mock_thermal.side_effect = [
+        ThermalState.HOT,  # before job: defer
+        ThermalState.HOT,  # still hot after pause
+        ThermalState.NORMAL,  # now run
+        ThermalState.NORMAL,  # cooldown
+    ]
+    scheduler = AiInferenceScheduler(cooldown_sec=0.0)
+    worker = asyncio.create_task(scheduler.run())
+    try:
+        result = await scheduler.submit(job)
+        assert result == 99
+    finally:
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
+
+
+@pytest.mark.asyncio
+@patch("airautomatica.ai.scheduler._BACKGROUND_PAUSE_WHEN_THROTTLED_SEC", 0.02)
+@patch("airautomatica.ai.scheduler.get_thermal_state")
+async def test_thermal_throttled_pauses_background_then_runs(
+    mock_thermal: MagicMock,
+) -> None:
+    """THROTTLED + background: paused, then NORMAL allows run."""
+
+    async def job() -> int:
+        return 7
+
+    mock_thermal.side_effect = [
+        ThermalState.THROTTLED,  # defer
+        ThermalState.NORMAL,  # after pause, run
+        ThermalState.NORMAL,  # cooldown
+    ]
+    scheduler = AiInferenceScheduler(cooldown_sec=0.0)
+    worker = asyncio.create_task(scheduler.run())
+    try:
+        result = await scheduler.submit(job)
+        assert result == 7
+    finally:
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
+
+
+@pytest.mark.asyncio
+@patch("airautomatica.ai.scheduler._COOLDOWN_THROTTLED_USER_EXTRA_SEC", 0.02)
+@patch("airautomatica.ai.scheduler.get_thermal_state")
+async def test_thermal_throttled_user_job_runs_with_delay(
+    mock_thermal: MagicMock,
+) -> None:
+    """THROTTLED + user job: extra delay then runs (no pause/re-queue)."""
+
+    async def job() -> int:
+        return 11
+
+    mock_thermal.side_effect = [
+        ThermalState.THROTTLED,  # user job: add delay, then run
+        ThermalState.NORMAL,  # cooldown after job
+    ]
+    scheduler = AiInferenceScheduler(cooldown_sec=0.0)
+    worker = asyncio.create_task(scheduler.run())
+    try:
+        result = await scheduler.submit(job, user_triggered=True)
+        assert result == 11
+    finally:
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
