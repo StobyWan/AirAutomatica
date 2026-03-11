@@ -16,6 +16,7 @@ from airautomatica.ai.ollama_tasks import (
     get_telemetry_summary_counts,
 )
 from airautomatica.config import (
+    get_camera_recording_mode,
     get_effective_ai_backend,
     get_sqlite_db_path,
     get_telemetry_backend,
@@ -23,6 +24,7 @@ from airautomatica.config import (
 from airautomatica.db.base import get_engine
 from airautomatica.logging_config import setup_logging
 from airautomatica.models.state import AircraftState, nan_to_none
+from airautomatica.services.camera_recording import CameraRecordingService
 from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
@@ -44,6 +46,7 @@ def create_app(
     persistence: Optional[PersistenceService] = None,
     session_id: Optional[int] = None,
     task_service: Optional[OllamaTaskService] = None,
+    camera_recording_service: Optional[CameraRecordingService] = None,
 ) -> FastAPI:
     """Create FastAPI app with state store dependency."""
     app = FastAPI(title="AIRAUTOMATICA", version="0.1.0", lifespan=_lifespan)
@@ -80,6 +83,17 @@ def create_app(
         )
         health_data["perception_acceptance_rate"] = rates["perception_acceptance_rate"]
         health_data["telemetry_meaningful_rate"] = rates["telemetry_meaningful_rate"]
+        if camera_recording_service is not None:
+            rec_state = camera_recording_service.get_recording_state()
+            health_data["camera_recording_available"] = (
+                camera_recording_service.is_available()
+            )
+            health_data["camera_recording_mode"] = get_camera_recording_mode()
+            health_data["camera_recording"] = rec_state.recording
+            health_data["camera_recording_file"] = rec_state.output_file
+            health_data["camera_recording_started_at"] = (
+                rec_state.started_at.isoformat() if rec_state.started_at else None
+            )
         if state is None:
             health_data["telemetry"] = {
                 "telemetry_status": "disconnected",
@@ -225,6 +239,38 @@ def create_app(
         """Save settings to file. Restart the app to apply changes."""
         save_settings(updates)
         return {"ok": True, "message": "Settings saved. Restart the app to apply."}
+
+    @app.post("/camera/recording/start")
+    def post_camera_recording_start() -> dict:
+        """Start camera recording. Rejected when mode=off."""
+        if camera_recording_service is None:
+            return {"ok": False, "error": "Camera recording service not available"}
+        if get_camera_recording_mode() == "off":
+            return {"ok": False, "error": "Recording disabled (mode=off)"}
+        state, err = camera_recording_service.start_recording()
+        if err is not None:
+            return {"ok": False, "error": err}
+        return {
+            "ok": True,
+            "recording": state.recording,
+            "output_file": state.output_file,
+            "started_at": state.started_at.isoformat() if state.started_at else None,
+        }
+
+    @app.post("/camera/recording/stop")
+    def post_camera_recording_stop() -> dict:
+        """Stop camera recording."""
+        if camera_recording_service is None:
+            return {"ok": False, "error": "Camera recording service not available"}
+        state, err = camera_recording_service.stop_recording()
+        if err is not None:
+            return {"ok": False, "error": err}
+        return {
+            "ok": True,
+            "recording": state.recording,
+            "output_file": state.output_file,
+            "started_at": state.started_at.isoformat() if state.started_at else None,
+        }
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:

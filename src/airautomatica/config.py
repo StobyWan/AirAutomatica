@@ -190,3 +190,22 @@ def get_sqlite_db_path() -> str:
     """SQLite database path. Default: ~/.airautomatica/airautomatica.db"""
     default = os.path.expanduser("~/.airautomatica/airautomatica.db")
     return os.environ.get("SQLITE_DB_PATH", default)
+
+
+def get_recordings_dir() -> str:
+    """Recordings directory for camera video files. Default: ~/.airautomatica/recordings"""
+    default = os.path.expanduser("~/.airautomatica/recordings")
+    return (
+        os.environ.get("AIRAUTOMATICA_RECORDINGS_DIR")
+        or os.environ.get("RECORDINGS_DIR")
+        or default
+    )
+
+
+def get_camera_recording_mode() -> str:
+    """Camera recording mode: off, manual, or auto. Default: manual.
+    Env: CAMERA_RECORDING_MODE (also from settings.json)."""
+    raw = os.environ.get("CAMERA_RECORDING_MODE", "manual").lower().strip()
+    if raw in ("off", "manual", "auto"):
+        return raw
+    return "manual"

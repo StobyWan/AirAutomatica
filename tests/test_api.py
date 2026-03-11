@@ -14,6 +14,7 @@ from airautomatica.api.server import create_app
 from airautomatica.db import init_db
 from airautomatica.db.base import get_engine
 from airautomatica.models.state import AircraftState
+from airautomatica.services.camera_recording import CameraRecordingService
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
 from airautomatica.settings import load_settings
@@ -774,3 +775,85 @@ def test_post_event_classification_error_when_no_task_service(
     assert r.status_code == 200
     data = r.json()
     assert data.get("error") == "AI task service not available"
+
+
+def test_health_includes_camera_recording_when_service_provided(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """GET /health includes camera_recording fields when camera_recording_service provided."""
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert "camera_recording_available" in data
+    assert "camera_recording_mode" in data
+    assert "camera_recording" in data
+    assert "camera_recording_file" in data
+    assert "camera_recording_started_at" in data
+    assert data["camera_recording_mode"] in ("off", "manual", "auto")
+
+
+def test_off_mode_rejects_api_start(
+    store: StateStore,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """When mode=off, POST /camera/recording/start returns error."""
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "off")
+    load_settings()
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.post("/camera/recording/start")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("ok") is False
+    assert "Recording disabled" in data.get("error", "")
+
+
+def test_post_camera_recording_start(
+    store: StateStore,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """POST /camera/recording/start returns ok when mode allows and libcamera-vid available."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "manual")
+    load_settings()
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.shutil.which",
+        lambda _: "/usr/bin/libcamera-vid",
+    )
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.subprocess.Popen",
+        lambda *a, **k: mock_proc,
+    )
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.time.sleep", lambda *a, **k: None
+    )
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.post("/camera/recording/start")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("ok") is True
+    assert data.get("recording") is True
+    assert "output_file" in data
+
+
+def test_post_camera_recording_stop(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """POST /camera/recording/stop returns ok."""
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.post("/camera/recording/stop")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("ok") is True
+    assert data.get("recording") is False

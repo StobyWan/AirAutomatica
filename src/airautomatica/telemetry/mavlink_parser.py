@@ -64,6 +64,7 @@ class MavlinkNormalizer:
         self._mode_mapping: dict[int, str] = dict(MODE_MAPPING_APM)
         self._accum: dict[str, Any] = {
             "mode": "UNKNOWN",
+            "armed": False,
             "lat": _nan(),
             "lon": _nan(),
             "rel_alt_m": _nan(),
@@ -92,12 +93,14 @@ class MavlinkNormalizer:
             self._apply_vfr_hud(msg)
 
     def _apply_heartbeat(self, msg: Any) -> None:
-        """HEARTBEAT: custom_mode = flight mode number, map to name."""
+        """HEARTBEAT: custom_mode = flight mode number, map to name; base_mode = armed bit."""
         self._heartbeat_count += 1
         self._last_heartbeat_time = time.monotonic()
         self._last_heartbeat_at = datetime.now(timezone.utc)
         custom_mode = getattr(msg, "custom_mode", 0)
         self._accum["mode"] = self._mode_mapping.get(custom_mode, "UNKNOWN")
+        base_mode = getattr(msg, "base_mode", 0)
+        self._accum["armed"] = bool(base_mode & 128)  # MAV_MODE_FLAG_ARMED
 
     def set_mode_mapping(self, mapping: dict[int, str]) -> None:
         """Override flight mode mapping (for INAV, generic adapters)."""
@@ -169,6 +172,7 @@ class MavlinkNormalizer:
             reconnect_count=reconnect_count,
             last_disconnect_reason=last_disconnect_reason,
             mode=self._accum["mode"],
+            armed=self._accum["armed"],
             lat=self._accum["lat"],
             lon=self._accum["lon"],
             rel_alt_m=self._accum["rel_alt_m"],

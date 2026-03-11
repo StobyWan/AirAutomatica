@@ -61,3 +61,14 @@ def test_dashboard_settings_uses_canonical_keys(client: TestClient) -> None:
     assert "AI Provider" in html
     assert "AI HAT" in html
     assert "Advanced" in html
+
+
+def test_dashboard_includes_camera_recording_controls(client: TestClient) -> None:
+    """Dashboard HTML includes camera recording card with start/stop buttons and status."""
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+    html = r.text
+    assert "camera-recording-status" in html
+    assert "camera-start-btn" in html
+    assert "camera-stop-btn" in html
+    assert "Camera Recording" in html
