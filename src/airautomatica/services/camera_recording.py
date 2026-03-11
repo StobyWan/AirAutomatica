@@ -53,6 +53,7 @@ class CameraRecordingService:
         self._output_path: Optional[Path] = None
         self._started_at: Optional[datetime] = None
         self._last_recorded_file: Optional[str] = None
+        self._last_error: Optional[str] = None
 
     @property
     def recordings_dir(self) -> str:
@@ -62,9 +63,32 @@ class CameraRecordingService:
     def get_recording_state(self) -> RecordingState:
         """Return current recording state."""
         with self._lock:
+            is_alive = self._process is not None and self._process.poll() is None
+            if self._process is not None and not is_alive:
+                exit_code = self._process.returncode
+                stderr = b""
+                if self._process.stderr:
+                    try:
+                        _, stderr = self._process.communicate(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        self._process.kill()
+                        self._process.wait()
+                        stderr = (
+                            self._process.stderr.read() if self._process.stderr else b""
+                        )
+                stderr = stderr or b""
+                err = stderr.decode("utf-8", errors="replace").strip() or "no stderr"
+                self._last_error = f"exit_code={exit_code}: {err}"
+                logger.warning(
+                    "Recording process exited unexpectedly (exit_code=%s): %s",
+                    exit_code,
+                    err,
+                )
+                self._process = None
+                self._output_path = None
             basename = self._output_path.name if self._output_path else None
             return RecordingState(
-                recording=self._process is not None and self._process.poll() is None,
+                recording=is_alive,
                 output_file=basename,
                 started_at=self._started_at,
                 last_recorded_file=self._last_recorded_file,
@@ -88,8 +112,10 @@ class CameraRecordingService:
                     ),
                     None,
                 )
+            logger.info("Recording start requested")
             cmd = get_camera_video_command()
             if cmd is None:
+                self._last_error = "rpicam-vid or libcamera-vid not found"
                 return (
                     RecordingState(
                         recording=False,
@@ -103,12 +129,15 @@ class CameraRecordingService:
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
             ext = "mp4" if cmd == "rpicam-vid" else "h264"
             self._output_path = self._recordings_dir / f"{ts}_cam.{ext}"
+            args = [cmd, "-t", "0"]
+            if cmd == "rpicam-vid":
+                args.extend(["--codec", "libav"])
+            args.extend(["-o", str(self._output_path)])
             try:
-                self._process = subprocess.Popen(
-                    [cmd, "-t", "0", "-o", str(self._output_path)],
-                    stderr=subprocess.PIPE,
-                )
+                self._process = subprocess.Popen(args, stderr=subprocess.PIPE)
+                logger.info("Recording command launched: %s", " ".join(args))
             except Exception as e:
+                self._last_error = str(e)
                 logger.warning("Recording start failed: %s", e)
                 return (
                     RecordingState(
@@ -121,15 +150,28 @@ class CameraRecordingService:
                 )
             time.sleep(_LIVENESS_POLL_SEC)
             if self._process.poll() is not None:
+                exit_code = self._process.returncode
                 stderr = b""
                 if self._process.stderr:
-                    stderr = self._process.stderr.read()
-                err_msg = (
+                    try:
+                        _, stderr = self._process.communicate(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        self._process.kill()
+                        self._process.wait()
+                        stderr = (
+                            self._process.stderr.read() if self._process.stderr else b""
+                        )
+                stderr = stderr or b""
+                err = (
                     stderr.decode("utf-8", errors="replace").strip() or "Process exited"
                 )
+                err_msg = f"exit_code={exit_code}: {err}"
+                self._last_error = err_msg
                 self._process = None
                 self._output_path = None
-                logger.warning("Recording start failed: %s", err_msg)
+                logger.warning(
+                    "Recording process exited early (exit_code=%s): %s", exit_code, err
+                )
                 return (
                     RecordingState(
                         recording=False,
@@ -140,6 +182,7 @@ class CameraRecordingService:
                     err_msg,
                 )
             self._started_at = datetime.now(timezone.utc)
+            self._last_error = None
             basename = self._output_path.name
             logger.info("Recording started (%s): %s", cmd, basename)
             return (
@@ -237,9 +280,9 @@ class RecordingAutoController:
             elif err:
                 logger.warning("Auto recording start failed: %s", err)
         elif not armed and self._last_armed and rec_state.recording:
+            logger.info(
+                "Auto-stop triggered: armed=False, last_armed=True, stopping %s",
+                rec_state.output_file or "recording",
+            )
             _, _ = self._service.stop_recording()
-            if rec_state.output_file:
-                logger.info(
-                    "Auto recording stopped (disarmed): %s", rec_state.output_file
-                )
         self._last_armed = armed

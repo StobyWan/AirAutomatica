@@ -124,6 +124,34 @@ def test_camera_command_missing(
     assert state.recording is False
 
 
+def test_get_recording_state_detects_unexpected_exit(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When process exits unexpectedly after start, get_recording_state detects and cleans up."""
+    mock_proc = MagicMock()
+    mock_proc.poll.side_effect = [None, 1]
+    mock_proc.returncode = 1
+    mock_proc.stderr = MagicMock()
+    mock_proc.communicate.return_value = (None, b"camera disconnected")
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                state1, err = svc.start_recording()
+    assert err is None
+    assert state1.recording is True
+    state2 = svc.get_recording_state()
+    assert state2.recording is False
+    assert svc._last_error is not None
+    assert "camera disconnected" in svc._last_error
+
+
 def test_start_recording_process_dies_immediately(
     monkeypatch: pytest.MonkeyPatch,
     recordings_dir: str,
@@ -131,8 +159,10 @@ def test_start_recording_process_dies_immediately(
     """When process exits immediately, return failure with stderr."""
     mock_proc = MagicMock()
     mock_proc.poll.return_value = 1  # Process died immediately (exited)
+    mock_proc.returncode = 1
     mock_proc.stderr = MagicMock()
     mock_proc.stderr.read.return_value = b"camera not found"
+    mock_proc.communicate.return_value = (None, b"camera not found")
     with patch(
         "airautomatica.services.camera_recording.get_camera_video_command",
         return_value="libcamera-vid",
@@ -208,6 +238,7 @@ def test_start_recording_uses_rpicam_vid_mp4(
     assert state.output_file.endswith(".mp4")
     call_args = mock_popen.call_args[0][0]
     assert call_args[0] == "rpicam-vid"
+    assert "--codec" in call_args and "libav" in call_args
 
 
 def test_start_recording_logs_command(
@@ -228,9 +259,57 @@ def test_start_recording_logs_command(
                 with patch("time.sleep"):
                     svc = CameraRecordingService(recordings_dir=recordings_dir)
                     svc.start_recording()
-    mock_logger.info.assert_called_once()
-    call_args = mock_logger.info.call_args[0]
-    assert "Recording started" in str(call_args) and "rpicam-vid" in str(call_args)
+    info_calls = [str(c) for c in mock_logger.info.call_args_list]
+    assert any("Recording started" in c and "rpicam-vid" in c for c in info_calls)
+
+
+def test_manual_mode_does_not_auto_stop(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """In manual mode, armed->disarmed does not stop an active recording."""
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "manual")
+    from airautomatica.settings import load_settings
+
+    load_settings()
+    from airautomatica.config import get_camera_recording_mode
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                ctrl = RecordingAutoController(svc, get_camera_recording_mode)
+                svc.start_recording()
+    assert svc.get_recording_state().recording is True
+    state_disarmed = AircraftState(
+        connected=True,
+        heartbeat=2,
+        mode="GUIDED",
+        armed=False,
+        lat=37.0,
+        lon=-122.0,
+        rel_alt_m=100.0,
+        heading_deg=90.0,
+        roll_rad=0.0,
+        pitch_rad=0.0,
+        yaw_rad=0.0,
+        voltage_v=12.5,
+        current_a=2.0,
+        groundspeed_m_s=10.0,
+        airspeed_m_s=12.0,
+        timestamp=__import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        ),
+    )
+    ctrl.maybe_auto_record(state_disarmed)
+    assert svc.get_recording_state().recording is True
 
 
 def test_manual_mode_does_not_auto_start(
