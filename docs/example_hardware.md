@@ -31,6 +31,7 @@ This document describes one concrete companion-computer bench setup used with AI
 - CP2102 and FTDI adapters typically appear as `/dev/ttyUSB0` on Linux.
 - Native USB devices (e.g. some FCs connected directly) often appear as `/dev/ttyACM0`.
 - Set `SERIAL_PORT` accordingly; e.g. `SERIAL_PORT=/dev/ttyUSB0` for CP2102.
+- Matek F405-WING V2 (arriving): Use TELEM1 or TELEM2 with `SERIALx_PROTOCOL=2`, `SERIALx_BAUD=921`.
 
 ---
 

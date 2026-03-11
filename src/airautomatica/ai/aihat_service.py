@@ -1,9 +1,11 @@
 """AI HAT service for Raspberry Pi 5 onboard perception.
 
-TODO: Implement when Raspberry Pi 5 + AI HAT+ hardware is available.
-- Input: camera frame (rpicam, picamera2). infer(state) has no image yet.
-- HailoRT + HEF model from Hailo Model Zoo. See hailo-rpi5-examples on GitHub.
-- hailo-all package, HailoRT Python API. Device auto-discovery via PCIe.
+Vision input pipeline: camera (Picamera2) -> frames -> AiHatAiService.infer.
+
+# HARDWARE_INTEGRATION:
+# - Picamera2 frame acquisition (camera.interface)
+# - HailoRT / HEF model load
+# - Map detection output -> AiResult
 """
 
 from datetime import datetime, timezone
@@ -27,9 +29,7 @@ class AiHatAiService(AiService):
 
     async def infer(self, state: AircraftState | None) -> AiResult:
         """Run inference on AI HAT. TODO: implement hardware path."""
-        # TODO: Capture camera frame (rpicam/picamera2)
-        # TODO: Run inference via HailoRT
-        # TODO: Parse detection output into AiResult (label, confidence, bbox, etc.)
+        # Frame input will come from camera.interface when Picamera2 is integrated.
         return AiResult(
             label="aihat_scaffold",
             confidence=0.0,

@@ -135,8 +135,10 @@ def get_telemetry_backend() -> str:
 
 def get_serial_port() -> str:
     """Serial port for MAVLink. Default: /dev/ttyUSB0 (Pi 5, CP2102/FTDI).
+    Bench setup: Pi 5 + CP2102 USB-TTL + Matek F405-WING V2.
+    FC UART (TELEM1/2) -> CP2102 -> Pi USB -> /dev/ttyUSB0.
     Native USB devices often use /dev/ttyACM0.
-    See docs/example_hardware.md for a reference setup."""
+    See docs/example_hardware.md and docs/hardware_hookup.md."""
     return os.environ.get("SERIAL_PORT", "/dev/ttyUSB0")
 
 
