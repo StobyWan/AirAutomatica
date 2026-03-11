@@ -139,4 +139,4 @@ sudo systemctl restart airautomatica
 - **Serial port**: User `airautomatica` is in the `dialout` group for `/dev/ttyUSB0` access.
 - **Python 3.12**: Raspberry Pi OS Bookworm ships Python 3.11. Use Trixie, or install python3.12 from testing/backports.
 - **Ollama**: For system service, Ollama must run as a separate service reachable at `LOCAL_LLM_BASE_URL`.
-- **libcamera-vid**: Camera recording requires `rpicam-apps` (optional; not a package dependency).
+- **Camera recording**: Requires `rpicam-vid` (modern Raspberry Pi OS) or `libcamera-vid` (legacy rpicam-apps). Not a package dependency.

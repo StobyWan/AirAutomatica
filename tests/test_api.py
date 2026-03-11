@@ -817,7 +817,7 @@ def test_post_camera_recording_start(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """POST /camera/recording/start returns ok when mode allows and libcamera-vid available."""
+    """POST /camera/recording/start returns ok when mode allows and camera command available."""
     from unittest.mock import MagicMock
 
     monkeypatch.setenv("CAMERA_RECORDING_MODE", "manual")
@@ -825,8 +825,8 @@ def test_post_camera_recording_start(
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
     monkeypatch.setattr(
-        "airautomatica.services.camera_recording.shutil.which",
-        lambda _: "/usr/bin/libcamera-vid",
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: "libcamera-vid",
     )
     monkeypatch.setattr(
         "airautomatica.services.camera_recording.subprocess.Popen",
