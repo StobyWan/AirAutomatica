@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
@@ -378,14 +378,28 @@ def create_app(
             content_disposition_type="inline",
         )
 
-    @app.get("/dashboard", response_class=HTMLResponse)
-    def dashboard() -> HTMLResponse:
-        """Serve the real-time flight dashboard."""
-        return HTMLResponse(content=get_dashboard_html())
+    @app.get("/dashboard")
+    def dashboard() -> Response:
+        """Serve the real-time flight dashboard. No-cache to ensure upgrades show new UI."""
+        return Response(
+            content=get_dashboard_html(),
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
 
-    @app.get("/dashboard/sessions/{sid:int}", response_class=HTMLResponse)
-    def session_detail(sid: int) -> HTMLResponse:
-        """Serve session detail page with lat/lon path."""
-        return HTMLResponse(content=get_session_detail_html())
+    @app.get("/dashboard/sessions/{sid:int}")
+    def session_detail(sid: int) -> Response:
+        """Serve session detail page with lat/lon path. No-cache for upgrade consistency."""
+        return Response(
+            content=get_session_detail_html(),
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
 
     return app

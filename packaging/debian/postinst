@@ -38,7 +38,7 @@ fi
 
 if [ "$venv_valid" = true ]; then
   echo "airautomatica postinst: reusing existing venv"
-  "$OPT_DIR/venv/bin/pip" install --upgrade "$OPT_DIR/wheels"/airautomatica-*.whl
+  "$OPT_DIR/venv/bin/pip" install --force-reinstall --no-deps "$OPT_DIR/wheels"/airautomatica-*.whl
 else
   if [ -d "$OPT_DIR/venv" ]; then
     echo "airautomatica postinst: venv broken or incomplete, rebuilding"
