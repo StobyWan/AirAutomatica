@@ -256,12 +256,16 @@ def test_rpicam_vid_uses_mpegts_pipe_when_ffmpeg_available(
         return_value="rpicam-vid",
     ):
         with patch(
-            "airautomatica.services.camera_recording.subprocess.Popen",
-            return_value=mock_proc,
-        ) as mock_popen:
-            with patch("time.sleep"):
-                svc = CameraRecordingService(recordings_dir=recordings_dir)
-                svc.start_recording()
+            "airautomatica.services.camera_recording.get_ffmpeg_command",
+            return_value="/usr/bin/ffmpeg",
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                return_value=mock_proc,
+            ) as mock_popen:
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc.start_recording()
     cam_args = mock_popen.call_args_list[0][0][0]
     assert "--codec" in cam_args
     assert "libav" in cam_args
