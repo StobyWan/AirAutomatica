@@ -182,7 +182,7 @@ class CameraRecordingService:
             try:
                 ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
                 if ffmpeg_cmd is not None:
-                    # Pipe to ffmpeg for reliable MP4 finalization (moov atom) on stop.
+                    # Pipe to ffmpeg for MP4. Fragmented MP4 (moov at start) keeps files playable when pipe closes.
                     cam_args = [cmd, "-t", "0", "--codec", "h264", "-o", "-"]
                     self._process = subprocess.Popen(
                         cam_args,
@@ -202,7 +202,7 @@ class CameraRecordingService:
                         "-c",
                         "copy",
                         "-movflags",
-                        "+faststart",
+                        "frag_keyframe+empty_moov+default_base_moof",
                         str(self._output_path),
                     ]
                     self._muxer_process = subprocess.Popen(
