@@ -182,15 +182,17 @@ class CameraRecordingService:
             try:
                 ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
                 if ffmpeg_cmd is not None:
-                    # Pipe to ffmpeg for MP4. Pi 5 uses libav for h264; --libav-format required when piping (rpicam-apps #626).
+                    # Pipe to ffmpeg for MP4. MPEG-TS has proper encapsulation/timestamps for piping (Pi Forums).
+                    # --nopreview avoids preview window consuming frames when running as service.
                     cam_args = [
                         cmd,
                         "-t",
                         "0",
+                        "--nopreview",
                         "--codec",
-                        "h264",
+                        "libav",
                         "--libav-format",
-                        "h264",
+                        "mpegts",
                         "-o",
                         "-",
                     ]
@@ -207,7 +209,7 @@ class CameraRecordingService:
                         "error",
                         "-y",
                         "-f",
-                        "h264",
+                        "mpegts",
                         "-i",
                         "pipe:0",
                         "-c",

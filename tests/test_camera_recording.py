@@ -245,10 +245,10 @@ def test_start_recording_uses_rpicam_vid_mp4(
     assert "-o" in cam_args
 
 
-def test_rpicam_vid_command_omit_codec_libav(
+def test_rpicam_vid_uses_mpegts_pipe_when_ffmpeg_available(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:
-    """Regression: rpicam-vid must not use --codec libav (Pi 5 baseline)."""
+    """When rpicam-vid + ffmpeg: use libav mpegts for proper encapsulation when piping."""
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
     with patch(
@@ -262,9 +262,12 @@ def test_rpicam_vid_command_omit_codec_libav(
             with patch("time.sleep"):
                 svc = CameraRecordingService(recordings_dir=recordings_dir)
                 svc.start_recording()
-    call_args = mock_popen.call_args[0][0]
-    assert "libav" not in call_args
-    assert "--codec" not in call_args
+    cam_args = mock_popen.call_args_list[0][0][0]
+    assert "--codec" in cam_args
+    assert "libav" in cam_args
+    assert "--libav-format" in cam_args
+    assert "mpegts" in cam_args
+    assert "--nopreview" in cam_args
 
 
 def test_start_recording_logs_command(
