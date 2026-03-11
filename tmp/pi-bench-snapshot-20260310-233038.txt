@@ -1,0 +1,26 @@
+=== AirAutomatica Pi Benchmark Snapshot ===
+
+--- System ---
+Hostname:  Mac.home.local
+Date:      Tue Mar 10 23:30:38 CDT 2026
+Uptime:    23:30  2 users, no load average information available
+Pi model:  N/A
+Kernel:    25.2.0
+
+--- Thermal ---
+Temp:      N/A
+Throttled: N/A
+Current:   N/A
+Historical:N/A
+Conclusion:vcgencmd not available
+
+--- Memory ---
+Memory info not available
+
+--- Disk ---
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    11Gi    26Gi    31%    453k  273M    0%   /
+
+--- Top 10 CPU ---
+
+--- Top 10 Memory ---
