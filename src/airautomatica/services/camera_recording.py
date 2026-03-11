@@ -2,7 +2,6 @@
 
 import logging
 import shutil
-import signal
 import subprocess
 import threading
 import time
@@ -20,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 _CAMERA_VID_COMMANDS = ("rpicam-vid", "libcamera-vid")
 MAV_MODE_FLAG_ARMED = 128
-_TERMINATE_WAIT_SEC = 5.0  # Allow time for MP4 moov atom finalization
+_TERMINATE_WAIT_SEC = (
+    8.0  # Allow time for rpicam-vid to finalize MP4 moov atom on SIGTERM
+)
 _LIVENESS_POLL_SEC = 0.2
 
 
@@ -221,20 +222,14 @@ class CameraRecordingService:
                     ),
                     None,
                 )
-            # SIGINT (Ctrl+C) allows rpicam-vid to finalize MP4 moov atom; SIGTERM can leave corrupt files
-            try:
-                self._process.send_signal(signal.SIGINT)
-            except ProcessLookupError:
-                pass
+            # SIGTERM: rpicam-vid may finalize MP4 if given enough time. SIGINT when run as systemd child
+            # can exit without writing; --signal has limited MP4 support on Pi 5.
+            self._process.terminate()
             try:
                 self._process.wait(timeout=_TERMINATE_WAIT_SEC)
             except subprocess.TimeoutExpired:
-                self._process.terminate()
-                try:
-                    self._process.wait(timeout=2.0)
-                except subprocess.TimeoutExpired:
-                    self._process.kill()
-                    self._process.wait()
+                self._process.kill()
+                self._process.wait()
             if basename:
                 self._last_recorded_file = basename
                 logger.info("Recording stopped: %s", basename)
@@ -256,19 +251,12 @@ class CameraRecordingService:
         with self._lock:
             if self._process is None or self._process.poll() is not None:
                 return
-            try:
-                self._process.send_signal(signal.SIGINT)
-            except ProcessLookupError:
-                pass
+            self._process.terminate()
             try:
                 self._process.wait(timeout=_TERMINATE_WAIT_SEC)
             except subprocess.TimeoutExpired:
-                self._process.terminate()
-                try:
-                    self._process.wait(timeout=2.0)
-                except subprocess.TimeoutExpired:
-                    self._process.kill()
-                    self._process.wait()
+                self._process.kill()
+                self._process.wait()
             self._process = None
             self._output_path = None
             self._started_at = None
