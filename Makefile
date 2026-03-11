@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check run setup-ollama pi-thermal pi-ollama pi-log-thermal pi-snapshot pi-diag pi-download-deb pi-upgrade-deb
+.PHONY: install format lint typecheck test check run setup-ollama pi-thermal pi-ollama pi-log-thermal pi-snapshot pi-diag pi-download-deb pi-upgrade-deb pi-upgrade-latest
 
 install:
 	uv pip install -e ".[dev]"
@@ -47,3 +47,7 @@ pi-download-deb:
 
 pi-upgrade-deb:
 	bash scripts/pi/upgrade_deb.sh $(DEB)
+
+pi-upgrade-latest:
+	@DEB=$$(REPO="$(REPO)" TAG="$(TAG)" bash scripts/pi/download_latest_deb.sh | tail -1) && \
+	bash scripts/pi/upgrade_deb.sh "$$DEB"

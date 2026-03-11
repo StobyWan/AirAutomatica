@@ -26,8 +26,9 @@ Use the env file for deployment configuration; settings.json remains for dashboa
 
 | Path | Purpose |
 |------|---------|
-| `/opt/airautomatica/` | App installation (venv + package) |
-| `/opt/airautomatica/venv/` | Python virtual environment |
+| `/opt/airautomatica/` | App installation (wheel + venv) |
+| `/opt/airautomatica/venv/` | Python virtual environment (created on target during package install) |
+| `/opt/airautomatica/wheels/` | Packaged wheel; installed into venv by postinst |
 | `/etc/airautomatica/airautomatica.env` | Main config (systemd EnvironmentFile) |
 | `/var/lib/airautomatica/` | Runtime data (home for system user) |
 | `/var/lib/airautomatica/.airautomatica/settings.json` | User settings |
@@ -97,6 +98,23 @@ VERSION=0.1.0 ./packaging/debian/build-deb.sh
 sudo dpkg -i airautomatica_*.deb
 sudo systemctl start airautomatica
 ```
+
+The `.deb` packages the wheel and systemd unit only. The venv is **created on the target machine** during `postinst`, and the wheel is installed into it. This ensures the Python interpreter and dependencies match the target architecture (e.g. ARM on Raspberry Pi).
+
+### Pi Upgrade (Makefile)
+
+From the Pi (or any machine with the repo):
+
+```bash
+# Two-step: download, then upgrade
+make pi-download-deb
+make pi-upgrade-deb DEB=airautomatica_0.1.0_all.deb   # use filename from download
+
+# One-step: download latest and upgrade
+make pi-upgrade-latest
+```
+
+Optional overrides: `REPO=owner/repo` or `TAG=v0.1.0` for `pi-download-deb`.
 
 ### Tag Release Flow
 
