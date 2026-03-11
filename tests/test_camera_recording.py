@@ -132,6 +132,7 @@ def test_get_recording_state_detects_unexpected_exit(
     mock_proc.poll.side_effect = [None, 1]
     mock_proc.returncode = 1
     mock_proc.stderr = MagicMock()
+    mock_proc.stderr.read.return_value = b"camera disconnected"
     mock_proc.communicate.return_value = (None, b"camera disconnected")
     with patch(
         "airautomatica.services.camera_recording.get_camera_video_command",

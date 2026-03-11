@@ -3,7 +3,7 @@ Version: 0.1.0
 Section: misc
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.12), python3-venv, python3-pip
+Depends: python3 (>= 3.12), python3-venv, python3-pip, ffmpeg
 Maintainer: AirAutomatica <https://github.com/StobyWan/AirAutomatica>
 Description: MAVLink telemetry companion app for Raspberry Pi
  Companion computer app that reads MAVLink telemetry from ArduPilot,

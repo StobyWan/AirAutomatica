@@ -18,11 +18,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _CAMERA_VID_COMMANDS = ("rpicam-vid", "libcamera-vid")
+_FFMPEG_COMMAND = "ffmpeg"
 MAV_MODE_FLAG_ARMED = 128
 _TERMINATE_WAIT_SEC = (
     8.0  # Allow time for rpicam-vid to finalize MP4 moov atom on SIGTERM
 )
 _LIVENESS_POLL_SEC = 0.2
+_MUXER_WAIT_SEC = 8.0
 
 
 def get_camera_video_command() -> Optional[str]:
@@ -31,6 +33,22 @@ def get_camera_video_command() -> Optional[str]:
         if shutil.which(cmd) is not None:
             return cmd
     return None
+
+
+def get_ffmpeg_command() -> Optional[str]:
+    """Return ffmpeg path if available."""
+    return shutil.which(_FFMPEG_COMMAND)
+
+
+def _read_process_stderr(proc: subprocess.Popen[bytes]) -> str:
+    """Best-effort stderr read without touching stdout pipes."""
+    if proc.stderr is None:
+        return ""
+    try:
+        data = proc.stderr.read()
+    except Exception:
+        return ""
+    return data.decode("utf-8", errors="replace").strip()
 
 
 @dataclass
@@ -52,6 +70,7 @@ class CameraRecordingService:
         self._recordings_dir = Path(recordings_dir or get_recordings_dir())
         self._lock = threading.Lock()
         self._process: Optional[subprocess.Popen[bytes]] = None
+        self._muxer_process: Optional[subprocess.Popen[bytes]] = None
         self._output_path: Optional[Path] = None
         self._started_at: Optional[datetime] = None
         self._last_recorded_file: Optional[str] = None
@@ -65,22 +84,35 @@ class CameraRecordingService:
     def get_recording_state(self) -> RecordingState:
         """Return current recording state."""
         with self._lock:
-            is_alive = self._process is not None and self._process.poll() is None
-            if self._process is not None and not is_alive:
-                pid = self._process.pid
-                exit_code = self._process.returncode
-                stderr = b""
-                if self._process.stderr:
+            if (
+                self._muxer_process is not None
+                and self._muxer_process.poll() is not None
+            ):
+                mux_exit = self._muxer_process.returncode
+                mux_err = _read_process_stderr(self._muxer_process) or "no stderr"
+                logger.warning(
+                    "Recording muxer exited unexpectedly pid=%s exit_code=%s: %s",
+                    self._muxer_process.pid,
+                    mux_exit,
+                    mux_err,
+                )
+                self._last_error = f"muxer_exit_code={mux_exit}: {mux_err}"
+                if self._process is not None and self._process.poll() is None:
+                    self._process.terminate()
                     try:
-                        _, stderr = self._process.communicate(timeout=2)
+                        self._process.wait(timeout=_TERMINATE_WAIT_SEC)
                     except subprocess.TimeoutExpired:
                         self._process.kill()
                         self._process.wait()
-                        stderr = (
-                            self._process.stderr.read() if self._process.stderr else b""
-                        )
-                stderr = stderr or b""
-                err = stderr.decode("utf-8", errors="replace").strip() or "no stderr"
+                    self._process = None
+                self._muxer_process = None
+                self._output_path = None
+                self._started_at = None
+
+            if self._process is not None and self._process.poll() is not None:
+                pid = self._process.pid
+                exit_code = self._process.returncode
+                err = _read_process_stderr(self._process) or "no stderr"
                 self._last_error = f"exit_code={exit_code}: {err}"
                 logger.warning(
                     "Recording process exited unexpectedly pid=%s exit_code=%s: %s",
@@ -88,8 +120,22 @@ class CameraRecordingService:
                     exit_code,
                     err,
                 )
+                if self._muxer_process is not None:
+                    try:
+                        self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                    except subprocess.TimeoutExpired:
+                        self._muxer_process.terminate()
+                        try:
+                            self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                        except subprocess.TimeoutExpired:
+                            self._muxer_process.kill()
+                            self._muxer_process.wait()
+                    self._muxer_process = None
                 self._process = None
                 self._output_path = None
+                self._started_at = None
+
+            is_alive = self._process is not None and self._process.poll() is None
             basename = self._output_path.name if self._output_path else None
             return RecordingState(
                 recording=is_alive,
@@ -133,18 +179,81 @@ class CameraRecordingService:
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
             ext = "mp4" if cmd == "rpicam-vid" else "h264"
             self._output_path = self._recordings_dir / f"{ts}_cam.{ext}"
-            args = [cmd, "-t", "0"]
-            args.extend(["-o", str(self._output_path)])
             try:
-                self._process = subprocess.Popen(args, stderr=subprocess.PIPE)
-                logger.info(
-                    "Recording command launched pid=%s: %s",
-                    self._process.pid,
-                    " ".join(args),
-                )
+                ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
+                if ffmpeg_cmd is not None:
+                    # Pipe to ffmpeg for reliable MP4 finalization (moov atom) on stop.
+                    cam_args = [cmd, "-t", "0", "--codec", "h264", "-o", "-"]
+                    self._process = subprocess.Popen(
+                        cam_args,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    ffmpeg_args = [
+                        ffmpeg_cmd,
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-y",
+                        "-f",
+                        "h264",
+                        "-i",
+                        "pipe:0",
+                        "-c",
+                        "copy",
+                        "-movflags",
+                        "+faststart",
+                        str(self._output_path),
+                    ]
+                    self._muxer_process = subprocess.Popen(
+                        ffmpeg_args,
+                        stdin=self._process.stdout,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                    )
+                    if self._process.stdout:
+                        self._process.stdout.close()
+                    logger.info(
+                        "Recording command launched pid=%s: %s",
+                        self._process.pid,
+                        " ".join(cam_args),
+                    )
+                    logger.info(
+                        "Recording muxer launched pid=%s: %s",
+                        self._muxer_process.pid,
+                        " ".join(ffmpeg_args),
+                    )
+                else:
+                    args = [cmd, "-t", "0", "-o", str(self._output_path)]
+                    self._process = subprocess.Popen(args, stderr=subprocess.PIPE)
+                    self._muxer_process = None
+                    logger.info(
+                        "Recording command launched pid=%s: %s",
+                        self._process.pid,
+                        " ".join(args),
+                    )
+                    if cmd == "rpicam-vid":
+                        logger.warning(
+                            "ffmpeg not found; MP4 output may be corrupt when stopping by signal"
+                        )
             except Exception as e:
                 self._last_error = str(e)
                 logger.warning("Recording start failed: %s", e)
+                if self._process is not None:
+                    try:
+                        self._process.kill()
+                        self._process.wait()
+                    except Exception:
+                        pass
+                if self._muxer_process is not None:
+                    try:
+                        self._muxer_process.kill()
+                        self._muxer_process.wait()
+                    except Exception:
+                        pass
+                self._process = None
+                self._muxer_process = None
+                self._output_path = None
                 return (
                     RecordingState(
                         recording=False,
@@ -155,29 +264,63 @@ class CameraRecordingService:
                     str(e),
                 )
             time.sleep(_LIVENESS_POLL_SEC)
-            if self._process.poll() is not None:
+            if self._process is not None and self._process.poll() is not None:
                 pid = self._process.pid
                 exit_code = self._process.returncode
-                stderr = b""
-                if self._process.stderr:
+                err = _read_process_stderr(self._process) or "Process exited"
+                err_msg = f"exit_code={exit_code}: {err}"
+                self._last_error = err_msg
+                if self._muxer_process is not None:
                     try:
-                        _, stderr = self._process.communicate(timeout=2)
+                        self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                    except subprocess.TimeoutExpired:
+                        self._muxer_process.terminate()
+                        try:
+                            self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                        except subprocess.TimeoutExpired:
+                            self._muxer_process.kill()
+                            self._muxer_process.wait()
+                    self._muxer_process = None
+                self._process = None
+                self._output_path = None
+                self._started_at = None
+                logger.warning(
+                    "Recording process exited early pid=%s exit_code=%s: %s",
+                    pid,
+                    exit_code,
+                    err,
+                )
+                return (
+                    RecordingState(
+                        recording=False,
+                        output_file=None,
+                        started_at=None,
+                        last_recorded_file=self._last_recorded_file,
+                    ),
+                    err_msg,
+                )
+            if (
+                self._muxer_process is not None
+                and self._muxer_process.poll() is not None
+            ):
+                pid = self._muxer_process.pid
+                exit_code = self._muxer_process.returncode
+                err = _read_process_stderr(self._muxer_process) or "Process exited"
+                err_msg = f"muxer_exit_code={exit_code}: {err}"
+                self._last_error = err_msg
+                if self._process is not None:
+                    self._process.terminate()
+                    try:
+                        self._process.wait(timeout=_TERMINATE_WAIT_SEC)
                     except subprocess.TimeoutExpired:
                         self._process.kill()
                         self._process.wait()
-                        stderr = (
-                            self._process.stderr.read() if self._process.stderr else b""
-                        )
-                stderr = stderr or b""
-                err = (
-                    stderr.decode("utf-8", errors="replace").strip() or "Process exited"
-                )
-                err_msg = f"exit_code={exit_code}: {err}"
-                self._last_error = err_msg
-                self._process = None
+                    self._process = None
+                self._muxer_process = None
                 self._output_path = None
+                self._started_at = None
                 logger.warning(
-                    "Recording process exited early pid=%s exit_code=%s: %s",
+                    "Recording muxer exited early pid=%s exit_code=%s: %s",
                     pid,
                     exit_code,
                     err,
@@ -210,6 +353,17 @@ class CameraRecordingService:
         with self._lock:
             basename = self._output_path.name if self._output_path else None
             if self._process is None or self._process.poll() is not None:
+                if self._muxer_process is not None:
+                    try:
+                        self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                    except subprocess.TimeoutExpired:
+                        self._muxer_process.terminate()
+                        try:
+                            self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                        except subprocess.TimeoutExpired:
+                            self._muxer_process.kill()
+                            self._muxer_process.wait()
+                    self._muxer_process = None
                 self._process = None
                 self._output_path = None
                 self._started_at = None
@@ -230,6 +384,28 @@ class CameraRecordingService:
             except subprocess.TimeoutExpired:
                 self._process.kill()
                 self._process.wait()
+            if self._muxer_process is not None:
+                try:
+                    self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                except subprocess.TimeoutExpired:
+                    self._muxer_process.terminate()
+                    try:
+                        self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                    except subprocess.TimeoutExpired:
+                        self._muxer_process.kill()
+                        self._muxer_process.wait()
+                if self._muxer_process.returncode not in (0, None):
+                    err = _read_process_stderr(self._muxer_process) or "no stderr"
+                    self._last_error = (
+                        f"muxer_exit_code={self._muxer_process.returncode}: {err}"
+                    )
+                    logger.warning(
+                        "Recording muxer exited with error pid=%s exit_code=%s: %s",
+                        self._muxer_process.pid,
+                        self._muxer_process.returncode,
+                        err,
+                    )
+                self._muxer_process = None
             if basename:
                 self._last_recorded_file = basename
                 logger.info("Recording stopped: %s", basename)
@@ -250,6 +426,17 @@ class CameraRecordingService:
         """Terminate active recording on app shutdown."""
         with self._lock:
             if self._process is None or self._process.poll() is not None:
+                if self._muxer_process is not None:
+                    try:
+                        self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                    except subprocess.TimeoutExpired:
+                        self._muxer_process.terminate()
+                        try:
+                            self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                        except subprocess.TimeoutExpired:
+                            self._muxer_process.kill()
+                            self._muxer_process.wait()
+                    self._muxer_process = None
                 return
             self._process.terminate()
             try:
@@ -257,6 +444,17 @@ class CameraRecordingService:
             except subprocess.TimeoutExpired:
                 self._process.kill()
                 self._process.wait()
+            if self._muxer_process is not None:
+                try:
+                    self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                except subprocess.TimeoutExpired:
+                    self._muxer_process.terminate()
+                    try:
+                        self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
+                    except subprocess.TimeoutExpired:
+                        self._muxer_process.kill()
+                        self._muxer_process.wait()
+                self._muxer_process = None
             self._process = None
             self._output_path = None
             self._started_at = None
