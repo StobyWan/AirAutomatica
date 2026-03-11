@@ -17,7 +17,8 @@ sudo apt install -y \
   build-essential pkg-config \
   python3 python3-pip python3-venv python3-full \
   sqlite3 libsqlite3-dev \
-  avahi-daemon ca-certificates
+  avahi-daemon ca-certificates \
+  ffmpeg
 sudo apt install -y gh 2>/dev/null || true
 
 echo "==> Ensuring user is in serial access groups..."
