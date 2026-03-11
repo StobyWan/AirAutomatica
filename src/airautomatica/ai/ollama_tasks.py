@@ -1,6 +1,7 @@
 """Ollama task types, prompts, and defensive parsers. Schema-first, no trust of LLM output."""
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -147,7 +148,14 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
         if samples:
             ctx_parts.append(f"recent_samples={min(len(samples), 10)}")
         ctx = "; ".join(ctx_parts) if ctx_parts else "no data"
-        return f"Return only valid JSON. No markdown. No explanation.\nContext: {ctx}"
+        return (
+            "Telemetry analyst. Summarize the most important operational state in one short sentence. "
+            "Plain English only. Summary must be meaningful, not a number/mode/heading/battery/altitude value alone. "
+            'If nothing notable: "Telemetry nominal".\n'
+            "Return ONLY valid JSON. No markdown.\n"
+            '{"status":"ok","summary":"<one sentence>","concerns":[],"recommendations":[]}\n'
+            f"Context: {ctx}"
+        )
 
     if task_type == OllamaTaskType.EVENT_CLASSIFICATION:
         events = context.get("events") or []
@@ -167,6 +175,50 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
 # --- JSON extraction (re-export for backward compatibility) ---
 
 from airautomatica.ai.json_utils import extract_json
+
+# --- Summary validation (telemetry) ---
+
+_NEUTRAL_SUMMARIES: frozenset[str] = frozenset(
+    {"telemetry nominal", "no immediate concerns"}
+)
+_TELEMETRY_SINGLE_TOKENS: frozenset[str] = frozenset(
+    {
+        "AUTO",
+        "GUIDED",
+        "RTL",
+        "LOITER",
+        "STABILIZE",
+        "UNKNOWN",
+        "HEADING",
+        "ALTITUDE",
+        "BATTERY",
+        "VOLTAGE",
+        "SPEED",
+        "GPS",
+        "MODE",
+        "CONNECTED",
+    }
+)
+# Measurement-only: number + optional unit (%, m, deg, V)
+_MEASUREMENT_ONLY_RE = re.compile(r"^[\d.]+\s*(%|m|deg|v)?$", re.IGNORECASE)
+_MIN_SUMMARY_LEN = 12
+
+
+def _get_summary_reject_reason(s: str) -> str:
+    """Reason why summary is weak. Empty string means acceptable."""
+    t = (s or "").strip()
+    if not t:
+        return "summary_empty"
+    if t.lower() in _NEUTRAL_SUMMARIES:
+        return ""
+    if _MEASUREMENT_ONLY_RE.match(t):
+        return "summary_numeric_only"
+    if t.upper() in _TELEMETRY_SINGLE_TOKENS:
+        return "summary_single_token"
+    if len(t) < _MIN_SUMMARY_LEN:
+        return "summary_too_short"
+    return ""
+
 
 # --- Parsers (never trust Ollama; coerce everything) ---
 
@@ -228,9 +280,14 @@ def parse_telemetry_summary_response(
     status = _safe_str(raw.get("status")) or "unknown"
     if status.lower() == "str" or status.lower() not in ("ok", "warn", "error"):
         status = "unknown"
+    summary = _safe_str(raw.get("summary")) or ""
+    reason = _get_summary_reject_reason(summary)
+    if reason:
+        logger.debug("telemetry summary weak: reason=%s raw=%r", reason, summary)
+        summary = "Telemetry nominal"
     return TelemetrySummaryResult(
         status=status,
-        summary=_safe_str(raw.get("summary")) or "",
+        summary=summary,
         concerns=_safe_str_list(raw.get("concerns"), "concerns"),
         recommendations=_safe_str_list(raw.get("recommendations"), "recommendations"),
     )

@@ -66,11 +66,14 @@ def test_build_prompt_perception_ignores_state() -> None:
 
 
 def test_build_prompt_telemetry_summary() -> None:
-    """Telemetry summary prompt is short and factual; schema comes from API format."""
+    """Telemetry summary prompt has analyst framing and schema."""
     prompt = build_prompt(OllamaTaskType.TELEMETRY_SUMMARY, {})
     assert len(prompt) > 0
     assert "JSON" in prompt
     assert "Context" in prompt
+    assert "Telemetry analyst" in prompt
+    assert "meaningful" in prompt
+    assert "Telemetry nominal" in prompt
 
 
 def test_build_prompt_event_classification() -> None:
@@ -184,26 +187,33 @@ def test_parse_telemetry_summary_valid() -> None:
 
 def test_parse_telemetry_summary_empty_arrays() -> None:
     """Empty arrays become empty tuples."""
-    raw = {"status": "ok", "summary": "All good", "concerns": [], "recommendations": []}
+    raw = {
+        "status": "ok",
+        "summary": "All systems nominal.",
+        "concerns": [],
+        "recommendations": [],
+    }
     result = parse_telemetry_summary_response(raw)
+    assert result.summary == "All systems nominal."
     assert result.concerns == ()
     assert result.recommendations == ()
 
 
 def test_parse_telemetry_summary_missing_fields() -> None:
-    """Missing fields get safe defaults."""
+    """Missing fields get safe defaults; empty summary normalized to Telemetry nominal."""
     raw: dict[str, Any] = {}
     result = parse_telemetry_summary_response(raw)
     assert result.status == "unknown"
-    assert result.summary == ""
+    assert result.summary == "Telemetry nominal"
     assert result.concerns == ()
     assert result.recommendations == ()
 
 
 def test_parse_telemetry_summary_none() -> None:
-    """None input degrades safely."""
+    """None input degrades safely; empty summary normalized."""
     result = parse_telemetry_summary_response(None)
     assert result.status == "unknown"
+    assert result.summary == "Telemetry nominal"
 
 
 def test_parse_telemetry_summary_malformed_types() -> None:
@@ -221,28 +231,46 @@ def test_parse_telemetry_summary_malformed_types() -> None:
 
 def test_parse_telemetry_summary_null_concerns() -> None:
     """null for list field normalizes to empty tuple."""
-    raw: dict[str, Any] = {"status": "ok", "summary": "x", "concerns": None}
+    raw: dict[str, Any] = {
+        "status": "ok",
+        "summary": "All systems nominal.",
+        "concerns": None,
+    }
     result = parse_telemetry_summary_response(raw)
+    assert result.summary == "All systems nominal."
     assert result.concerns == ()
 
 
 def test_parse_telemetry_summary_string_recommendations() -> None:
     """String for list field normalizes to single-item tuple."""
-    raw: dict[str, Any] = {"status": "ok", "recommendations": "check battery"}
+    raw: dict[str, Any] = {
+        "status": "ok",
+        "summary": "Telemetry nominal",
+        "recommendations": "check battery",
+    }
     result = parse_telemetry_summary_response(raw)
+    assert result.summary == "Telemetry nominal"
     assert result.recommendations == ("check battery",)
 
 
 def test_parse_telemetry_summary_whitespace_string() -> None:
     """Whitespace-only string for list field normalizes to empty tuple."""
-    raw: dict[str, Any] = {"status": "ok", "concerns": "   "}
+    raw: dict[str, Any] = {
+        "status": "ok",
+        "summary": "Telemetry nominal",
+        "concerns": "   ",
+    }
     result = parse_telemetry_summary_response(raw)
     assert result.concerns == ()
 
 
 def test_parse_telemetry_summary_malformed_non_list() -> None:
     """Non-list non-string (e.g. int) for list field degrades to empty tuple."""
-    raw: dict[str, Any] = {"status": "ok", "concerns": 123}
+    raw: dict[str, Any] = {
+        "status": "ok",
+        "summary": "Telemetry nominal",
+        "concerns": 123,
+    }
     result = parse_telemetry_summary_response(raw)
     assert result.concerns == ()
 
@@ -257,6 +285,7 @@ def test_parse_telemetry_summary_str_schema_leakage() -> None:
     }
     result = parse_telemetry_summary_response(raw)
     assert result.status == "unknown"
+    assert result.summary == "Telemetry nominal"
     assert result.concerns == ()
     assert result.recommendations == ()
 
@@ -271,6 +300,7 @@ def test_parse_telemetry_summary_invalid_status() -> None:
     }
     result = parse_telemetry_summary_response(raw)
     assert result.status == "unknown"
+    assert result.summary == "Telemetry nominal"
 
 
 def test_parse_telemetry_summary_valid_statuses() -> None:
@@ -278,12 +308,77 @@ def test_parse_telemetry_summary_valid_statuses() -> None:
     for st in ("ok", "warn", "error"):
         raw: dict[str, Any] = {
             "status": st,
-            "summary": "x",
+            "summary": "Telemetry nominal",
             "concerns": [],
             "recommendations": [],
         }
         result = parse_telemetry_summary_response(raw)
         assert result.status == st
+        assert result.summary == "Telemetry nominal"
+
+
+def test_parse_telemetry_summary_numeric_only_normalized() -> None:
+    """Numeric-only summary is normalized to Telemetry nominal."""
+    raw: dict[str, Any] = {
+        "status": "ok",
+        "summary": "10",
+        "concerns": [],
+        "recommendations": [],
+    }
+    result = parse_telemetry_summary_response(raw)
+    assert result.summary == "Telemetry nominal"
+
+
+def test_parse_telemetry_summary_measurement_only_normalized() -> None:
+    """Measurement-only summaries (12%, 52m, 180deg, 12.1V) are normalized."""
+    for weak in ("12%", "52m", "180deg", "12.1V"):
+        raw: dict[str, Any] = {
+            "status": "ok",
+            "summary": weak,
+            "concerns": [],
+            "recommendations": [],
+        }
+        result = parse_telemetry_summary_response(raw)
+        assert (
+            result.summary == "Telemetry nominal"
+        ), f"Expected normalization for {weak!r}"
+
+
+def test_parse_telemetry_summary_single_token_normalized() -> None:
+    """Single telemetry token (e.g. AUTO) is normalized to Telemetry nominal."""
+    raw: dict[str, Any] = {
+        "status": "ok",
+        "summary": "AUTO",
+        "concerns": [],
+        "recommendations": [],
+    }
+    result = parse_telemetry_summary_response(raw)
+    assert result.summary == "Telemetry nominal"
+
+
+def test_parse_telemetry_summary_valid_short_sentence_accepted() -> None:
+    """Valid short sentence passes through unchanged."""
+    raw: dict[str, Any] = {
+        "status": "ok",
+        "summary": "Vehicle in AUTO with stable battery.",
+        "concerns": [],
+        "recommendations": [],
+    }
+    result = parse_telemetry_summary_response(raw)
+    assert result.summary == "Vehicle in AUTO with stable battery."
+
+
+def test_parse_telemetry_summary_neutral_nominal_accepted() -> None:
+    """Neutral summaries Telemetry nominal and No immediate concerns pass through."""
+    for neutral in ("Telemetry nominal", "No immediate concerns"):
+        raw: dict[str, Any] = {
+            "status": "ok",
+            "summary": neutral,
+            "concerns": [],
+            "recommendations": [],
+        }
+        result = parse_telemetry_summary_response(raw)
+        assert result.summary == neutral
 
 
 # --- Event classification parser ---
@@ -496,7 +591,7 @@ async def test_task_service_ollama_malformed_degrades_safely() -> None:
         result = await svc.infer_task(OllamaTaskType.TELEMETRY_SUMMARY, {})
     assert isinstance(result, TelemetrySummaryResult)
     assert result.status == "unknown"
-    assert result.summary == ""
+    assert result.summary == "Telemetry nominal"
 
 
 @pytest.mark.asyncio
