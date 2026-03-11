@@ -51,6 +51,17 @@ else
   "$OPT_DIR/venv/bin/pip" install "$OPT_DIR/wheels"/airautomatica-*.whl
 fi
 
+# Clear stale bytecode and compile fresh so systemd runs current code
+SITE_PKG="$("$OPT_DIR/venv/bin/python" -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)" || true
+if [ -n "$SITE_PKG" ] && [ -d "$SITE_PKG/airautomatica" ]; then
+  APPDIR="$SITE_PKG/airautomatica"
+  find "$APPDIR" -type d -name __pycache__ -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
+  find "$APPDIR" -type f -name "*.pyc" -delete 2>/dev/null || true
+  echo "airautomatica postinst: stale bytecode cache cleared"
+  "$OPT_DIR/venv/bin/python" -m compileall -q "$APPDIR" 2>/dev/null || true
+  echo "airautomatica postinst: fresh bytecode compiled"
+fi
+
 # Set ownership
 chown -R "$APP_USER:$APP_USER" "$OPT_DIR" "$VAR_DIR"
 

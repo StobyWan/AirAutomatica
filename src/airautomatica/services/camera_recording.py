@@ -71,11 +71,17 @@ class CameraRecordingService:
         self._lock = threading.Lock()
         cam_cmd = get_camera_video_command()
         ffmpeg_cmd = get_ffmpeg_command()
+        # Strategy: rpicam-vid + ffmpeg -> pipe (MPEG-TS to MP4); else direct file output
+        strategy = (
+            "pipe" if (cam_cmd == "rpicam-vid" and ffmpeg_cmd is not None) else "direct"
+        )
         logger.info(
-            "Camera recording: dir=%s cam=%s ffmpeg=%s",
-            self._recordings_dir,
+            "AIRAUTOMATICA camera_recording: __file__=%s cam=%s ffmpeg=%s strategy=%s dir=%s",
+            __file__,
             cam_cmd or "none",
             ffmpeg_cmd or "none",
+            strategy,
+            self._recordings_dir,
         )
         self._process: Optional[subprocess.Popen[bytes]] = None
         self._muxer_process: Optional[subprocess.Popen[bytes]] = None
@@ -193,6 +199,13 @@ class CameraRecordingService:
             )
             try:
                 ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
+                use_pipe = ffmpeg_cmd is not None and cmd == "rpicam-vid"
+                logger.info(
+                    "AIRAUTOMATICA camera_recording: strategy=%s (cam=%s ffmpeg=%s)",
+                    "pipe" if use_pipe else "direct",
+                    cmd,
+                    ffmpeg_cmd or "none",
+                )
                 if ffmpeg_cmd is not None:
                     # Pipe to ffmpeg for MP4. MPEG-TS has proper encapsulation/timestamps for piping (Pi Forums).
                     # --nopreview avoids preview window consuming frames when running as service.
