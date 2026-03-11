@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 # Fixed cooldown between completed jobs (seconds). Phase 1 base; Phase 2 scales by thermal.
-_COOLDOWN_SEC = 2.0
+_COOLDOWN_SEC = 4.0
 
 # Thermal backoff: extra delay when HOT, pause duration for background when THROTTLED.
-_COOLDOWN_WARM_MULT = 1.5
-_COOLDOWN_HOT_MULT = 2.0
-_COOLDOWN_THROTTLED_USER_EXTRA_SEC = 5.0
-_BACKGROUND_PAUSE_WHEN_THROTTLED_SEC = 15.0
-_BACKGROUND_PAUSE_WHEN_HOT_SEC = 5.0
+_COOLDOWN_WARM_MULT = 2.0
+_COOLDOWN_HOT_MULT = 3.0
+_COOLDOWN_THROTTLED_USER_EXTRA_SEC = 10.0
+_BACKGROUND_PAUSE_WHEN_THROTTLED_SEC = 30.0
+_BACKGROUND_PAUSE_WHEN_HOT_SEC = 15.0
 
 
 class AiInferenceScheduler:
