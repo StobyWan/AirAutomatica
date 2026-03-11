@@ -1,7 +1,9 @@
 """Ollama AI service for local inference via POST /api/generate."""
 
+import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -38,15 +40,18 @@ class OllamaAiService(AiService):
             "format": fmt,
             "options": {"num_thread": num_thread},
         }
+        start = time.perf_counter()
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             r = await client.post(
                 f"{self._base_url}/api/generate",
                 json=payload,
             )
             r.raise_for_status()
-            data = r.json()
-            content = data.get("response", "") or ""
-            return content.strip()
+            data = await asyncio.to_thread(r.json)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.debug("Ollama /api/generate elapsed %.0fms", elapsed_ms)
+        content = data.get("response", "") or ""
+        return content.strip()
 
     async def _infer_from_prompt(self, prompt: str) -> AiResult:
         """Call generate_raw and parse into AiResult. Used by infer() and scheduler."""

@@ -61,7 +61,7 @@ class AiInferenceScheduler:
         while True:
             try:
                 job, future, user_triggered = await self._queue.get()
-                thermal = get_thermal_state()
+                thermal = await asyncio.to_thread(get_thermal_state)
 
                 # THROTTLED: pause background jobs; user jobs run with extra delay
                 if thermal == ThermalState.THROTTLED and not user_triggered:
@@ -97,7 +97,9 @@ class AiInferenceScheduler:
                 except Exception as e:
                     future.set_exception(e)
 
-                cooldown = self._get_cooldown_sec(get_thermal_state())
+                cooldown = self._get_cooldown_sec(
+                    await asyncio.to_thread(get_thermal_state)
+                )
                 await asyncio.sleep(cooldown)
             except asyncio.CancelledError:
                 break
