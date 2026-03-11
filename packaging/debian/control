@@ -1,0 +1,14 @@
+Package: airautomatica
+Version: 0.1.0
+Section: misc
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.12), python3-venv, python3-pip
+Maintainer: AirAutomatica <https://github.com/StobyWan/AirAutomatica>
+Description: MAVLink telemetry companion app for Raspberry Pi
+ Companion computer app that reads MAVLink telemetry from ArduPilot,
+ maintains shared aircraft state, and exposes a local FastAPI server.
+ Designed for Raspberry Pi 5 with optional AI HAT+.
+ .
+ Runs as a systemd service. Default: mock mode (no FC/serial/Ollama required).
+ Configure via /etc/airautomatica/airautomatica.env

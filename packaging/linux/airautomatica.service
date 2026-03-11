@@ -1,0 +1,18 @@
+[Unit]
+Description=AirAutomatica - MAVLink telemetry companion app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=airautomatica
+Group=airautomatica
+WorkingDirectory=/opt/airautomatica
+Environment=HOME=/var/lib/airautomatica
+EnvironmentFile=-/etc/airautomatica/airautomatica.env
+ExecStart=/opt/airautomatica/venv/bin/python -m airautomatica.main
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

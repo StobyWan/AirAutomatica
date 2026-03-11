@@ -1,0 +1,33 @@
+#!/bin/sh
+set -e
+
+APP_USER="airautomatica"
+OPT_DIR="/opt/airautomatica"
+VAR_DIR="/var/lib/airautomatica"
+ETC_DIR="/etc/airautomatica"
+SERVICE_NAME="airautomatica"
+
+# Create system user if missing
+if ! getent passwd "$APP_USER" >/dev/null 2>&1; then
+  useradd --system --home "$VAR_DIR" --shell /usr/sbin/nologin "$APP_USER"
+fi
+
+# Create directories
+mkdir -p "$VAR_DIR" "$ETC_DIR"
+
+# Add dialout for serial access
+usermod -aG dialout "$APP_USER" 2>/dev/null || true
+
+# Install env template only if not present
+if [ ! -f "$ETC_DIR/airautomatica.env" ]; then
+  if [ -f "$OPT_DIR/airautomatica.env.example" ]; then
+    cp "$OPT_DIR/airautomatica.env.example" "$ETC_DIR/airautomatica.env"
+  fi
+fi
+
+# Set ownership
+chown -R "$APP_USER:$APP_USER" "$OPT_DIR" "$VAR_DIR"
+
+# Enable service (do not start automatically on install; let operator start)
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"

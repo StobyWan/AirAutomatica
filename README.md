@@ -236,6 +236,19 @@ pytest
 
 CI runs format, lint, typecheck, and tests on push/PR.
 
+## Linux Packaging
+
+Install as a systemd service on Debian/Raspberry Pi OS:
+
+```bash
+sudo packaging/linux/install.sh
+sudo systemctl start airautomatica
+```
+
+Default: mock mode (no FC, serial, or Ollama required). Configure via `/etc/airautomatica/airautomatica.env`.
+
+See [docs/packaging.md](docs/packaging.md) for install layout, service management, .deb build, and tag-release flow.
+
 ## Example Hardware / Bench Setup
 
 See [docs/example_hardware.md](docs/example_hardware.md) for a documented reference setup: Matek F405-WING V2, Raspberry Pi 5, CP2102 USB-to-TTL adapter, and power components. It is an example only — the software works with other ArduPilot FCs and serial adapters.
