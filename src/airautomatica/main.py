@@ -214,13 +214,22 @@ def _create_task_service(
     if provider == "ollama":
         if ollama_transport is not None and scheduler is not None:
             executor = ScheduledOllamaExecutor(ollama_transport, scheduler)
+            logger.debug(
+                "Task service: provider=%s executor=ScheduledOllamaExecutor (scheduled)",
+                provider,
+            )
             return OllamaTaskService(provider="ollama", ollama_service=executor)
         ollama = OllamaAiService(
             base_url=get_local_llm_base_url("ollama"),
             model=get_local_llm_model("ollama"),
             timeout_sec=get_local_llm_timeout(),
         )
+        logger.debug(
+            "Task service: provider=%s executor=OllamaAiService (direct)",
+            provider,
+        )
         return OllamaTaskService(provider="ollama", ollama_service=ollama)
+    logger.debug("Task service: provider=%s executor=mock", provider)
     return OllamaTaskService(provider="mock", ollama_service=None)
 
 
@@ -228,15 +237,22 @@ def main() -> None:
     """Run API server, telemetry loop, and mission logic."""
     setup_logging()
     store = StateStore()
+    provider = get_local_llm_provider()
     ollama_transport: OllamaAiService | None = None
     scheduler: AiInferenceScheduler | None = None
-    if get_local_llm_provider() == "ollama":
+    if provider == "ollama":
         ollama_transport = OllamaAiService(
             base_url=get_local_llm_base_url("ollama"),
             model=get_local_llm_model("ollama"),
             timeout_sec=get_local_llm_timeout(),
         )
         scheduler = AiInferenceScheduler()
+    logger.debug(
+        "Startup: provider=%s ollama_transport=%s scheduler=%s",
+        provider,
+        "created" if ollama_transport is not None else "none",
+        "created" if scheduler is not None else "none",
+    )
     ai_service = _create_ai_service(ollama_transport, scheduler)
     task_service = _create_task_service(ollama_transport, scheduler)
 
