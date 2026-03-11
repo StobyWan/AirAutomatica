@@ -43,9 +43,8 @@ class OllamaAiService(AiService):
             content = data.get("response", "") or ""
             return content.strip()
 
-    async def infer(self, state: AircraftState | None) -> AiResult:
-        """Call Ollama /api/generate. Returns normalized AiResult."""
-        prompt = self._build_prompt(state)
+    async def _infer_from_prompt(self, prompt: str) -> AiResult:
+        """Call generate_raw and parse into AiResult. Used by infer() and scheduler."""
         try:
             content = await self.generate_raw(prompt)
         except httpx.TimeoutException as e:
@@ -99,6 +98,11 @@ class OllamaAiService(AiService):
             timestamp=datetime.now(timezone.utc),
             metadata={"raw_length": len(content)},
         )
+
+    async def infer(self, state: AircraftState | None) -> AiResult:
+        """Call Ollama /api/generate. Returns normalized AiResult."""
+        prompt = self._build_prompt(state)
+        return await self._infer_from_prompt(prompt)
 
     def _build_prompt(self, state: AircraftState | None) -> str:
         """Build prompt from aircraft state. Asks for JSON to simulate AI HAT output."""
