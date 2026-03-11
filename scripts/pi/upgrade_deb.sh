@@ -60,8 +60,18 @@ sudo systemctl start airautomatica
 echo "==> Service status:"
 sudo systemctl status airautomatica --no-pager
 
-echo "==> Health check:"
-curl -sf "$HEALTH_URL"
+echo "==> Waiting for health endpoint..."
+MAX_WAIT=20
+ELAPSED=0
+while ! curl -sf "$HEALTH_URL" >/dev/null 2>&1; do
+  if [[ $ELAPSED -ge $MAX_WAIT ]]; then
+    echo "Health check failed after waiting ${MAX_WAIT}s"
+    echo "Check logs: sudo journalctl -u airautomatica -n 100 --no-pager"
+    exit 1
+  fi
+  sleep 1
+  ELAPSED=$((ELAPSED + 1))
+done
 
 echo ""
 echo "==> Installed version:"
