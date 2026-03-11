@@ -34,11 +34,9 @@ echo "==> Building wheel"
 mkdir -p "$BUILD_DIR/wheels"
 python3 -m pip wheel --wheel-dir "$BUILD_DIR/wheels" "$REPO_ROOT"
 
-# Create venv and install
-echo "==> Creating venv and installing"
-python3 -m venv "$OPT_DIR/venv"
-"$OPT_DIR/venv/bin/pip" install --upgrade pip
-"$OPT_DIR/venv/bin/pip" install "$BUILD_DIR/wheels"/airautomatica-*.whl
+# Package wheel (venv created on target during postinst)
+mkdir -p "$OPT_DIR/wheels"
+cp "$BUILD_DIR/wheels"/airautomatica-*.whl "$OPT_DIR/wheels/"
 
 # Copy systemd unit and env example
 cp "$LINUX_DIR/airautomatica.service" "$ETC_SYSTEMD/"
