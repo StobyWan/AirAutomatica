@@ -286,8 +286,13 @@ def create_app(
         path = Path(camera_recording_service.recordings_dir) / filename
         if not path.is_file():
             raise HTTPException(404, "File not found")
-        media_type = "video/mp4" if filename.lower().endswith(".mp4") else "video/mpeg"
-        return FileResponse(path, media_type=media_type, filename=filename)
+        media_type = "video/mp4" if filename.lower().endswith(".mp4") else "video/H264"
+        return FileResponse(
+            path,
+            media_type=media_type,
+            filename=filename,
+            content_disposition_type="inline",
+        )
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:
