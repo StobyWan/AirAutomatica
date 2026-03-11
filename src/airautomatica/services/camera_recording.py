@@ -69,6 +69,14 @@ class CameraRecordingService:
     def __init__(self, recordings_dir: Optional[str] = None) -> None:
         self._recordings_dir = Path(recordings_dir or get_recordings_dir())
         self._lock = threading.Lock()
+        cam_cmd = get_camera_video_command()
+        ffmpeg_cmd = get_ffmpeg_command()
+        logger.info(
+            "Camera recording: dir=%s cam=%s ffmpeg=%s",
+            self._recordings_dir,
+            cam_cmd or "none",
+            ffmpeg_cmd or "none",
+        )
         self._process: Optional[subprocess.Popen[bytes]] = None
         self._muxer_process: Optional[subprocess.Popen[bytes]] = None
         self._output_path: Optional[Path] = None
