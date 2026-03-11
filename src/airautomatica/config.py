@@ -99,6 +99,20 @@ def get_local_llm_timeout() -> float:
         return 30.0
 
 
+def get_ollama_num_thread() -> int:
+    """Number of CPU threads Ollama uses for inference. 1-8. Default 4.
+    Lower values reduce Pi 5 CPU load and thermals."""
+    raw = os.environ.get(
+        "AIRAUTOMATICA_OLLAMA_NUM_THREAD",
+        os.environ.get("OLLAMA_NUM_THREAD", "4"),
+    )
+    try:
+        val = int(raw)
+        return max(1, min(8, val))
+    except ValueError:
+        return 4
+
+
 def get_aihat_model_name() -> str:
     """AI HAT model name. Default: default."""
     return os.environ.get("AIHAT_MODEL_NAME", "default")

@@ -10,6 +10,7 @@ import httpx
 from airautomatica.ai.json_utils import extract_json
 from airautomatica.ai.models import AiResult, create_error_fallback
 from airautomatica.ai.service import AiService
+from airautomatica.config import get_ollama_num_thread
 from airautomatica.models.state import AircraftState
 
 logger = logging.getLogger(__name__)
@@ -28,15 +29,19 @@ class OllamaAiService(AiService):
     ) -> str:
         """POST to /api/generate, return raw response content. Raises on failure."""
         fmt = format if format is not None else "json"
+        # Lower num_thread reduces Pi 5 CPU load and thermals.
+        num_thread = get_ollama_num_thread()
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "prompt": prompt,
+            "stream": False,
+            "format": fmt,
+            "options": {"num_thread": num_thread},
+        }
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             r = await client.post(
                 f"{self._base_url}/api/generate",
-                json={
-                    "model": self._model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": fmt,
-                },
+                json=payload,
             )
             r.raise_for_status()
             data = r.json()
