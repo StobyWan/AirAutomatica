@@ -857,3 +857,43 @@ def test_post_camera_recording_stop(
     data = r.json()
     assert data.get("ok") is True
     assert data.get("recording") is False
+    assert "last_recorded_file" in data
+
+
+def test_get_recording_file_not_found(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """GET /recordings/{filename} returns 404 when file does not exist."""
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    tmp_path.joinpath("recordings").mkdir(exist_ok=True)
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/recordings/nonexistent.mp4")
+    assert r.status_code == 404
+
+
+def test_get_recording_file_rejects_path_traversal(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """GET /recordings/{filename} returns 400 for path traversal attempts."""
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    # Filename containing ".." should be rejected
+    r = client.get("/recordings/foo..bar")
+    assert r.status_code == 400
+
+
+def test_get_recording_file_serves_file(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """GET /recordings/{filename} serves the file when it exists."""
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / "test_rec.mp4").write_bytes(b"fake video content")
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/recordings/test_rec.mp4")
+    assert r.status_code == 200
+    assert r.content == b"fake video content"

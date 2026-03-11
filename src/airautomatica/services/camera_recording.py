@@ -38,6 +38,9 @@ class RecordingState:
     recording: bool
     output_file: Optional[str]  # basename for health/API
     started_at: Optional[datetime]
+    last_recorded_file: Optional[
+        str
+    ]  # basename of last completed recording (when not recording)
 
 
 class CameraRecordingService:
@@ -49,6 +52,12 @@ class CameraRecordingService:
         self._process: Optional[subprocess.Popen[bytes]] = None
         self._output_path: Optional[Path] = None
         self._started_at: Optional[datetime] = None
+        self._last_recorded_file: Optional[str] = None
+
+    @property
+    def recordings_dir(self) -> str:
+        """Path to recordings directory."""
+        return str(self._recordings_dir)
 
     def get_recording_state(self) -> RecordingState:
         """Return current recording state."""
@@ -58,6 +67,7 @@ class CameraRecordingService:
                 recording=self._process is not None and self._process.poll() is None,
                 output_file=basename,
                 started_at=self._started_at,
+                last_recorded_file=self._last_recorded_file,
             )
 
     def is_available(self) -> bool:
@@ -74,13 +84,19 @@ class CameraRecordingService:
                         recording=True,
                         output_file=basename,
                         started_at=self._started_at,
+                        last_recorded_file=self._last_recorded_file,
                     ),
                     None,
                 )
             cmd = get_camera_video_command()
             if cmd is None:
                 return (
-                    RecordingState(recording=False, output_file=None, started_at=None),
+                    RecordingState(
+                        recording=False,
+                        output_file=None,
+                        started_at=None,
+                        last_recorded_file=self._last_recorded_file,
+                    ),
                     "rpicam-vid or libcamera-vid not found",
                 )
             self._recordings_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +111,12 @@ class CameraRecordingService:
             except Exception as e:
                 logger.warning("Recording start failed: %s", e)
                 return (
-                    RecordingState(recording=False, output_file=None, started_at=None),
+                    RecordingState(
+                        recording=False,
+                        output_file=None,
+                        started_at=None,
+                        last_recorded_file=self._last_recorded_file,
+                    ),
                     str(e),
                 )
             time.sleep(_LIVENESS_POLL_SEC)
@@ -110,7 +131,12 @@ class CameraRecordingService:
                 self._output_path = None
                 logger.warning("Recording start failed: %s", err_msg)
                 return (
-                    RecordingState(recording=False, output_file=None, started_at=None),
+                    RecordingState(
+                        recording=False,
+                        output_file=None,
+                        started_at=None,
+                        last_recorded_file=self._last_recorded_file,
+                    ),
                     err_msg,
                 )
             self._started_at = datetime.now(timezone.utc)
@@ -121,6 +147,7 @@ class CameraRecordingService:
                     recording=True,
                     output_file=basename,
                     started_at=self._started_at,
+                    last_recorded_file=self._last_recorded_file,
                 ),
                 None,
             )
@@ -134,7 +161,12 @@ class CameraRecordingService:
                 self._output_path = None
                 self._started_at = None
                 return (
-                    RecordingState(recording=False, output_file=None, started_at=None),
+                    RecordingState(
+                        recording=False,
+                        output_file=None,
+                        started_at=None,
+                        last_recorded_file=self._last_recorded_file,
+                    ),
                     None,
                 )
             self._process.terminate()
@@ -144,12 +176,18 @@ class CameraRecordingService:
                 self._process.kill()
                 self._process.wait()
             if basename:
+                self._last_recorded_file = basename
                 logger.info("Recording stopped: %s", basename)
             self._process = None
             self._output_path = None
             self._started_at = None
             return (
-                RecordingState(recording=False, output_file=None, started_at=None),
+                RecordingState(
+                    recording=False,
+                    output_file=None,
+                    started_at=None,
+                    last_recorded_file=self._last_recorded_file,
+                ),
                 None,
             )
 

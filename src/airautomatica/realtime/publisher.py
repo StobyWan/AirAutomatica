@@ -170,6 +170,10 @@ class DashboardPublisher:
                     health["camera_recording_mode"] = get_camera_recording_mode()
                     health["camera_recording"] = rec_state.recording
                     health["camera_recording_file"] = rec_state.output_file
+                    health["camera_recording_last_file"] = rec_state.last_recorded_file
+                    health["recordings_dir"] = (
+                        self._camera_recording_service.recordings_dir
+                    )
                     health["camera_recording_started_at"] = (
                         rec_state.started_at.isoformat()
                         if rec_state.started_at

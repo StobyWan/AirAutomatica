@@ -167,6 +167,10 @@
       </button>
     </div>
     <div id="camera-recording-status" class="mt-2 text-sm text-slate-300">—</div>
+    <div id="camera-recording-last" class="mt-2 text-sm text-slate-400 hidden"></div>
+    <div id="camera-recording-preview" class="mt-3 hidden">
+      <video id="camera-preview-video" controls class="w-full max-w-md rounded-lg bg-black" preload="metadata"></video>
+    </div>
   </div>
 
   <div class="card">
@@ -615,10 +619,29 @@
             statusEl.textContent = 'Recording: ' + (d.camera_recording_file || '—');
             startBtn.disabled = true;
             stopBtn.disabled = false;
+            document.getElementById('camera-recording-preview').classList.add('hidden');
           } else {
             statusEl.textContent = 'Not recording';
             startBtn.disabled = false;
             stopBtn.disabled = true;
+            const lastFile = d.camera_recording_last_file;
+            const lastEl = document.getElementById('camera-recording-last');
+            const previewEl = document.getElementById('camera-recording-preview');
+            const videoEl = document.getElementById('camera-preview-video');
+            if (lastFile) {
+              lastEl.classList.remove('hidden');
+              const dir = d.recordings_dir || '';
+              lastEl.innerHTML = 'Last recorded: <span class="font-mono text-cyan-400">' + lastFile + '</span>' +
+                (dir ? ' <span class="text-slate-500">(' + dir + ')</span>' : '') +
+                ' <a href="/recordings/' + encodeURIComponent(lastFile) + '" target="_blank" class="text-cyan-400 hover:text-cyan-300 underline ml-1">Preview</a>';
+              previewEl.classList.remove('hidden');
+              videoEl.src = '/recordings/' + encodeURIComponent(lastFile);
+            } else {
+              lastEl.classList.add('hidden');
+              lastEl.innerHTML = '';
+              previewEl.classList.add('hidden');
+              videoEl.src = '';
+            }
           }
         }
       }
@@ -646,12 +669,28 @@
     document.getElementById('camera-stop-btn').addEventListener('click', async () => {
       const btn = document.getElementById('camera-stop-btn');
       const statusEl = document.getElementById('camera-recording-status');
+      const lastEl = document.getElementById('camera-recording-last');
+      const previewEl = document.getElementById('camera-recording-preview');
+      const videoEl = document.getElementById('camera-preview-video');
       btn.disabled = true;
       try {
         const r = await fetch('/camera/recording/stop', { method: 'POST' });
         const d = await r.json();
         if (d.ok) {
           statusEl.textContent = 'Not recording';
+          const lastFile = d.last_recorded_file;
+          if (lastFile) {
+            lastEl.classList.remove('hidden');
+            lastEl.innerHTML = 'Last recorded: <span class="font-mono text-cyan-400">' + lastFile + '</span>' +
+              ' <a href="/recordings/' + encodeURIComponent(lastFile) + '" target="_blank" class="text-cyan-400 hover:text-cyan-300 underline ml-1">Preview</a>';
+            previewEl.classList.remove('hidden');
+            videoEl.src = '/recordings/' + encodeURIComponent(lastFile);
+          } else {
+            lastEl.classList.add('hidden');
+            lastEl.innerHTML = '';
+            previewEl.classList.add('hidden');
+            videoEl.src = '';
+          }
         } else {
           statusEl.textContent = 'Error: ' + (d.error || 'Unknown');
         }
