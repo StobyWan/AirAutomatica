@@ -42,6 +42,9 @@ pi-snapshot:
 pi-diag:
 	bash scripts/pi/quick_diag.sh
 
+pi-verify-video:
+	uv run python scripts/pi/verify_video_playback.py
+
 pi-download-deb:
 	REPO="$(REPO)" TAG="$(TAG)" bash scripts/pi/download_latest_deb.sh
 

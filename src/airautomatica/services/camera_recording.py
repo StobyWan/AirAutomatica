@@ -194,6 +194,7 @@ class CameraRecordingService:
                         "-o",
                         "-",
                     ]
+
                     self._process = subprocess.Popen(
                         cam_args,
                         stdout=subprocess.PIPE,
