@@ -59,8 +59,13 @@ else
   echo "==> Env file already exists, skipping template"
 fi
 
-# 6. Add dialout for serial access (no-op if already in group)
+# 6. Add groups for device access (no-op if already in group)
+# dialout: serial port; video: camera (/dev/media*, v4l2); render: GPU/DMA buffers (if present)
 usermod -aG dialout "$APP_USER" 2>/dev/null || true
+usermod -aG video "$APP_USER" 2>/dev/null || true
+if getent group render >/dev/null 2>&1; then
+  usermod -aG render "$APP_USER" 2>/dev/null || true
+fi
 
 # 7. Set ownership
 echo "==> Setting ownership"
@@ -76,6 +81,9 @@ systemctl enable "$SERVICE_NAME"
 
 echo ""
 echo "==> Installation complete."
+echo ""
+echo "Note: Group membership (dialout, video, render) takes effect for new processes."
+echo "      If upgrading, restart the service or reboot: sudo systemctl restart $SERVICE_NAME"
 echo ""
 echo "Next steps:"
 echo "  1. Edit config if needed: sudo nano $ENV_FILE"

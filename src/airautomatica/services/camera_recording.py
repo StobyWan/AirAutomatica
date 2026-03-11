@@ -65,6 +65,7 @@ class CameraRecordingService:
         with self._lock:
             is_alive = self._process is not None and self._process.poll() is None
             if self._process is not None and not is_alive:
+                pid = self._process.pid
                 exit_code = self._process.returncode
                 stderr = b""
                 if self._process.stderr:
@@ -80,7 +81,8 @@ class CameraRecordingService:
                 err = stderr.decode("utf-8", errors="replace").strip() or "no stderr"
                 self._last_error = f"exit_code={exit_code}: {err}"
                 logger.warning(
-                    "Recording process exited unexpectedly (exit_code=%s): %s",
+                    "Recording process exited unexpectedly pid=%s exit_code=%s: %s",
+                    pid,
                     exit_code,
                     err,
                 )
@@ -130,12 +132,14 @@ class CameraRecordingService:
             ext = "mp4" if cmd == "rpicam-vid" else "h264"
             self._output_path = self._recordings_dir / f"{ts}_cam.{ext}"
             args = [cmd, "-t", "0"]
-            if cmd == "rpicam-vid":
-                args.extend(["--codec", "libav"])
             args.extend(["-o", str(self._output_path)])
             try:
                 self._process = subprocess.Popen(args, stderr=subprocess.PIPE)
-                logger.info("Recording command launched: %s", " ".join(args))
+                logger.info(
+                    "Recording command launched pid=%s: %s",
+                    self._process.pid,
+                    " ".join(args),
+                )
             except Exception as e:
                 self._last_error = str(e)
                 logger.warning("Recording start failed: %s", e)
@@ -150,6 +154,7 @@ class CameraRecordingService:
                 )
             time.sleep(_LIVENESS_POLL_SEC)
             if self._process.poll() is not None:
+                pid = self._process.pid
                 exit_code = self._process.returncode
                 stderr = b""
                 if self._process.stderr:
@@ -170,7 +175,10 @@ class CameraRecordingService:
                 self._process = None
                 self._output_path = None
                 logger.warning(
-                    "Recording process exited early (exit_code=%s): %s", exit_code, err
+                    "Recording process exited early pid=%s exit_code=%s: %s",
+                    pid,
+                    exit_code,
+                    err,
                 )
                 return (
                     RecordingState(
