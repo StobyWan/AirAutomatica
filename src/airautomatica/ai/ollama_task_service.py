@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Union
+from typing import Any, Protocol, Union
 
 from airautomatica.ai.json_utils import extract_json
 from airautomatica.ai.models import AiResult
@@ -23,13 +23,21 @@ logger = logging.getLogger(__name__)
 OllamaTaskResult = Union[AiResult, TelemetrySummaryResult, EventClassificationResult]
 
 
+class _GenerateRawProtocol(Protocol):
+    """Protocol for objects that provide generate_raw (OllamaAiService or ScheduledOllamaExecutor)."""
+
+    async def generate_raw(
+        self, prompt: str, *, format: str | dict[str, Any] | None = None
+    ) -> str: ...
+
+
 class OllamaTaskService:
     """Orchestrates task-based Ollama inference. Mock returns stubs; ollama calls API."""
 
     def __init__(
         self,
         provider: str,
-        ollama_service: OllamaAiService | None = None,
+        ollama_service: OllamaAiService | _GenerateRawProtocol | None = None,
     ) -> None:
         self._provider = provider
         self._ollama = ollama_service

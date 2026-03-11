@@ -22,6 +22,11 @@ from airautomatica.ai import (
     OllamaAiService,
     OllamaTaskService,
 )
+from airautomatica.ai.scheduler import (
+    AiInferenceScheduler,
+    ScheduledOllamaAiService,
+    ScheduledOllamaExecutor,
+)
 from airautomatica.api.server import create_app
 from airautomatica.config import (
     get_ai_duplicate_window_sec,
@@ -118,12 +123,17 @@ def _create_telemetry_source(
     return MockTelemetry()
 
 
-def _create_base_ai_service() -> AiService:
+def _create_base_ai_service(
+    ollama_transport: OllamaAiService | None = None,
+    scheduler: AiInferenceScheduler | None = None,
+) -> AiService:
     """Create base local LLM service (mock or ollama). AI HAT is composed separately."""
     provider = get_local_llm_provider()
     if provider == "mock":
         return MockAiService()
     if provider == "ollama":
+        if ollama_transport is not None and scheduler is not None:
+            return ScheduledOllamaAiService(ollama_transport, scheduler)
         return OllamaAiService(
             base_url=get_local_llm_base_url("ollama"),
             model=get_local_llm_model("ollama"),
@@ -133,9 +143,12 @@ def _create_base_ai_service() -> AiService:
     return MockAiService()
 
 
-def _create_ai_service() -> AiService:
+def _create_ai_service(
+    ollama_transport: OllamaAiService | None = None,
+    scheduler: AiInferenceScheduler | None = None,
+) -> AiService:
     """Create composed AI service: base local LLM + optional AI HAT layer."""
-    base = _create_base_ai_service()
+    base = _create_base_ai_service(ollama_transport, scheduler)
     aihat: AiService | None = None
     if get_ai_hat_enabled():
         aihat = AiHatAiService(
@@ -192,10 +205,16 @@ async def _telemetry_loop(
             lifecycle_logger.maybe_log_transition(state)
 
 
-def _create_task_service() -> OllamaTaskService:
+def _create_task_service(
+    ollama_transport: OllamaAiService | None = None,
+    scheduler: AiInferenceScheduler | None = None,
+) -> OllamaTaskService:
     """Create OllamaTaskService for dashboard AI tasks (telemetry summary, etc.)."""
     provider = get_local_llm_provider()
     if provider == "ollama":
+        if ollama_transport is not None and scheduler is not None:
+            executor = ScheduledOllamaExecutor(ollama_transport, scheduler)
+            return OllamaTaskService(provider="ollama", ollama_service=executor)
         ollama = OllamaAiService(
             base_url=get_local_llm_base_url("ollama"),
             model=get_local_llm_model("ollama"),
@@ -209,8 +228,17 @@ def main() -> None:
     """Run API server, telemetry loop, and mission logic."""
     setup_logging()
     store = StateStore()
-    ai_service = _create_ai_service()
-    task_service = _create_task_service()
+    ollama_transport: OllamaAiService | None = None
+    scheduler: AiInferenceScheduler | None = None
+    if get_local_llm_provider() == "ollama":
+        ollama_transport = OllamaAiService(
+            base_url=get_local_llm_base_url("ollama"),
+            model=get_local_llm_model("ollama"),
+            timeout_sec=get_local_llm_timeout(),
+        )
+        scheduler = AiInferenceScheduler()
+    ai_service = _create_ai_service(ollama_transport, scheduler)
+    task_service = _create_task_service(ollama_transport, scheduler)
 
     init_db(get_sqlite_db_path())
 
@@ -282,6 +310,9 @@ def main() -> None:
                 pass
 
         server_task = asyncio.create_task(server.serve())
+        scheduler_task: asyncio.Task[None] | None = None
+        if scheduler is not None:
+            scheduler_task = asyncio.create_task(scheduler.run())
         telemetry_task = asyncio.create_task(
             _run_with_restart(
                 _telemetry_loop,
@@ -312,7 +343,10 @@ def main() -> None:
 
         _shutdown_cleanup(persistence, session_ref)
 
-        for t in (server_task, telemetry_task, mission_task, publisher_task):
+        all_tasks = [server_task, telemetry_task, mission_task, publisher_task]
+        if scheduler_task is not None:
+            all_tasks.append(scheduler_task)
+        for t in all_tasks:
             if not t.done():
                 t.cancel()
             try:
