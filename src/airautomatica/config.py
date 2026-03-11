@@ -2,6 +2,7 @@
 
 import logging
 import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -193,13 +194,14 @@ def get_sqlite_db_path() -> str:
 
 
 def get_recordings_dir() -> str:
-    """Recordings directory for camera video files. Default: ~/.airautomatica/recordings"""
-    default = os.path.expanduser("~/.airautomatica/recordings")
-    return (
+    """Recordings directory for camera video files. Default: ~/.airautomatica/recordings.
+    Always returns an absolute path (resolved, expanduser applied)."""
+    raw = (
         os.environ.get("AIRAUTOMATICA_RECORDINGS_DIR")
         or os.environ.get("RECORDINGS_DIR")
-        or default
+        or os.path.expanduser("~/.airautomatica/recordings")
     )
+    return str(Path(raw).expanduser().resolve())
 
 
 def get_camera_recording_mode() -> str:

@@ -1,5 +1,6 @@
 """FastAPI server."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -33,6 +34,8 @@ from airautomatica.settings import get_settings, save_settings
 from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -285,6 +288,12 @@ def create_app(
             raise HTTPException(400, "Invalid filename")
         path = Path(camera_recording_service.recordings_dir) / filename
         if not path.is_file():
+            logger.warning(
+                "Recording file not found: path=%s recordings_dir=%s filename=%s",
+                str(path.resolve()),
+                camera_recording_service.recordings_dir,
+                filename,
+            )
             raise HTTPException(404, "File not found")
         media_type = "video/mp4" if filename.lower().endswith(".mp4") else "video/H264"
         return FileResponse(

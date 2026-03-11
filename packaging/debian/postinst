@@ -13,7 +13,7 @@ if ! getent passwd "$APP_USER" >/dev/null 2>&1; then
 fi
 
 # Create directories
-mkdir -p "$VAR_DIR" "$ETC_DIR"
+mkdir -p "$VAR_DIR" "$ETC_DIR" "$VAR_DIR/.airautomatica/recordings"
 
 # Add groups for device access: dialout (serial), video (camera), render (GPU/DMA, if present)
 usermod -aG dialout "$APP_USER" 2>/dev/null || true

@@ -36,6 +36,12 @@ Use the env file for deployment configuration; settings.json remains for dashboa
 | `/var/lib/airautomatica/.airautomatica/recordings/` | Camera recordings |
 | `/etc/systemd/system/airautomatica.service` | systemd unit |
 
+### Recordings Path
+
+Camera recordings are stored in `/var/lib/airautomatica/.airautomatica/recordings/` by default. The postinst script creates this directory with correct ownership. The path is configured via `AIRAUTOMATICA_RECORDINGS_DIR` in `/etc/airautomatica/airautomatica.env`.
+
+**For packaged installs, use an absolute path.** Relative paths resolve relative to the service `WorkingDirectory` (`/opt/airautomatica`) and can cause "file not found" when the app serves recordings. The env template sets `AIRAUTOMATICA_RECORDINGS_DIR=/var/lib/airautomatica/.airautomatica/recordings` explicitly.
+
 ## Install with Script
 
 From the repo root:

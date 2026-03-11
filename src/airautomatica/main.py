@@ -7,6 +7,7 @@ load_settings()
 import asyncio
 import atexit
 import logging
+import os
 import signal
 import sys
 from collections.abc import Coroutine
@@ -282,6 +283,13 @@ def main() -> None:
     lifecycle_logger = TelemetryLifecycleLogger(persistence, session_id)
 
     camera_recording_service = CameraRecordingService()
+    logger.info(
+        "Recordings path: dir=%s cwd=%s HOME=%s AIRAUTOMATICA_RECORDINGS_DIR=%s",
+        camera_recording_service.recordings_dir,
+        os.getcwd(),
+        os.environ.get("HOME", "<unset>"),
+        "set" if os.environ.get("AIRAUTOMATICA_RECORDINGS_DIR") else "unset",
+    )
     recording_auto_controller = RecordingAutoController(
         camera_recording_service,
         get_mode_fn=get_camera_recording_mode,
