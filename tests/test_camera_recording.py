@@ -30,10 +30,13 @@ def test_recording_state_idle(recordings_dir: str) -> None:
 def test_start_recording_when_idle(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:
-    """Start returns recording state when idle."""
+    """Start returns recording state when idle (libcamera-vid, .h264)."""
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
-    with patch("shutil.which", return_value="/usr/bin/libcamera-vid"):
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
         with patch(
             "airautomatica.services.camera_recording.subprocess.Popen",
             return_value=mock_proc,
@@ -55,7 +58,10 @@ def test_start_recording_when_already_recording(
     """Start when already recording returns same state, no duplicate process."""
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
-    with patch("shutil.which", return_value="/usr/bin/libcamera-vid"):
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
         with patch(
             "airautomatica.services.camera_recording.subprocess.Popen",
             return_value=mock_proc,
@@ -78,7 +84,10 @@ def test_stop_recording_when_recording(
     """Stop when recording returns idle state."""
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
-    with patch("shutil.which", return_value="/usr/bin/libcamera-vid"):
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
         with patch(
             "airautomatica.services.camera_recording.subprocess.Popen",
             return_value=mock_proc,
@@ -101,14 +110,17 @@ def test_stop_recording_when_idle(recordings_dir: str) -> None:
     assert state.recording is False
 
 
-def test_libcamera_vid_missing(
+def test_camera_command_missing(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:
-    """Start returns error when libcamera-vid not found."""
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    """Start returns error when neither rpicam-vid nor libcamera-vid found."""
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: None,
+    )
     svc = CameraRecordingService(recordings_dir=recordings_dir)
     state, err = svc.start_recording()
-    assert err == "libcamera-vid not found"
+    assert "rpicam-vid or libcamera-vid" in (err or "")
     assert state.recording is False
 
 
@@ -121,7 +133,10 @@ def test_start_recording_process_dies_immediately(
     mock_proc.poll.return_value = 1  # Process died immediately (exited)
     mock_proc.stderr = MagicMock()
     mock_proc.stderr.read.return_value = b"camera not found"
-    with patch("shutil.which", return_value="/usr/bin/libcamera-vid"):
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
         with patch(
             "airautomatica.services.camera_recording.subprocess.Popen",
             return_value=mock_proc,
@@ -134,14 +149,88 @@ def test_start_recording_process_dies_immediately(
     assert state.recording is False
 
 
-def test_is_available(monkeypatch: pytest.MonkeyPatch, recordings_dir: str) -> None:
-    """is_available True when which finds libcamera-vid."""
-    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/libcamera-vid")
+def test_is_available_rpicam_vid(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """is_available True when rpicam-vid exists."""
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: "rpicam-vid",
+    )
     svc = CameraRecordingService(recordings_dir=recordings_dir)
     assert svc.is_available() is True
-    monkeypatch.setattr("shutil.which", lambda _: None)
-    svc2 = CameraRecordingService(recordings_dir=recordings_dir)
-    assert svc2.is_available() is False
+
+
+def test_is_available_libcamera_vid(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """is_available True when libcamera-vid exists."""
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: "libcamera-vid",
+    )
+    svc = CameraRecordingService(recordings_dir=recordings_dir)
+    assert svc.is_available() is True
+
+
+def test_is_available_neither(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """is_available False when neither command exists."""
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: None,
+    )
+    svc = CameraRecordingService(recordings_dir=recordings_dir)
+    assert svc.is_available() is False
+
+
+def test_start_recording_uses_rpicam_vid_mp4(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When rpicam-vid is used, output is .mp4 and Popen gets rpicam-vid."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ) as mock_popen:
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                state, err = svc.start_recording()
+    assert err is None
+    assert state.recording is True
+    assert state.output_file is not None
+    assert state.output_file.endswith(".mp4")
+    call_args = mock_popen.call_args[0][0]
+    assert call_args[0] == "rpicam-vid"
+
+
+def test_start_recording_logs_command(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Recording start logs which command is used."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("airautomatica.services.camera_recording.logger") as mock_logger:
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc.start_recording()
+    mock_logger.info.assert_called_once()
+    call_args = mock_logger.info.call_args[0]
+    assert "Recording started" in str(call_args) and "rpicam-vid" in str(call_args)
 
 
 def test_manual_mode_does_not_auto_start(
@@ -192,7 +281,10 @@ def test_auto_mode_starts_on_armed(
 
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
-    with patch("shutil.which", return_value="/usr/bin/libcamera-vid"):
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
         with patch(
             "airautomatica.services.camera_recording.subprocess.Popen",
             return_value=mock_proc,
@@ -236,7 +328,10 @@ def test_auto_mode_stops_on_disarmed(
 
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
-    with patch("shutil.which", return_value="/usr/bin/libcamera-vid"):
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
         with patch(
             "airautomatica.services.camera_recording.subprocess.Popen",
             return_value=mock_proc,
@@ -299,7 +394,10 @@ def test_auto_mode_no_duplicate_starts(
 
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
-    with patch("shutil.which", return_value="/usr/bin/libcamera-vid"):
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
         with patch(
             "airautomatica.services.camera_recording.subprocess.Popen",
             return_value=mock_proc,

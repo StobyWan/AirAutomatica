@@ -1,4 +1,4 @@
-"""Camera recording service using libcamera-vid. Supports manual and auto (armed-based) recording."""
+"""Camera recording service using rpicam-vid (modern Pi OS) or libcamera-vid (legacy). Supports manual and auto (armed-based) recording."""
 
 import logging
 import shutil
@@ -17,9 +17,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_CAMERA_VID_COMMANDS = ("rpicam-vid", "libcamera-vid")
 MAV_MODE_FLAG_ARMED = 128
 _TERMINATE_WAIT_SEC = 2.5
 _LIVENESS_POLL_SEC = 0.2
+
+
+def get_camera_video_command() -> Optional[str]:
+    """Return first available camera video command, or None. Prefers rpicam-vid (modern Pi OS)."""
+    for cmd in _CAMERA_VID_COMMANDS:
+        if shutil.which(cmd) is not None:
+            return cmd
+    return None
 
 
 @dataclass
@@ -32,7 +41,7 @@ class RecordingState:
 
 
 class CameraRecordingService:
-    """Manages libcamera-vid subprocess for video recording."""
+    """Manages rpicam-vid or libcamera-vid subprocess for video recording."""
 
     def __init__(self, recordings_dir: Optional[str] = None) -> None:
         self._recordings_dir = Path(recordings_dir or get_recordings_dir())
@@ -52,8 +61,8 @@ class CameraRecordingService:
             )
 
     def is_available(self) -> bool:
-        """True if libcamera-vid is present and service is usable."""
-        return shutil.which("libcamera-vid") is not None
+        """True if rpicam-vid or libcamera-vid is present and service is usable."""
+        return get_camera_video_command() is not None
 
     def start_recording(self) -> tuple[RecordingState, Optional[str]]:
         """Start recording. Returns (state, error_message). Error is None on success."""
@@ -68,17 +77,19 @@ class CameraRecordingService:
                     ),
                     None,
                 )
-            if not self.is_available():
+            cmd = get_camera_video_command()
+            if cmd is None:
                 return (
                     RecordingState(recording=False, output_file=None, started_at=None),
-                    "libcamera-vid not found",
+                    "rpicam-vid or libcamera-vid not found",
                 )
             self._recordings_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
-            self._output_path = self._recordings_dir / f"{ts}_cam.h264"
+            ext = "mp4" if cmd == "rpicam-vid" else "h264"
+            self._output_path = self._recordings_dir / f"{ts}_cam.{ext}"
             try:
                 self._process = subprocess.Popen(
-                    ["libcamera-vid", "-t", "0", "-o", str(self._output_path)],
+                    [cmd, "-t", "0", "-o", str(self._output_path)],
                     stderr=subprocess.PIPE,
                 )
             except Exception as e:
@@ -104,7 +115,7 @@ class CameraRecordingService:
                 )
             self._started_at = datetime.now(timezone.utc)
             basename = self._output_path.name
-            logger.info("Recording started: %s", basename)
+            logger.info("Recording started (%s): %s", cmd, basename)
             return (
                 RecordingState(
                     recording=True,
