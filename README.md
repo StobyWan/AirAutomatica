@@ -116,6 +116,8 @@ export SERIAL_BAUD=921600        # match FC
 python -m airautomatica.main
 ```
 
+See [docs/hardware_hookup.md](docs/hardware_hookup.md) for camera, serial, and AI HAT expectations.
+
 The API server runs at `http://localhost:8000` by default. Ctrl+C and SIGTERM trigger graceful shutdown (session ended, loops stopped). See [docs/persistence.md](docs/persistence.md#shutdown) for details.
 
 ## Local Database

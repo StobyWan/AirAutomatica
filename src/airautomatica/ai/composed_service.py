@@ -1,8 +1,9 @@
 """Composed AI service: local LLM provider + optional AI HAT layer.
 
-AI HAT and local LLM are complementary: local LLM handles inference/text reasoning,
-AI HAT handles hardware-accelerated vision. When both are enabled, AI HAT takes
-priority when it produces meaningful output; otherwise the local LLM result is used.
+Ollama = text/reasoning (state-only). AI HAT = vision/detection (future: camera frames).
+AI HAT and local LLM are complementary. ComposedAiService uses AI HAT when meaningful
+else base. When both enabled, AI HAT takes priority when it produces meaningful output;
+otherwise the local LLM result is used.
 """
 
 import logging

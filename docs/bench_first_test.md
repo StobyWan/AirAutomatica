@@ -1,5 +1,7 @@
 # First Bench Test: Pi 5 + CP2102 + Matek F405-WING V2
 
+**Upcoming: Matek F405-WING V2.** Use TELEM1 or TELEM2 with `SERIALx_PROTOCOL=2`, `SERIALx_BAUD=921`. FC UART TX→CP2102 RX, RX→CP2102 TX, GND→GND.
+
 ## 1. Confirm device
 
 - [ ] `ls /dev/ttyUSB*` shows device (e.g. /dev/ttyUSB0) for CP2102
