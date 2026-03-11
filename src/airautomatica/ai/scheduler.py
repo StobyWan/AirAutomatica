@@ -138,6 +138,7 @@ class ScheduledOllamaExecutor:
     async def generate_raw(
         self, prompt: str, *, format: str | dict[str, Any] | None = None
     ) -> str:
+        logger.debug("Ollama request via ScheduledOllamaExecutor (scheduled)")
         return await self._scheduler.submit(
             lambda: self._transport.generate_raw(prompt, format=format),
             user_triggered=True,
