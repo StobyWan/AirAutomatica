@@ -43,6 +43,7 @@ class AircraftState:
     telemetry_status: TelemetryStatus = "connected"
     reconnect_count: int = 0
     last_disconnect_reason: Optional[str] = None
+    armed: bool = False
 
     def to_dict(self) -> dict:
         """Serialize for API response. NaN values become None for JSON."""
@@ -69,4 +70,5 @@ class AircraftState:
             "groundspeed_m_s": nan_to_none(self.groundspeed_m_s),
             "airspeed_m_s": nan_to_none(self.airspeed_m_s),
             "timestamp": self.timestamp.isoformat(),
+            "armed": self.armed,
         }

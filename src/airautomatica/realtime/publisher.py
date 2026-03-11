@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import socketio
 
 from airautomatica.ai.ollama_tasks import get_telemetry_summary_counts
-from airautomatica.config import get_sqlite_db_path
+from airautomatica.config import get_camera_recording_mode, get_sqlite_db_path
 from airautomatica.db.base import get_engine
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.mission_logic import get_perception_counts
@@ -16,6 +16,7 @@ from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 
 if TYPE_CHECKING:
+    from airautomatica.services.camera_recording import CameraRecordingService
     from airautomatica.services.persistence import PersistenceService
     from airautomatica.services.state_store import StateStore
 
@@ -114,6 +115,7 @@ class DashboardPublisher:
         telemetry_backend: str,
         sio: socketio.AsyncServer,
         interval_sec: float = 1.0,
+        camera_recording_service: Optional["CameraRecordingService"] = None,
     ) -> None:
         self._store = store
         self._persistence = persistence
@@ -122,6 +124,7 @@ class DashboardPublisher:
         self._telemetry_backend = telemetry_backend
         self._sio = sio
         self._interval_sec = interval_sec
+        self._camera_recording_service = camera_recording_service
         self._heartbeat_buffer: deque[dict] = deque(maxlen=_HEARTBEAT_BUFFER_MAX)
         self._loop_count = 0
 
@@ -159,6 +162,19 @@ class DashboardPublisher:
                     last_error,
                     capabilities=caps_dict,
                 )
+                if self._camera_recording_service is not None:
+                    rec_state = self._camera_recording_service.get_recording_state()
+                    health["camera_recording_available"] = (
+                        self._camera_recording_service.is_available()
+                    )
+                    health["camera_recording_mode"] = get_camera_recording_mode()
+                    health["camera_recording"] = rec_state.recording
+                    health["camera_recording_file"] = rec_state.output_file
+                    health["camera_recording_started_at"] = (
+                        rec_state.started_at.isoformat()
+                        if rec_state.started_at
+                        else None
+                    )
                 await self._sio.emit("health_update", health)
 
                 state_payload = _build_state_payload(state)

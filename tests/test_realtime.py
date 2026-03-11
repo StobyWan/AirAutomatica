@@ -1,11 +1,14 @@
 """Tests for realtime payload builders and publisher."""
 
+import asyncio
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from airautomatica.models.state import AircraftState
 from airautomatica.realtime.publisher import (
+    DashboardPublisher,
     _build_detections_payload,
     _build_health_payload,
     _build_sessions_payload,
@@ -188,3 +191,47 @@ def test_health_payload_includes_capabilities_with_firmware_and_profile() -> Non
     assert "telemetry_summary_counts" in payload
     assert "perception_acceptance_rate" in payload
     assert "telemetry_meaningful_rate" in payload
+
+
+@pytest.mark.asyncio
+async def test_dashboard_publisher_emits_camera_fields_when_service_provided(
+    tmp_path,
+) -> None:
+    """When camera_recording_service is provided, health_update includes camera fields."""
+    from airautomatica.services.camera_recording import CameraRecordingService
+    from airautomatica.services.state_store import StateStore
+
+    store = StateStore()
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    emitted: list[tuple[str, dict]] = []
+
+    async def capture_emit(event: str, data: dict) -> None:
+        emitted.append((event, data))
+
+    sio = MagicMock()
+    sio.emit = AsyncMock(side_effect=capture_emit)
+    publisher = DashboardPublisher(
+        store,
+        persistence=None,
+        session_id=None,
+        ai_mode="mock",
+        telemetry_backend="mock",
+        sio=sio,
+        interval_sec=999.0,
+        camera_recording_service=camera_svc,
+    )
+    task = asyncio.create_task(publisher.run())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    health_emits = [e for e in emitted if e[0] == "health_update"]
+    assert len(health_emits) >= 1
+    health = health_emits[0][1]
+    assert "camera_recording_available" in health
+    assert "camera_recording_mode" in health
+    assert "camera_recording" in health
+    assert "camera_recording_file" in health
+    assert "camera_recording_started_at" in health

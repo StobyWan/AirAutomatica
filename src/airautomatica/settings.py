@@ -26,6 +26,7 @@ CANONICAL_SETTINGS_KEYS = [
     "AI_MIN_CONFIDENCE",
     "AI_DUPLICATE_WINDOW_SEC",
     "AI_SCHEDULER_COOLDOWN_SEC",
+    "CAMERA_RECORDING_MODE",
 ]
 
 # Legacy keys accepted when loading from file or in POST body; never persisted.
@@ -108,6 +109,7 @@ def get_settings() -> dict:
         "AI_MIN_CONFIDENCE": "0.5",
         "AI_DUPLICATE_WINDOW_SEC": "30",
         "AI_SCHEDULER_COOLDOWN_SEC": "8",
+        "CAMERA_RECORDING_MODE": "manual",
     }
     result: dict[str, str] = {}
     for k in CANONICAL_SETTINGS_KEYS:

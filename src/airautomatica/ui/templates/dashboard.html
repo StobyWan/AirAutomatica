@@ -156,6 +156,20 @@
   </div>
 
   <div class="card">
+    <h2>Camera Recording</h2>
+    <p class="text-xs text-slate-400 mb-2">Pi camera recording (libcamera-vid). Mode: <span id="camera-recording-mode" class="font-mono">—</span></p>
+    <div class="flex flex-wrap gap-2 items-center">
+      <button type="button" id="camera-start-btn" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        Start Recording
+      </button>
+      <button type="button" id="camera-stop-btn" class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        Stop Recording
+      </button>
+    </div>
+    <div id="camera-recording-status" class="mt-2 text-sm text-slate-300">—</div>
+  </div>
+
+  <div class="card">
     <h2>Aircraft State</h2>
     <div class="flex flex-col items-start gap-4">
       <div class="flex flex-col items-center gap-1">
@@ -270,6 +284,19 @@
       </div>
 
       <div class="settings-section">
+        <h3>Camera Recording</h3>
+        <div class="settings-field">
+          <label for="CAMERA_RECORDING_MODE">Recording mode</label>
+          <select id="CAMERA_RECORDING_MODE" name="CAMERA_RECORDING_MODE">
+            <option value="off">off</option>
+            <option value="manual">manual</option>
+            <option value="auto">auto</option>
+          </select>
+          <span class="text-xs text-slate-500 mt-1 block">off: disabled. manual: API/UI only. auto: start on armed, stop on disarmed.</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h3>AI HAT</h3>
         <div class="settings-field">
           <label class="flex items-center gap-2 cursor-pointer">
@@ -310,7 +337,7 @@
   </div>
 
   <script>
-    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','CAMERA_RECORDING_MODE','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
 
     function updateProviderVisibility() {
       const p = document.getElementById('LOCAL_LLM_PROVIDER').value;
@@ -565,6 +592,71 @@
         linkEl.href = '/dashboard/sessions/' + sid;
       } else {
         btnWrap.classList.add('hidden');
+      }
+      const modeEl = document.getElementById('camera-recording-mode');
+      const statusEl = document.getElementById('camera-recording-status');
+      const startBtn = document.getElementById('camera-start-btn');
+      const stopBtn = document.getElementById('camera-stop-btn');
+      if (modeEl && statusEl && startBtn && stopBtn && d.camera_recording_mode !== undefined) {
+        modeEl.textContent = d.camera_recording_mode || '—';
+        const available = d.camera_recording_available === true;
+        const recording = d.camera_recording === true;
+        const mode = d.camera_recording_mode || 'manual';
+        if (!available) {
+          statusEl.textContent = 'Recording not available (libcamera-vid not found)';
+          startBtn.disabled = true;
+          stopBtn.disabled = true;
+        } else if (mode === 'off') {
+          statusEl.textContent = 'Recording disabled';
+          startBtn.disabled = true;
+          stopBtn.disabled = !recording;
+        } else {
+          if (recording) {
+            statusEl.textContent = 'Recording: ' + (d.camera_recording_file || '—');
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+          } else {
+            statusEl.textContent = 'Not recording';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+          }
+        }
+      }
+    });
+
+    document.getElementById('camera-start-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('camera-start-btn');
+      const statusEl = document.getElementById('camera-recording-status');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/camera/recording/start', { method: 'POST' });
+        const d = await r.json();
+        if (d.ok) {
+          statusEl.textContent = 'Recording: ' + (d.output_file || '—');
+        } else {
+          statusEl.textContent = 'Error: ' + (d.error || 'Unknown');
+          btn.disabled = false;
+        }
+      } catch (e) {
+        statusEl.textContent = 'Request failed';
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('camera-stop-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('camera-stop-btn');
+      const statusEl = document.getElementById('camera-recording-status');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/camera/recording/stop', { method: 'POST' });
+        const d = await r.json();
+        if (d.ok) {
+          statusEl.textContent = 'Not recording';
+        } else {
+          statusEl.textContent = 'Error: ' + (d.error || 'Unknown');
+        }
+      } catch (e) {
+        statusEl.textContent = 'Request failed';
       }
     });
 

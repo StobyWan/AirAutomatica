@@ -36,6 +36,7 @@ from airautomatica.config import (
     get_aihat_model_name,
     get_api_host,
     get_api_port,
+    get_camera_recording_mode,
     get_effective_ai_backend,
     get_local_llm_base_url,
     get_local_llm_model,
@@ -49,6 +50,10 @@ from airautomatica.config import (
 from airautomatica.db import init_db
 from airautomatica.logging_config import setup_logging
 from airautomatica.realtime import DashboardPublisher, sio, wrap_app
+from airautomatica.services.camera_recording import (
+    CameraRecordingService,
+    RecordingAutoController,
+)
 from airautomatica.services.mission_logic import MissionLogic
 from airautomatica.services.persistence import (
     PathRecorder,
@@ -193,6 +198,7 @@ async def _telemetry_loop(
     sampler: TelemetrySampler | None = None,
     path_recorder: PathRecorder | None = None,
     lifecycle_logger: TelemetryLifecycleLogger | None = None,
+    recording_auto_controller: RecordingAutoController | None = None,
 ) -> None:
     """Consume telemetry stream and update store."""
     async for state in source.stream():
@@ -203,6 +209,8 @@ async def _telemetry_loop(
             path_recorder.maybe_record(state)
         if lifecycle_logger is not None:
             lifecycle_logger.maybe_log_transition(state)
+        if recording_auto_controller is not None:
+            recording_auto_controller.maybe_auto_record(state)
 
 
 def _create_task_service(
@@ -273,6 +281,12 @@ def main() -> None:
     path_recorder = PathRecorder(persistence, session_id, min_distance_m=5.0)
     lifecycle_logger = TelemetryLifecycleLogger(persistence, session_id)
 
+    camera_recording_service = CameraRecordingService()
+    recording_auto_controller = RecordingAutoController(
+        camera_recording_service,
+        get_mode_fn=get_camera_recording_mode,
+    )
+
     def _end_session() -> None:
         try:
             _shutdown_cleanup(persistence, session_ref, log_shutdown=False)
@@ -286,6 +300,7 @@ def main() -> None:
         persistence=persistence,
         session_id=session_id,
         task_service=task_service,
+        camera_recording_service=camera_recording_service,
     )
     asgi_app = wrap_app(app)
     host = get_api_host()
@@ -299,6 +314,7 @@ def main() -> None:
         get_telemetry_backend(),
         sio,
         interval_sec=1.0,
+        camera_recording_service=camera_recording_service,
     )
 
     config = uvicorn.Config(asgi_app, host=host, port=port, log_level="info")
@@ -337,6 +353,7 @@ def main() -> None:
                 sampler,
                 path_recorder,
                 lifecycle_logger,
+                recording_auto_controller,
                 name="telemetry",
             )
         )
@@ -358,6 +375,7 @@ def main() -> None:
                 pass
 
         _shutdown_cleanup(persistence, session_ref)
+        camera_recording_service.stop_and_cleanup()
 
         all_tasks = [server_task, telemetry_task, mission_task, publisher_task]
         if scheduler_task is not None:
