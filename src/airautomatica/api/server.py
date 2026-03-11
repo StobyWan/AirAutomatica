@@ -3,10 +3,11 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from fastapi import Body, FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import Body, FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
 
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
@@ -91,6 +92,8 @@ def create_app(
             health_data["camera_recording_mode"] = get_camera_recording_mode()
             health_data["camera_recording"] = rec_state.recording
             health_data["camera_recording_file"] = rec_state.output_file
+            health_data["camera_recording_last_file"] = rec_state.last_recorded_file
+            health_data["recordings_dir"] = camera_recording_service.recordings_dir
             health_data["camera_recording_started_at"] = (
                 rec_state.started_at.isoformat() if rec_state.started_at else None
             )
@@ -269,8 +272,22 @@ def create_app(
             "ok": True,
             "recording": state.recording,
             "output_file": state.output_file,
+            "last_recorded_file": state.last_recorded_file,
             "started_at": state.started_at.isoformat() if state.started_at else None,
         }
+
+    @app.get("/recordings/{filename}")
+    def get_recording_file(filename: str) -> FileResponse:
+        """Serve a recording file for preview or download. Filename must be a basename (no path traversal)."""
+        if camera_recording_service is None:
+            raise HTTPException(503, "Camera recording service not available")
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(400, "Invalid filename")
+        path = Path(camera_recording_service.recordings_dir) / filename
+        if not path.is_file():
+            raise HTTPException(404, "File not found")
+        media_type = "video/mp4" if filename.lower().endswith(".mp4") else "video/mpeg"
+        return FileResponse(path, media_type=media_type, filename=filename)
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:
