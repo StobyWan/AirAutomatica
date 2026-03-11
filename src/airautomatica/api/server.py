@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 
 from airautomatica.ai.ollama_task_service import OllamaTaskService
@@ -26,9 +26,12 @@ from airautomatica.config import (
 from airautomatica.db.base import get_engine
 from airautomatica.logging_config import setup_logging
 from airautomatica.models.state import AircraftState, nan_to_none
+from airautomatica.services.camera_ready_state import get as get_camera_ready
+from airautomatica.services.camera_ready_state import set_ready as set_camera_ready
 from airautomatica.services.camera_recording import CameraRecordingService
 from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.services.persistence import PersistenceService
+from airautomatica.services.recordings_service import RecordingsService
 from airautomatica.services.state_store import StateStore
 from airautomatica.settings import get_settings, save_settings
 from airautomatica.system.observability import get_ai_observability_rates
@@ -87,6 +90,7 @@ def create_app(
         )
         health_data["perception_acceptance_rate"] = rates["perception_acceptance_rate"]
         health_data["telemetry_meaningful_rate"] = rates["telemetry_meaningful_rate"]
+        health_data["camera_ready"] = get_camera_ready()
         if camera_recording_service is not None:
             rec_state = camera_recording_service.get_recording_state()
             health_data["camera_recording_available"] = (
@@ -246,6 +250,13 @@ def create_app(
         save_settings(updates)
         return {"ok": True, "message": "Settings saved. Restart the app to apply."}
 
+    @app.post("/camera/ready")
+    def post_camera_ready(body: dict = Body(...)) -> dict:
+        """Set camera ready state. Body: {ready: true|false}. Independent of aircraft armed."""
+        ready = body.get("ready", False)
+        set_camera_ready(bool(ready))
+        return {"ok": True, "ready": get_camera_ready()}
+
     @app.post("/camera/recording/start")
     def post_camera_recording_start() -> dict:
         """Start camera recording. Rejected when mode=off."""
@@ -278,6 +289,70 @@ def create_app(
             "last_recorded_file": state.last_recorded_file,
             "started_at": state.started_at.isoformat() if state.started_at else None,
         }
+
+    recordings_service: RecordingsService | None = None
+    if camera_recording_service is not None:
+        recordings_service = RecordingsService(
+            recordings_dir=camera_recording_service.recordings_dir,
+            persistence=persistence,
+        )
+
+    @app.get("/recordings")
+    def get_recordings(
+        session_id_query: int | None = Query(None, alias="session_id"),
+    ) -> dict:
+        """List recordings. Optional session_id query param filters by session (time-based)."""
+        if recordings_service is None:
+            return {"recordings": [], "recordings_dir": None}
+        sid = session_id_query
+        recordings = recordings_service.get_recordings(session_id=sid)
+        recordings_dir = (
+            camera_recording_service.recordings_dir
+            if camera_recording_service
+            else None
+        )
+        return {
+            "recordings": [
+                {
+                    "filename": r.filename,
+                    "timestamp": r.timestamp_iso,
+                    "size_bytes": r.size_bytes,
+                    "duration_sec": r.duration_sec,
+                }
+                for r in recordings
+            ],
+            "recordings_dir": recordings_dir,
+        }
+
+    @app.get("/sessions/{sid:int}/recordings")
+    def get_session_recordings(sid: int) -> dict:
+        """Return recordings for a session (time-based association)."""
+        if recordings_service is None:
+            return {"recordings": [], "session_id": sid}
+        recordings = recordings_service.get_recordings(session_id=sid)
+        return {
+            "recordings": [
+                {
+                    "filename": r.filename,
+                    "timestamp": r.timestamp_iso,
+                    "size_bytes": r.size_bytes,
+                    "duration_sec": r.duration_sec,
+                }
+                for r in recordings
+            ],
+            "session_id": sid,
+        }
+
+    @app.delete("/recordings/{filename}")
+    def delete_recording(filename: str) -> dict:
+        """Delete a recording by basename. Path traversal protected."""
+        if recordings_service is None:
+            raise HTTPException(503, "Recordings service not available")
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(400, "Invalid filename")
+        if not recordings_service.delete_recording(filename):
+            raise HTTPException(404, "File not found or delete failed")
+        return {"ok": True}
 
     @app.get("/recordings/{filename}")
     def get_recording_file(filename: str) -> FileResponse:

@@ -11,6 +11,7 @@ from airautomatica.ai.ollama_tasks import get_telemetry_summary_counts
 from airautomatica.config import get_camera_recording_mode, get_sqlite_db_path
 from airautomatica.db.base import get_engine
 from airautomatica.models.state import AircraftState, nan_to_none
+from airautomatica.services.camera_ready_state import get as get_camera_ready
 from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
@@ -162,6 +163,7 @@ class DashboardPublisher:
                     last_error,
                     capabilities=caps_dict,
                 )
+                health["camera_ready"] = get_camera_ready()
                 if self._camera_recording_service is not None:
                     rec_state = self._camera_recording_service.get_recording_state()
                     health["camera_recording_available"] = (

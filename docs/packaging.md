@@ -161,6 +161,6 @@ sudo systemctl restart airautomatica
 ## Caveats
 
 - **Serial port**: User `airautomatica` is in the `dialout` group for `/dev/ttyUSB0` access.
-- **Camera recording**: Requires `rpicam-vid` (modern Raspberry Pi OS) or `libcamera-vid` (legacy rpicam-apps), and ffmpeg. The full `rpicam-apps` package (not lite) is required for libav/mpegts piping. The .deb lists ffmpeg as a dependency. The service unit sets `PATH` and `SupplementaryGroups=video dialout` so the process has camera and serial device access. Without `SupplementaryGroups`, systemd may not pass the user's groups to child processes. **Restart the service or reboot** after install/upgrade.
+- **Camera recording**: Requires `rpicam-vid` (modern Raspberry Pi OS) or `libcamera-vid` (legacy rpicam-apps), and ffmpeg. The full `rpicam-apps` package (not lite) is required for libav/mpegts piping. The .deb lists ffmpeg as a dependency. The service unit sets `PATH` and `SupplementaryGroups=video dialout` so the process has camera and serial device access. Without `SupplementaryGroups`, systemd may not pass the user's groups to child processes. In auto mode, a disarm debounce (default 2.5s) reduces false stops from telemetry jitter or brief disconnects; tune via `CAMERA_RECORDING_DISARM_DEBOUNCE_SEC`. **Restart the service or reboot** after install/upgrade.
 - **Python 3.12**: Raspberry Pi OS Bookworm ships Python 3.11. Use Trixie, or install python3.12 from testing/backports.
 - **Ollama**: For system service, Ollama must run as a separate service reachable at `LOCAL_LLM_BASE_URL`.
