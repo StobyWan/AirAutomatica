@@ -64,12 +64,12 @@ def test_dashboard_settings_uses_canonical_keys(client: TestClient) -> None:
 
 
 def test_dashboard_includes_camera_recording_controls(client: TestClient) -> None:
-    """Dashboard HTML includes Video tab with camera controls (start/stop, state badge)."""
+    """Dashboard HTML includes camera controls on Live tab (start/stop, state badge)."""
     r = client.get("/dashboard")
     assert r.status_code == 200
     html = r.text
     assert "camera-start-btn" in html
     assert "camera-stop-btn" in html
     assert "video-state-badge" in html
-    assert "Video" in html
     assert "Live Camera Controls" in html or "Camera Ready" in html
+    assert "Recordings for Current Session" in html

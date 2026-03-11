@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 _FILENAME_PATTERN = re.compile(
     r"^(\d{4}-\d{2}-\d{2})_(\d{6})_cam\.(mp4|h264)$", re.IGNORECASE
 )
+_FALLBACK_LIMIT = 5
 
 
 @dataclass
@@ -29,8 +30,21 @@ class RecordingInfo:
     duration_sec: Optional[float]
 
 
+@dataclass
+class GetRecordingsResult:
+    """Result of get_recordings with session association metadata."""
+
+    session_id: Optional[int]
+    session_resolved: bool
+    fallback_used: bool
+    count: int
+    recordings: list[RecordingInfo]
+    pre_filter_count: int
+    post_filter_count: int
+
+
 def _parse_filename_timestamp(filename: str) -> Optional[datetime]:
-    """Parse YYYY-MM-DD_HHMMSS from filename. Returns None if invalid."""
+    """Parse YYYY-MM-DD_HHMMSS from filename. Returns UTC-aware datetime."""
     m = _FILENAME_PATTERN.match(filename)
     if not m:
         return None
@@ -40,6 +54,15 @@ def _parse_filename_timestamp(filename: str) -> Optional[datetime]:
         return datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc)
     except (ValueError, IndexError):
         return None
+
+
+def _to_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalize datetime to UTC. Naive datetimes assumed to be UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def _get_duration_sec(path: Path) -> Optional[float]:
@@ -91,12 +114,31 @@ class RecordingsService:
     def get_recordings(
         self,
         session_id: Optional[int] = None,
-    ) -> list[RecordingInfo]:
-        """List recordings. When session_id given, filter by time overlap with session."""
-        if not self._dir.is_dir():
-            return []
+        allow_fallback: bool = False,
+    ) -> GetRecordingsResult:
+        """
+        List recordings. When session_id given, filter by time overlap with session.
 
-        recordings: list[RecordingInfo] = []
+        Matching rule (all UTC):
+        - recording.timestamp >= session.started_at
+        - recording.timestamp <= session.ended_at, or <= now if session active
+
+        When session_id provided but session not resolved:
+        - session_resolved=False, recordings=[]
+        - If allow_fallback=True, fallback_recordings contains recent N from all files
+        """
+        if not self._dir.is_dir():
+            return GetRecordingsResult(
+                session_id=session_id,
+                session_resolved=session_id is None,
+                fallback_used=False,
+                count=0,
+                recordings=[],
+                pre_filter_count=0,
+                post_filter_count=0,
+            )
+
+        all_candidates: list[RecordingInfo] = []
         for p in self._dir.iterdir():
             if not p.is_file():
                 continue
@@ -108,21 +150,13 @@ class RecordingsService:
             if ts is None:
                 continue
 
-            if session_id is not None and self._persistence is not None:
-                start_dt, end_dt = self._get_session_time_range(session_id)
-                if start_dt is None:
-                    continue
-                end = end_dt or datetime.now(timezone.utc)
-                if ts < start_dt or ts > end:
-                    continue
-
             try:
                 size = p.stat().st_size
             except OSError:
                 size = None
             duration = _get_duration_sec(p)
 
-            recordings.append(
+            all_candidates.append(
                 RecordingInfo(
                     filename=name,
                     timestamp_iso=ts.isoformat(),
@@ -131,8 +165,71 @@ class RecordingsService:
                 )
             )
 
-        recordings.sort(key=lambda r: r.timestamp_iso, reverse=True)
-        return recordings
+        all_candidates.sort(key=lambda r: r.timestamp_iso, reverse=True)
+        pre_filter_count = len(all_candidates)
+
+        if session_id is None:
+            return GetRecordingsResult(
+                session_id=None,
+                session_resolved=True,
+                fallback_used=False,
+                count=pre_filter_count,
+                recordings=all_candidates,
+                pre_filter_count=pre_filter_count,
+                post_filter_count=pre_filter_count,
+            )
+
+        start_dt, end_dt = self._get_session_time_range(session_id)
+        if start_dt is None:
+            logger.warning(
+                "Recording session lookup failed: session_id=%s dir=%s pre_filter=%s",
+                session_id,
+                str(self._dir),
+                pre_filter_count,
+            )
+            fallback = []
+            if allow_fallback and all_candidates:
+                fallback = all_candidates[:_FALLBACK_LIMIT]
+            return GetRecordingsResult(
+                session_id=session_id,
+                session_resolved=False,
+                fallback_used=allow_fallback and bool(fallback),
+                count=len(fallback) if allow_fallback else 0,
+                recordings=fallback,
+                pre_filter_count=pre_filter_count,
+                post_filter_count=0,
+            )
+
+        start_utc = _to_utc(start_dt)
+        end_utc = _to_utc(end_dt) or datetime.now(timezone.utc)
+
+        filtered: list[RecordingInfo] = []
+        for r in all_candidates:
+            ts = datetime.fromisoformat(r.timestamp_iso)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if ts >= start_utc and ts <= end_utc:
+                filtered.append(r)
+
+        post_filter_count = len(filtered)
+        logger.debug(
+            "Recordings session filter: session_id=%s range=[%s, %s] pre=%s post=%s",
+            session_id,
+            start_utc.isoformat(),
+            end_utc.isoformat(),
+            pre_filter_count,
+            post_filter_count,
+        )
+
+        return GetRecordingsResult(
+            session_id=session_id,
+            session_resolved=True,
+            fallback_used=False,
+            count=post_filter_count,
+            recordings=filtered,
+            pre_filter_count=pre_filter_count,
+            post_filter_count=post_filter_count,
+        )
 
     def _get_session_time_range(
         self, session_id: int
