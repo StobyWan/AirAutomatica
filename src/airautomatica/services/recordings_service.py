@@ -202,6 +202,7 @@ class RecordingsService:
 
         start_utc = _to_utc(start_dt)
         end_utc = _to_utc(end_dt) or datetime.now(timezone.utc)
+        assert start_utc is not None  # start_dt was validated above
 
         filtered: list[RecordingInfo] = []
         for r in all_candidates:
