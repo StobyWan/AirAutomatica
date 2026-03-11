@@ -9,6 +9,7 @@ User=airautomatica
 Group=airautomatica
 WorkingDirectory=/opt/airautomatica
 Environment=HOME=/var/lib/airautomatica
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=-/etc/airautomatica/airautomatica.env
 ExecStart=/opt/airautomatica/venv/bin/python -m airautomatica.main
 Restart=on-failure
