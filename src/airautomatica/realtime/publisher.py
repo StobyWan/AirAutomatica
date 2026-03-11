@@ -7,9 +7,12 @@ from typing import TYPE_CHECKING, Optional
 
 import socketio
 
+from airautomatica.ai.ollama_tasks import get_telemetry_summary_counts
 from airautomatica.config import get_sqlite_db_path
 from airautomatica.db.base import get_engine
 from airautomatica.models.state import AircraftState, nan_to_none
+from airautomatica.services.mission_logic import get_perception_counts
+from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 
 if TYPE_CHECKING:
@@ -68,6 +71,13 @@ def _build_health_payload(
         }
     if capabilities is not None:
         payload["capabilities"] = capabilities
+    perception_counts = get_perception_counts()
+    telemetry_summary_counts = get_telemetry_summary_counts()
+    payload["perception_counts"] = perception_counts
+    payload["telemetry_summary_counts"] = telemetry_summary_counts
+    rates = get_ai_observability_rates(perception_counts, telemetry_summary_counts)
+    payload["perception_acceptance_rate"] = rates["perception_acceptance_rate"]
+    payload["telemetry_meaningful_rate"] = rates["telemetry_meaningful_rate"]
     return payload
 
 

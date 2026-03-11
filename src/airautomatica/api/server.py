@@ -27,6 +27,7 @@ from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
 from airautomatica.settings import get_settings, save_settings
+from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
 
@@ -71,9 +72,14 @@ def create_app(
                 ),
             },
         }
-        if task_service is not None:
-            health_data["telemetry_summary_counts"] = get_telemetry_summary_counts()
+        health_data["telemetry_summary_counts"] = get_telemetry_summary_counts()
         health_data["perception_counts"] = get_perception_counts()
+        rates = get_ai_observability_rates(
+            health_data["perception_counts"],
+            health_data["telemetry_summary_counts"],
+        )
+        health_data["perception_acceptance_rate"] = rates["perception_acceptance_rate"]
+        health_data["telemetry_meaningful_rate"] = rates["telemetry_meaningful_rate"]
         if state is None:
             health_data["telemetry"] = {
                 "telemetry_status": "disconnected",

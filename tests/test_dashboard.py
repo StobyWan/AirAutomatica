@@ -35,6 +35,15 @@ def test_session_detail_route_exists(client: TestClient) -> None:
     assert "path-list" in r.text
 
 
+def test_dashboard_includes_ai_observability_rate_labels(client: TestClient) -> None:
+    """Dashboard HTML includes perception_acceptance_rate and telemetry_meaningful_rate in health fields."""
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+    html = r.text
+    assert "perception_acceptance_rate" in html
+    assert "telemetry_meaningful_rate" in html
+
+
 def test_dashboard_settings_uses_canonical_keys(client: TestClient) -> None:
     """Settings tab uses LOCAL_LLM_PROVIDER and AI_HAT_ENABLED; no AI_MODE.
     Frontend sends canonical keys only on save."""
