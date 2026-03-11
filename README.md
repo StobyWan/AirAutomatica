@@ -7,6 +7,44 @@ Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an A
 
 **Disclaimer:** This software is **not flight-critical**. It does not send commands to the flight controller. It reads telemetry and logs detections. Use at your own risk.
 
+## Quick Get Started
+
+**Path A — Linux / Raspberry Pi (.deb)** — Fastest install on Debian/Raspberry Pi OS:
+
+```bash
+# Download from GitHub Releases (or clone repo and run: make pi-download-deb)
+# https://github.com/StobyWan/AirAutomatica/releases
+
+sudo dpkg -i airautomatica_*.deb
+sudo apt-get install -f   # fix dependencies if needed
+sudo systemctl start airautomatica
+```
+
+Then open `http://<pi-ip>:8000/dashboard`. Runs in mock mode by default. Configure via `/etc/airautomatica/airautomatica.env`.
+
+**Path B — Development / Mock mode** — No hardware or `.env` needed:
+
+```bash
+git clone https://github.com/StobyWan/AirAutomatica.git
+cd AirAutomatica
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+python -m airautomatica.main
+```
+
+Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `http://localhost:8000/dashboard`.
+
+## Hardware You'll Need
+
+| Mode | Hardware |
+|------|----------|
+| **Mock** | None — runs on any OS |
+| **Serial MAVLink** | Raspberry Pi 5 (or compatible Debian/ARM), ArduPilot flight controller (e.g. Matek F405-WING), USB-to-TTL adapter (CP2102/FTDI), power (5V 5A buck, fuse, USB-C pigtail) |
+| **Ollama AI** | Same as above; Ollama runs on the Pi or a separate machine |
+| **Future: AI HAT** | Raspberry Pi AI HAT+ (scaffolded only) |
+
+**Serial wiring:** FC UART TX → CP2102 RX; FC UART RX → CP2102 TX; FC GND → CP2102 GND. See [docs/example_hardware.md](docs/example_hardware.md) for full reference.
+
 ## What Works Today
 
 - **Mock mode**: Simulated telemetry and AI. No hardware. Run locally for development.
@@ -26,25 +64,9 @@ Companion computer app for Raspberry Pi 5 that reads MAVLink telemetry from an A
 
 AI HAT mode exists as a scaffold; real Hailo integration is not yet implemented.
 
-## Quick Start (Mock Mode)
-
-No hardware or `.env` needed:
-
-```bash
-git clone https://github.com/StobyWan/AirAutomatica.git
-cd AirAutomatica
-uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
-python -m airautomatica.main
-# or: uv run airautomatica
-```
-
-Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `http://localhost:8000/dashboard` for the live UI.
-
 ## Requirements
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (recommended) or standard venv
+For development (Path B): Python 3.12+, [uv](https://docs.astral.sh/uv/) (recommended) or standard venv. .deb users do not need Python or uv.
 
 ## Local Setup
 
@@ -238,16 +260,29 @@ CI runs format, lint, typecheck, and tests on push/PR.
 
 ## Linux Packaging
 
-Install as a systemd service on Debian/Raspberry Pi OS:
+Install as a systemd service on Debian/Raspberry Pi OS. **.deb is the primary install method** — no Python or venv needed.
+
+**Install from .deb** (download from [Releases](https://github.com/StobyWan/AirAutomatica/releases) or use the script):
+
+```bash
+# Download latest (from repo root)
+make pi-download-deb
+# or with a specific version: TAG=v0.1.0 make pi-download-deb
+
+# Install
+sudo dpkg -i airautomatica_*.deb
+sudo apt-get install -f   # if dpkg reports missing deps
+sudo systemctl start airautomatica
+```
+
+**Alternative: install from repo** (for development or when no release exists):
 
 ```bash
 sudo packaging/linux/install.sh
 sudo systemctl start airautomatica
 ```
 
-Default: mock mode (no FC, serial, or Ollama required). Configure via `/etc/airautomatica/airautomatica.env`.
-
-See [docs/packaging.md](docs/packaging.md) for install layout, service management, .deb build, and tag-release flow.
+Default: mock mode (no FC, serial, or Ollama required). Configure via `/etc/airautomatica/airautomatica.env`. See [docs/packaging.md](docs/packaging.md) for install layout, service management, .deb build, and tag-release flow.
 
 ## Example Hardware / Bench Setup
 
