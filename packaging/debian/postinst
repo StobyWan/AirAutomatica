@@ -15,8 +15,12 @@ fi
 # Create directories
 mkdir -p "$VAR_DIR" "$ETC_DIR"
 
-# Add dialout for serial access
+# Add groups for device access: dialout (serial), video (camera), render (GPU/DMA, if present)
 usermod -aG dialout "$APP_USER" 2>/dev/null || true
+usermod -aG video "$APP_USER" 2>/dev/null || true
+if getent group render >/dev/null 2>&1; then
+  usermod -aG render "$APP_USER" 2>/dev/null || true
+fi
 
 # Install env template only if not present
 if [ ! -f "$ETC_DIR/airautomatica.env" ]; then
