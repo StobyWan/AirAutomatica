@@ -52,6 +52,14 @@ def test_health(client: TestClient) -> None:
     assert "session_id" in data["persistence"]
     assert "last_persistence_error" in data["persistence"]
     assert "telemetry_summary_counts" not in data
+    assert "perception_counts" in data
+    counts = data["perception_counts"]
+    assert "accepted" in counts
+    assert "suppressed" in counts
+    assert "no_detection" in counts
+    assert "non_perception_label" in counts
+    assert "unknown_label" in counts
+    assert "parse_error" in counts
 
 
 def test_health_includes_telemetry_summary_counts_when_task_service_exists(

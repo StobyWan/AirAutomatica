@@ -12,6 +12,7 @@ from airautomatica.models.state import AircraftState
 from airautomatica.services.mission_logic import (
     MissionLogic,
     _normalize_label,
+    get_perception_counts,
 )
 from airautomatica.services.state_store import StateStore
 
@@ -368,6 +369,141 @@ def test_empty_label_no_response() -> None:
     )
     logic.process_result(_make_state(), result)
     persistence.insert_detection.assert_not_called()
+
+
+def test_perception_counts_accepted() -> None:
+    """Accepted result increments accepted counter."""
+    before = get_perception_counts()
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="person",
+        confidence=0.8,
+        summary="Person detected",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    after = get_perception_counts()
+    assert after["accepted"] - before["accepted"] == 1
+
+
+def test_perception_counts_suppressed() -> None:
+    """Duplicate result increments suppressed counter."""
+    before = get_perception_counts()
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+        duplicate_window_sec=30.0,
+    )
+    result = AiResult(
+        label="person",
+        confidence=0.8,
+        summary="Person detected",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    state = _make_state()
+    logic.process_result(state, result)
+    logic.process_result(state, result)
+    after = get_perception_counts()
+    assert after["suppressed"] - before["suppressed"] == 1
+
+
+def test_perception_counts_no_detection() -> None:
+    """NONE label increments no_detection counter."""
+    before = get_perception_counts()
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.9,
+    )
+    result = AiResult(
+        label="none",
+        confidence=0.9,
+        summary="No detection",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    after = get_perception_counts()
+    assert after["no_detection"] - before["no_detection"] == 1
+
+
+def test_perception_counts_non_perception_label() -> None:
+    """Disallowed label increments non_perception_label counter."""
+    before = get_perception_counts()
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="battery",
+        confidence=0.9,
+        summary="Battery level",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    after = get_perception_counts()
+    assert after["non_perception_label"] - before["non_perception_label"] == 1
+
+
+def test_perception_counts_unknown_label() -> None:
+    """Unknown label increments unknown_label counter."""
+    before = get_perception_counts()
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="cow",
+        confidence=0.9,
+        summary="Random label",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    after = get_perception_counts()
+    assert after["unknown_label"] - before["unknown_label"] == 1
+
+
+def test_perception_counts_parse_error() -> None:
+    """Placeholder label increments parse_error counter."""
+    before = get_perception_counts()
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_id=1,
+        min_confidence=0.0,
+    )
+    result = AiResult(
+        label="ollama",
+        confidence=0.9,
+        summary="Unparseable content",
+        source_backend="ollama",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    after = get_perception_counts()
+    assert after["parse_error"] - before["parse_error"] == 1
 
 
 def test_duplicate_suppressed() -> None:

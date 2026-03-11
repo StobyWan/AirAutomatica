@@ -4,6 +4,7 @@ import asyncio
 import logging
 import math
 import time
+from collections import defaultdict
 from typing import TYPE_CHECKING, Optional
 
 from airautomatica.ai.models import AiResult
@@ -82,6 +83,20 @@ _ALLOWED_PERCEPTION_LABELS: frozenset[str] = frozenset(
         "NONE",
     }
 )
+
+_PERCEPTION_COUNTS: dict[str, int] = defaultdict(int)
+
+
+def get_perception_counts() -> dict[str, int]:
+    """Return copy of outcome counters for observability."""
+    return {
+        "accepted": _PERCEPTION_COUNTS["accepted"],
+        "suppressed": _PERCEPTION_COUNTS["suppressed"],
+        "no_detection": _PERCEPTION_COUNTS["no_detection"],
+        "non_perception_label": _PERCEPTION_COUNTS["non_perception_label"],
+        "unknown_label": _PERCEPTION_COUNTS["unknown_label"],
+        "parse_error": _PERCEPTION_COUNTS["parse_error"],
+    }
 
 
 def _fmt(x: float, fmt: str = "%.1f") -> str:
@@ -166,9 +181,18 @@ class MissionLogic:
         """Filter, dedupe, log, and persist. Call after infer()."""
         if not self._is_meaningful(result):
             reason = self._get_ignore_reason(result)
+            if reason == "placeholder_label":
+                _PERCEPTION_COUNTS["parse_error"] += 1
+            elif reason == "no_detection":
+                _PERCEPTION_COUNTS["no_detection"] += 1
+            elif reason == "non_perception_label":
+                _PERCEPTION_COUNTS["non_perception_label"] += 1
+            elif reason == "unknown_label":
+                _PERCEPTION_COUNTS["unknown_label"] += 1
             logger.debug("ai ignored: reason=%s label=%s", reason, result.label)
             return
         if self._is_duplicate(result):
+            _PERCEPTION_COUNTS["suppressed"] += 1
             now = time.monotonic()
             ago = now - self._last_accepted.get(result.label, now)
             logger.debug(
@@ -177,6 +201,7 @@ class MissionLogic:
                 ago,
             )
             return
+        _PERCEPTION_COUNTS["accepted"] += 1
         logger.info(
             "ai accepted: label=%s confidence=%.2f",
             result.label,

@@ -23,6 +23,7 @@ from airautomatica.config import (
 from airautomatica.db.base import get_engine
 from airautomatica.logging_config import setup_logging
 from airautomatica.models.state import AircraftState, nan_to_none
+from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
 from airautomatica.settings import get_settings, save_settings
@@ -72,6 +73,7 @@ def create_app(
         }
         if task_service is not None:
             health_data["telemetry_summary_counts"] = get_telemetry_summary_counts()
+        health_data["perception_counts"] = get_perception_counts()
         if state is None:
             health_data["telemetry"] = {
                 "telemetry_status": "disconnected",
