@@ -260,6 +260,12 @@
             <label for="LOCAL_LLM_TIMEOUT">Local LLM timeout (seconds)</label>
             <input type="number" id="LOCAL_LLM_TIMEOUT" name="LOCAL_LLM_TIMEOUT" placeholder="30" min="1" />
           </div>
+          <div class="settings-field">
+            <label for="OLLAMA_NUM_THREAD">Ollama Threads</label>
+            <input type="number" id="OLLAMA_NUM_THREAD" name="OLLAMA_NUM_THREAD" placeholder="4" min="1" max="8" />
+            <span class="text-xs text-slate-500 mt-1 block">Lower values reduce CPU load and heat but may slow responses. Recommended Pi 5 starting value: 4.</span>
+            <span class="text-xs text-slate-500 mt-1 block">Pi 5 tip: try 4 first. Use 2 if the device gets too hot or sluggish.</span>
+          </div>
         </div>
       </div>
 
@@ -304,7 +310,7 @@
   </div>
 
   <script>
-    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
 
     function updateProviderVisibility() {
       const p = document.getElementById('LOCAL_LLM_PROVIDER').value;

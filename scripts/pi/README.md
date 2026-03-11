@@ -10,7 +10,11 @@ Fast on-device diagnostics for AirAutomatica on Raspberry Pi. Use these for ther
 |--------|---------|
 | `decode_throttled.sh` | Decode throttled flags from `vcgencmd get_throttled` or a raw value |
 | `watch_thermal.sh` | Live thermal watch: temp, throttled, CPU freq, load (1s refresh) |
+| `watch_ollama.sh` | Live system metrics + Ollama processes (2s refresh) |
+| `log_thermal_csv.sh` | Log thermal metrics to CSV every 5s until Ctrl+C |
 | `bench_snapshot.sh` | One-shot snapshot to stdout and `tmp/pi-bench-snapshot-*.txt` |
+| `compare_snapshots.sh` | Compare two bench_snapshot files (before/after) |
+| `inference_probe.sh` | Run short Ollama inference, capture thermal before/after |
 | `watch_top_processes.sh` | Live top CPU and memory processes (2s refresh) |
 | `quick_diag.sh` | Brief SSH-friendly checks including serial/video devices |
 
@@ -47,6 +51,33 @@ Fast on-device diagnostics for AirAutomatica on Raspberry Pi. Use these for ther
 # Ctrl+C to exit
 ```
 
+### Watch Ollama processes
+
+```bash
+./watch_ollama.sh
+# Ctrl+C to exit
+```
+
+### Log thermal to CSV
+
+```bash
+./log_thermal_csv.sh
+# Logs to tmp/pi-thermal-YYYYMMDD-HHMMSS.csv, Ctrl+C to stop
+```
+
+### Compare snapshots
+
+```bash
+./compare_snapshots.sh tmp/pi-bench-snapshot-before.txt tmp/pi-bench-snapshot-after.txt
+```
+
+### Ollama inference probe
+
+```bash
+./inference_probe.sh
+# or with model: ./inference_probe.sh gemma3:1b
+```
+
 ### Quick SSH diagnosis
 
 ```bash
@@ -58,9 +89,11 @@ Fast on-device diagnostics for AirAutomatica on Raspberry Pi. Use these for ther
 From the project root:
 
 ```bash
-make pi-thermal   # Run watch_thermal.sh
-make pi-snapshot # Run bench_snapshot.sh
-make pi-diag     # Run quick_diag.sh
+make pi-thermal     # Run watch_thermal.sh
+make pi-ollama      # Run watch_ollama.sh
+make pi-log-thermal # Run log_thermal_csv.sh
+make pi-snapshot    # Run bench_snapshot.sh
+make pi-diag        # Run quick_diag.sh
 ```
 
 ## Throttled flag reference

@@ -42,6 +42,7 @@ def test_dashboard_settings_uses_canonical_keys(client: TestClient) -> None:
     assert r.status_code == 200
     html = r.text
     assert 'id="LOCAL_LLM_PROVIDER"' in html
+    assert 'id="OLLAMA_NUM_THREAD"' in html
     assert 'id="AI_HAT_ENABLED"' in html
     assert "LOCAL_LLM_PROVIDER" in html
     assert "AI_HAT_ENABLED" in html

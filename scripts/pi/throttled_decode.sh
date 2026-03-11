@@ -23,7 +23,7 @@ decode_throttled() {
 
   # Parse hex or decimal
   local val=0
-  if [[ -z "$raw" ]]; then
+  if [[ -z "$raw" ]] || [[ "$raw" == "N/A" ]]; then
     THROTTLED_CURRENT_SUMMARY="N/A"
     THROTTLED_HISTORICAL_SUMMARY="N/A"
     THROTTLED_CONCLUSION="No throttled value provided."
@@ -32,8 +32,14 @@ decode_throttled() {
   fi
   if [[ "$raw" =~ ^0x[0-9a-fA-F]+$ ]]; then
     val=$((raw))
-  else
+  elif [[ "$raw" =~ ^[0-9]+$ ]]; then
     val=$((raw))
+  else
+    THROTTLED_CURRENT_SUMMARY="N/A"
+    THROTTLED_HISTORICAL_SUMMARY="N/A"
+    THROTTLED_CONCLUSION="Invalid throttled value: $raw"
+    THROTTLED_CURRENT_COMPACT="N/A"
+    return 0
   fi
 
   # Current flags (0x0F)

@@ -78,6 +78,7 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | `LOCAL_LLM_BASE_URL` | `http://127.0.0.1:11434` | Ollama API URL |
 | `LOCAL_LLM_MODEL` | `gemma3:1b` | Ollama model name |
 | `LOCAL_LLM_TIMEOUT` | `30` | Local LLM request timeout (seconds) |
+| `OLLAMA_NUM_THREAD` | `4` | Ollama inference threads (1-8); lower reduces Pi 5 CPU/heat |
 | `AI_HAT_ENABLED` | `0` | Enable AI HAT layer alongside local LLM (additive; Pi 5) |
 | `AI_MIN_CONFIDENCE` | `0.5` | Min confidence to persist detection (0–1) |
 | `AI_DUPLICATE_WINDOW_SEC` | `30` | Seconds to suppress same-label duplicate |

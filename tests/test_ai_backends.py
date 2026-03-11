@@ -272,6 +272,31 @@ async def test_ollama_valid_json_response() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ollama_request_includes_num_thread() -> None:
+    """Ollama generate request includes options.num_thread from config."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"response": "{}", "done": True}
+    mock_post = AsyncMock(return_value=mock_response)
+    mock_instance = AsyncMock()
+    mock_instance.post = mock_post
+    with patch("airautomatica.ai.ollama_service.httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__.return_value = mock_instance
+        mock_client.return_value.__aexit__.return_value = None
+        with patch(
+            "airautomatica.ai.ollama_service.get_ollama_num_thread", return_value=4
+        ):
+            service = OllamaAiService(
+                base_url="http://127.0.0.1:11434", model="test", timeout_sec=5.0
+            )
+            await service.generate_raw("hello")
+    call_kwargs = mock_post.call_args[1]
+    payload = call_kwargs["json"]
+    assert "options" in payload
+    assert payload["options"]["num_thread"] == 4
+
+
+@pytest.mark.asyncio
 async def test_ollama_malformed_response() -> None:
     """OllamaAiService returns fallback when API returns invalid JSON."""
     mock_response = MagicMock()

@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check run setup-ollama pi-thermal pi-snapshot pi-diag
+.PHONY: install format lint typecheck test check run setup-ollama pi-thermal pi-ollama pi-log-thermal pi-snapshot pi-diag
 
 install:
 	uv pip install -e ".[dev]"
@@ -29,6 +29,12 @@ setup-ollama:
 
 pi-thermal:
 	bash scripts/pi/watch_thermal.sh
+
+pi-ollama:
+	bash scripts/pi/watch_ollama.sh
+
+pi-log-thermal:
+	bash scripts/pi/log_thermal_csv.sh
 
 pi-snapshot:
 	bash scripts/pi/bench_snapshot.sh

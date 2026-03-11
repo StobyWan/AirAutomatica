@@ -469,6 +469,7 @@ def test_get_settings(client: TestClient) -> None:
     s = data["settings"]
     assert "TELEMETRY_BACKEND" in s
     assert "LOCAL_LLM_PROVIDER" in s
+    assert "OLLAMA_NUM_THREAD" in s
     assert "AI_HAT_ENABLED" in s
     assert "AI_MODE" not in s
     assert s["TELEMETRY_BACKEND"] in ("mock", "serial")
@@ -555,6 +556,7 @@ def test_post_settings_persists_canonical_only(
             json={
                 "TELEMETRY_BACKEND": "serial",
                 "LOCAL_LLM_PROVIDER": "ollama",
+                "OLLAMA_NUM_THREAD": "4",
                 "AI_HAT_ENABLED": "1",
             },
         )
@@ -563,9 +565,30 @@ def test_post_settings_persists_canonical_only(
             saved = json.load(f)
         assert saved.get("TELEMETRY_BACKEND") == "serial"
         assert saved.get("LOCAL_LLM_PROVIDER") == "ollama"
+        assert saved.get("OLLAMA_NUM_THREAD") == "4"
         assert saved.get("AI_HAT_ENABLED") == "1"
         for legacy in ("AI_MODE", "AI_BACKEND"):
             assert legacy not in saved
+
+
+def test_post_settings_ollama_num_thread_clamped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST OLLAMA_NUM_THREAD outside 1-8 is clamped on save."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        settings_file = settings_dir / "settings.json"
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_FILE", settings_file)
+
+        store = StateStore()
+        client = TestClient(create_app(store))
+        r = client.post("/settings", json={"OLLAMA_NUM_THREAD": "99"})
+        assert r.status_code == 200
+        with open(settings_file) as f:
+            saved = json.load(f)
+        assert saved.get("OLLAMA_NUM_THREAD") == "8"
 
 
 def test_post_settings(monkeypatch: pytest.MonkeyPatch) -> None:

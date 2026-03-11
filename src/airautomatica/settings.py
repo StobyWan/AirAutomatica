@@ -21,6 +21,7 @@ CANONICAL_SETTINGS_KEYS = [
     "LOCAL_LLM_BASE_URL",
     "LOCAL_LLM_MODEL",
     "LOCAL_LLM_TIMEOUT",
+    "OLLAMA_NUM_THREAD",
     "AI_HAT_ENABLED",
     "AI_MIN_CONFIDENCE",
     "AI_DUPLICATE_WINDOW_SEC",
@@ -102,6 +103,7 @@ def get_settings() -> dict:
         "LOCAL_LLM_BASE_URL": "http://127.0.0.1:11434",
         "LOCAL_LLM_MODEL": "gemma3:1b",
         "LOCAL_LLM_TIMEOUT": "30",
+        "OLLAMA_NUM_THREAD": "4",
         "AI_HAT_ENABLED": "0",
         "AI_MIN_CONFIDENCE": "0.5",
         "AI_DUPLICATE_WINDOW_SEC": "30",
@@ -143,7 +145,14 @@ def save_settings(updates: dict) -> None:
                 current.pop(k, None)
                 os.environ.pop(k, None)
             else:
-                current[k] = str(v).strip()
+                val = str(v).strip()
+                if k == "OLLAMA_NUM_THREAD":
+                    try:
+                        n = int(val)
+                        val = str(max(1, min(8, n)))
+                    except ValueError:
+                        val = "4"
+                current[k] = val
                 os.environ[k] = current[k]
     with open(_SETTINGS_FILE, "w") as f:
         json.dump(current, f, indent=2)
