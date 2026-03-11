@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
-from airautomatica.config import get_recordings_dir
+from airautomatica.config import (
+    get_camera_recording_disarm_debounce_sec,
+    get_recordings_dir,
+)
 
 if TYPE_CHECKING:
     from airautomatica.models.state import AircraftState
@@ -506,38 +509,72 @@ class CameraRecordingService:
 
 
 class RecordingAutoController:
-    """Edge-triggered auto recording based on armed state."""
+    """Edge-triggered auto recording based on armed state.
+
+    recording_mode: off | manual | auto (not MAV flight mode).
+    If the app starts while the aircraft is already armed, recording begins
+    on the first armed state (intentional).
+    """
 
     def __init__(
         self,
         service: CameraRecordingService,
         get_mode_fn: Callable[[], str],
+        debounce_sec: Optional[float] = None,
     ) -> None:
         self._service = service
         self._get_mode = get_mode_fn
+        self._debounce_sec = (
+            debounce_sec
+            if debounce_sec is not None
+            else get_camera_recording_disarm_debounce_sec()
+        )
         self._last_armed: Optional[bool] = None
+        self._disarm_since: Optional[float] = None
 
     def maybe_auto_record(self, state: "AircraftState") -> None:
         """Call from telemetry loop. Start/stop based on armed transitions in auto mode."""
-        mode = self._get_mode()
-        if mode != "auto":
+        recording_mode = self._get_mode()
+        if recording_mode != "auto":
             return
         armed = state.armed
         rec_state = self._service.get_recording_state()
-        if (
-            armed
-            and (self._last_armed is None or not self._last_armed)
-            and not rec_state.recording
-        ):
-            new_state, err = self._service.start_recording()
-            if err is None and new_state.output_file:
-                logger.info("Auto recording started (armed): %s", new_state.output_file)
-            elif err:
-                logger.warning("Auto recording start failed: %s", err)
-        elif not armed and self._last_armed and rec_state.recording:
-            logger.info(
-                "Auto-stop triggered: armed=False, last_armed=True, stopping %s",
-                rec_state.output_file or "recording",
-            )
-            _, _ = self._service.stop_recording()
+
+        if armed:
+            self._disarm_since = None
+            if (
+                self._last_armed is None or not self._last_armed
+            ) and not rec_state.recording:
+                new_state, err = self._service.start_recording()
+                if err is None and new_state.output_file:
+                    logger.info(
+                        "Auto recording started (armed): %s", new_state.output_file
+                    )
+                elif err:
+                    logger.warning("Auto recording start failed: %s", err)
+        elif self._last_armed and rec_state.recording:
+            if not state.connected:
+                logger.debug(
+                    "Armed transition ignored: disconnected/stale (holding last armed)"
+                )
+                return
+            now = time.monotonic()
+            if self._disarm_since is None:
+                self._disarm_since = now
+            if (
+                self._debounce_sec <= 0
+                or (now - self._disarm_since) >= self._debounce_sec
+            ):
+                logger.info(
+                    "Auto-stop triggered (disarm confirmed after %.1fs): %s",
+                    self._debounce_sec,
+                    rec_state.output_file or "recording",
+                )
+                _, _ = self._service.stop_recording()
+                self._disarm_since = None
+            else:
+                return
+        else:
+            self._disarm_since = None
+
         self._last_armed = armed

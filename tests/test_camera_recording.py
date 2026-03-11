@@ -431,7 +431,7 @@ def test_auto_mode_starts_on_armed(
 def test_auto_mode_stops_on_disarmed(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:
-    """In auto mode, armed True->False triggers stop."""
+    """In auto mode, armed True->False triggers stop (with debounce_sec=0 for test)."""
     monkeypatch.setenv("CAMERA_RECORDING_MODE", "auto")
     from airautomatica.settings import load_settings
 
@@ -450,7 +450,9 @@ def test_auto_mode_stops_on_disarmed(
         ):
             with patch("time.sleep"):
                 svc = CameraRecordingService(recordings_dir=recordings_dir)
-                ctrl = RecordingAutoController(svc, get_camera_recording_mode)
+                ctrl = RecordingAutoController(
+                    svc, get_camera_recording_mode, debounce_sec=0
+                )
                 from datetime import datetime, timezone
 
                 state_armed = AircraftState(
@@ -541,3 +543,177 @@ def test_auto_mode_no_duplicate_starts(
                 ctrl.maybe_auto_record(state)
                 ctrl.maybe_auto_record(state)
     assert mock_popen.call_count == 1
+
+
+def test_auto_mode_ignores_disarm_when_disconnected(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When state.connected=False and armed=False, do not stop recording (hold last armed)."""
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "auto")
+    from airautomatica.settings import load_settings
+
+    load_settings()
+    from airautomatica.config import get_camera_recording_mode
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                ctrl = RecordingAutoController(
+                    svc, get_camera_recording_mode, debounce_sec=0
+                )
+                from datetime import datetime, timezone
+
+                state_armed = AircraftState(
+                    connected=True,
+                    heartbeat=1,
+                    mode="GUIDED",
+                    armed=True,
+                    lat=37.0,
+                    lon=-122.0,
+                    rel_alt_m=100.0,
+                    heading_deg=90.0,
+                    roll_rad=0.0,
+                    pitch_rad=0.0,
+                    yaw_rad=0.0,
+                    voltage_v=12.5,
+                    current_a=2.0,
+                    groundspeed_m_s=10.0,
+                    airspeed_m_s=12.0,
+                    timestamp=datetime.now(timezone.utc),
+                )
+                state_disconnected_disarmed = AircraftState(
+                    connected=False,
+                    heartbeat=2,
+                    mode="GUIDED",
+                    armed=False,
+                    lat=37.0,
+                    lon=-122.0,
+                    rel_alt_m=100.0,
+                    heading_deg=90.0,
+                    roll_rad=0.0,
+                    pitch_rad=0.0,
+                    yaw_rad=0.0,
+                    voltage_v=12.5,
+                    current_a=2.0,
+                    groundspeed_m_s=10.0,
+                    airspeed_m_s=12.0,
+                    timestamp=datetime.now(timezone.utc),
+                )
+                ctrl.maybe_auto_record(state_armed)
+                ctrl.maybe_auto_record(state_disconnected_disarmed)
+    assert svc.get_recording_state().recording is True
+
+
+def test_auto_mode_disarm_debounce(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Require armed=False for debounce_sec before stop; armed=True before debounce cancels."""
+    import threading
+
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "auto")
+    from airautomatica.settings import load_settings
+
+    load_settings()
+    from airautomatica.config import get_camera_recording_mode
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.time.sleep",
+            ):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                ctrl = RecordingAutoController(
+                    svc, get_camera_recording_mode, debounce_sec=0.02
+                )
+                from datetime import datetime, timezone
+
+                def make_state(connected: bool, armed: bool) -> AircraftState:
+                    return AircraftState(
+                        connected=connected,
+                        heartbeat=1,
+                        mode="GUIDED",
+                        armed=armed,
+                        lat=37.0,
+                        lon=-122.0,
+                        rel_alt_m=100.0,
+                        heading_deg=90.0,
+                        roll_rad=0.0,
+                        pitch_rad=0.0,
+                        yaw_rad=0.0,
+                        voltage_v=12.5,
+                        current_a=2.0,
+                        groundspeed_m_s=10.0,
+                        airspeed_m_s=12.0,
+                        timestamp=datetime.now(timezone.utc),
+                    )
+
+                ctrl.maybe_auto_record(make_state(True, True))
+                ctrl.maybe_auto_record(make_state(True, False))
+                assert svc.get_recording_state().recording is True
+                threading.Event().wait(0.03)
+                ctrl.maybe_auto_record(make_state(True, False))
+                assert svc.get_recording_state().recording is False
+
+
+def test_auto_mode_startup_while_armed(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """First state with armed=True and _last_armed=None starts recording (intentional)."""
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "auto")
+    from airautomatica.settings import load_settings
+
+    load_settings()
+    from airautomatica.config import get_camera_recording_mode
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                ctrl = RecordingAutoController(svc, get_camera_recording_mode)
+                from datetime import datetime, timezone
+
+                state_armed = AircraftState(
+                    connected=True,
+                    heartbeat=1,
+                    mode="GUIDED",
+                    armed=True,
+                    lat=37.0,
+                    lon=-122.0,
+                    rel_alt_m=100.0,
+                    heading_deg=90.0,
+                    roll_rad=0.0,
+                    pitch_rad=0.0,
+                    yaw_rad=0.0,
+                    voltage_v=12.5,
+                    current_a=2.0,
+                    groundspeed_m_s=10.0,
+                    airspeed_m_s=12.0,
+                    timestamp=datetime.now(timezone.utc),
+                )
+                ctrl.maybe_auto_record(state_armed)
+    assert svc.get_recording_state().recording is True

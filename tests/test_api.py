@@ -932,3 +932,75 @@ def test_recordings_path_resolution_absolute(
     r = client.get("/recordings/abs_test.mp4")
     assert r.status_code == 200
     assert r.content == b"content"
+
+
+def test_get_recordings_list_empty(client: TestClient) -> None:
+    """GET /recordings returns empty list when no recordings service."""
+    r = client.get("/recordings")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["recordings"] == []
+    assert data["recordings_dir"] is None
+
+
+def test_get_recordings_list_with_files(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """GET /recordings returns list of recordings with metadata."""
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / "2025-03-11_120000_cam.mp4").write_bytes(b"video1")
+    (rec_dir / "2025-03-11_120100_cam.mp4").write_bytes(b"video2")
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/recordings")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["recordings"]) == 2
+    assert data["recordings_dir"] is not None
+    filenames = [rec["filename"] for rec in data["recordings"]]
+    assert "2025-03-11_120000_cam.mp4" in filenames
+    assert "2025-03-11_120100_cam.mp4" in filenames
+
+
+def test_delete_recording(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """DELETE /recordings/{filename} removes file and returns ok."""
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / "to_delete.mp4").write_bytes(b"content")
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.delete("/recordings/to_delete.mp4")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+    assert not (rec_dir / "to_delete.mp4").exists()
+
+
+def test_delete_recording_rejects_path_traversal(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """DELETE /recordings/{filename} rejects path traversal (.. or / in filename)."""
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.delete("/recordings/foo..bar.mp4")  # ".." in filename triggers rejection
+    assert r.status_code == 400
+
+
+def test_post_camera_ready(client: TestClient) -> None:
+    """POST /camera/ready sets and returns camera ready state."""
+    r = client.post("/camera/ready", json={"ready": True})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["ready"] is True
+    r2 = client.get("/health")
+    assert r2.json()["camera_ready"] is True
+    r3 = client.post("/camera/ready", json={"ready": False})
+    assert r3.json()["ready"] is False

@@ -88,6 +88,25 @@ class PersistenceService:
             self._record_error(str(e))
             logger.exception("end_session failed: %s", e)
 
+    def get_session_time_range(
+        self, session_id: int
+    ) -> tuple[datetime | None, datetime | None]:
+        """Return (started_at, ended_at) for session. (None, None) if not found or DB disabled."""
+        if get_engine() is None:
+            return (None, None)
+        try:
+            with get_session() as session:
+                if session is None:
+                    return (None, None)
+                row = session.get(FlightSession, session_id)
+                if row is None:
+                    return (None, None)
+                return (row.started_at, row.ended_at)
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_session_time_range failed: %s", e)
+            return (None, None)
+
     def insert_telemetry_sample(self, session_id: int, state: "AircraftState") -> None:
         """Insert telemetry_samples row. Converts NaN to None."""
         if get_engine() is None:

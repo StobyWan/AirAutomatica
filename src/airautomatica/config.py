@@ -211,3 +211,15 @@ def get_camera_recording_mode() -> str:
     if raw in ("off", "manual", "auto"):
         return raw
     return "manual"
+
+
+def get_camera_recording_disarm_debounce_sec() -> float:
+    """Seconds armed=False must persist before auto-stop. Default: 2.5.
+    Reduces false stops from telemetry jitter or brief disconnects.
+    Env: CAMERA_RECORDING_DISARM_DEBOUNCE_SEC."""
+    try:
+        return max(
+            0.0, float(os.environ.get("CAMERA_RECORDING_DISARM_DEBOUNCE_SEC", "2.5"))
+        )
+    except ValueError:
+        return 2.5
