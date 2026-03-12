@@ -31,6 +31,10 @@ class FlightSession(Base):
     generated_debrief_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+    manual_home_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    manual_home_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    home_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    home_set_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     telemetry_samples = relationship("TelemetrySample", back_populates="session")
     path_points = relationship("PathPoint", back_populates="session")

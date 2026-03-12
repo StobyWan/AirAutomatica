@@ -62,3 +62,5 @@ AircraftState fields and how they map from both autopilots:
 | home_lat, home_lon | HOME_POSITION | GPS_GLOBAL_ORIGIN |
 
 Both HOME_POSITION and GPS_GLOBAL_ORIGIN populate home_lat, home_lon via the same accumulator in MavlinkNormalizer.
+
+**App home vs FC home:** AirAutomatica does not send any MAVLink command to set home on the flight controller. The app only reads HOME_POSITION and GPS_GLOBAL_ORIGIN. App-level home overrides (session replay/debrief override, future live app home) affect only AirAutomatica's calculations and UI. They do not change the FC's RTL or navigation home.

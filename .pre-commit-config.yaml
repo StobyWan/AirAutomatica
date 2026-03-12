@@ -25,7 +25,8 @@ repos:
       - id: mypy
         name: mypy
         entry: mypy src tests
-        language: system
+        language: python
+        additional_dependencies: [mypy>=1.0]
         types: [python]
         pass_filenames: false
         exclude: ^alembic/

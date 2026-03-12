@@ -7,7 +7,7 @@ import threading
 import time
 import typing
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import func, select
 
@@ -117,7 +117,7 @@ class PersistenceService:
                 )
                 session.add(row)
                 session.flush()
-                return row.id
+                return cast(int, row.id)
         except Exception as e:
             self._record_error(str(e))
             logger.exception("start_session failed: %s", e)
@@ -391,7 +391,7 @@ class PersistenceService:
                 row = session.get(FlightSession, session_id)
                 if row is None:
                     return None
-                return {
+                out: dict = {
                     "id": row.id,
                     "started_at": row.started_at.isoformat(),
                     "ended_at": (row.ended_at.isoformat() if row.ended_at else None),
@@ -403,10 +403,132 @@ class PersistenceService:
                     "connection_mode": row.connection_mode,
                     "baud": row.baud,
                 }
+                home_lat, home_lon, home_source = self._get_session_home_impl(
+                    session, session_id, row
+                )
+                if home_lat is not None and home_lon is not None:
+                    out["home_lat"] = home_lat
+                    out["home_lon"] = home_lon
+                if home_source is not None:
+                    out["home_source"] = home_source
+                return out
         except Exception as e:
             self._record_error(str(e))
             logger.exception("get_session failed: %s", e)
             return None
+
+    def _get_session_home_impl(
+        self,
+        db_session: typing.Any,
+        session_id: int,
+        flight_session: FlightSession | None = None,
+    ) -> tuple[float | None, float | None, str | None]:
+        """Return (home_lat, home_lon, home_source) for a session.
+        home_source: 'manual_session' | 'autopilot' | 'fallback'
+        Session replay/debrief override only; does not affect FC.
+        """
+        row = flight_session
+        if row is None:
+            row = db_session.get(FlightSession, session_id)
+        if row is None:
+            return (None, None, None)
+
+        def _valid(x: typing.Any) -> typing.TypeGuard[float]:
+            return x is not None and isinstance(x, (int, float)) and not math.isnan(x)
+
+        if _valid(row.manual_home_lat) and _valid(row.manual_home_lon):
+            return (
+                float(row.manual_home_lat),
+                float(row.manual_home_lon),
+                "manual_session",
+            )
+
+        result = db_session.execute(
+            select(TelemetrySample)
+            .where(TelemetrySample.session_id == session_id)
+            .order_by(TelemetrySample.timestamp.asc())
+            .limit(100)
+        )
+        samples = result.scalars().all()
+        for s in samples:
+            if _valid(s.home_lat) and _valid(s.home_lon):
+                return (float(s.home_lat), float(s.home_lon), "autopilot")
+        for s in samples:
+            if _valid(s.lat) and _valid(s.lon):
+                return (float(s.lat), float(s.lon), "fallback")
+
+        path_result = db_session.execute(
+            select(PathPoint)
+            .where(PathPoint.session_id == session_id)
+            .order_by(PathPoint.timestamp.asc())
+            .limit(1)
+        )
+        path_row = path_result.scalars().first()
+        if path_row is not None and _valid(path_row.lat) and _valid(path_row.lon):
+            return (float(path_row.lat), float(path_row.lon), "fallback")
+
+        return (None, None, None)
+
+    def get_session_home(
+        self, session_id: int
+    ) -> tuple[float | None, float | None, str | None]:
+        """Return (home_lat, home_lon, home_source) for a session. (None, None, None) if not found."""
+        if get_engine() is None:
+            return (None, None, None)
+        try:
+            with get_session() as session:
+                if session is None:
+                    return (None, None, None)
+                return self._get_session_home_impl(session, session_id)
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_session_home failed: %s", e)
+            return (None, None, None)
+
+    def update_session_home(self, session_id: int, lat: float, lon: float) -> bool:
+        """Set replay/debrief home override for a session. Returns True on success.
+        Does not affect the flight controller's RTL home."""
+        if get_engine() is None:
+            return False
+        try:
+            with get_session() as session:
+                if session is None:
+                    return False
+                row = session.get(FlightSession, session_id)
+                if row is None:
+                    return False
+                row.manual_home_lat = lat
+                row.manual_home_lon = lon
+                row.home_source = (
+                    "manual_session"  # Replay/debrief override only; does not affect FC
+                )
+                row.home_set_at = datetime.now(timezone.utc)
+                return True
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("update_session_home failed: %s", e)
+            return False
+
+    def clear_session_home(self, session_id: int) -> bool:
+        """Clear manual home for a session. Returns True on success."""
+        if get_engine() is None:
+            return False
+        try:
+            with get_session() as session:
+                if session is None:
+                    return False
+                row = session.get(FlightSession, session_id)
+                if row is None:
+                    return False
+                row.manual_home_lat = None
+                row.manual_home_lon = None
+                row.home_source = None
+                row.home_set_at = None
+                return True
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("clear_session_home failed: %s", e)
+            return False
 
     def get_recent_sessions(
         self,
@@ -712,7 +834,7 @@ class PersistenceService:
                 row = session.get(FlightSession, session_id)
                 if row is None or not row.generated_debrief_summary:
                     return None
-                return row.generated_debrief_summary
+                return cast(str, row.generated_debrief_summary)
         except Exception as e:
             self._record_error(str(e))
             logger.exception("get_generated_debrief failed: %s", e)
@@ -729,7 +851,7 @@ class PersistenceService:
                 row = session.get(FlightSession, session_id)
                 if row is None or row.generated_debrief_at is None:
                     return None
-                return row.generated_debrief_at
+                return cast(datetime, row.generated_debrief_at)
         except Exception as e:
             self._record_error(str(e))
             logger.exception("get_generated_debrief_at failed: %s", e)

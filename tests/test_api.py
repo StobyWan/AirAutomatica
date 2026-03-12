@@ -18,6 +18,7 @@ from airautomatica.api.server import create_app
 from airautomatica.db import init_db
 from airautomatica.db.base import get_engine
 from airautomatica.models.state import AircraftState
+from airautomatica.services.app_home_store import AppHomeStore
 from airautomatica.services.camera_recording import CameraRecordingService
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.state_store import StateStore
@@ -2031,3 +2032,85 @@ def test_post_camera_ready(client: TestClient) -> None:
     assert r2.json()["camera_ready"] is True
     r3 = client.post("/camera/ready", json={"ready": False})
     assert r3.json()["ready"] is False
+
+
+def test_post_live_home_503_when_no_store(store: StateStore) -> None:
+    """POST /live/home returns 503 when app_home_store not provided."""
+    client = TestClient(create_app(store))
+    r = client.post("/live/home", json={"lat": 37.0, "lon": -122.0})
+    assert r.status_code == 503
+
+
+def test_post_live_home_set_lat_lon(store: StateStore) -> None:
+    """POST /live/home with lat/lon sets app home override."""
+    app_home_store = AppHomeStore()
+    client = TestClient(create_app(store, app_home_store=app_home_store))
+    r = client.post("/live/home", json={"lat": 37.0, "lon": -122.0})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert app_home_store.get_override() == (37.0, -122.0)
+
+
+def test_post_live_home_use_current(store: StateStore) -> None:
+    """POST /live/home with use_current uses current position from store."""
+    app_home_store = AppHomeStore()
+    state = AircraftState(
+        connected=True,
+        heartbeat=1,
+        mode="GUIDED",
+        lat=37.5,
+        lon=-122.5,
+        rel_alt_m=100.0,
+        heading_deg=90.0,
+        roll_rad=0.0,
+        pitch_rad=0.0,
+        yaw_rad=0.0,
+        voltage_v=12.5,
+        current_a=2.0,
+        groundspeed_m_s=10.0,
+        airspeed_m_s=12.0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    store.update(state)
+    client = TestClient(create_app(store, app_home_store=app_home_store))
+    r = client.post("/live/home", json={"use_current": True})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert app_home_store.get_override() == (37.5, -122.5)
+
+
+def test_post_live_home_use_current_no_state(store: StateStore) -> None:
+    """POST /live/home with use_current returns 400 when no telemetry state."""
+    app_home_store = AppHomeStore()
+    client = TestClient(create_app(store, app_home_store=app_home_store))
+    r = client.post("/live/home", json={"use_current": True})
+    assert r.status_code == 400
+
+
+def test_post_live_home_clear(store: StateStore) -> None:
+    """POST /live/home with clear=true clears app home override."""
+    app_home_store = AppHomeStore()
+    app_home_store.set_app_home(37.0, -122.0)
+    client = TestClient(create_app(store, app_home_store=app_home_store))
+    r = client.post("/live/home", json={"clear": True})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert app_home_store.get_override() == (None, None)
+
+
+def test_post_live_home_invalid_lat_lon(store: StateStore) -> None:
+    """POST /live/home with invalid lat/lon returns 400."""
+    app_home_store = AppHomeStore()
+    client = TestClient(create_app(store, app_home_store=app_home_store))
+    r = client.post("/live/home", json={"lat": 100.0, "lon": -122.0})
+    assert r.status_code == 400
+    r2 = client.post("/live/home", json={"lat": 37.0, "lon": 200.0})
+    assert r2.status_code == 400
+
+
+def test_post_live_home_empty_body_400(store: StateStore) -> None:
+    """POST /live/home with no valid body returns 400."""
+    app_home_store = AppHomeStore()
+    client = TestClient(create_app(store, app_home_store=app_home_store))
+    r = client.post("/live/home", json={})
+    assert r.status_code == 400

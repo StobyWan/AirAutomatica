@@ -48,6 +48,8 @@ Aviation UI elements for the AirAutomatica dashboard: FlightStatusStrip, Artific
 
 **Home position priority:** 1) Explicit home from `state.home_lat`, `state.home_lon` (HOME_POSITION message). 2) Fallback: first path point from `telemetry_path_update` when HOME_POSITION not in telemetry. `cachedHome` is reset when session_id changes.
 
+**Live vs replay home:** The live dashboard uses autopilot home (or path[0] fallback). The session detail page has a "Replay home override" for past sessions only—it affects replay and debrief metrics, not the flight controller's RTL home. App home overrides do not change the FC.
+
 ### Altitude / Vertical Speed
 
 | Field          | Source        | Required | Notes                          |
@@ -109,7 +111,7 @@ Aviation UI elements for the AirAutomatica dashboard: FlightStatusStrip, Artific
 
 1. **GPS / satellites:** Only available when GPS_RAW_INT is parsed (ArduPilot/INAV).
 2. **Climb rate:** Only available when GLOBAL_POSITION_INT includes vz.
-3. **Home position:** Uses path[0] fallback when HOME_POSITION not received.
+3. **Home position:** Uses path[0] fallback when HOME_POSITION not received. App home overrides affect only app calculations; they do not change the FC's RTL home.
 4. **Battery remaining % / mAh:** Not in model; endurance always "—" until extended.
 
 ## Recommended Next Steps

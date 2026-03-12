@@ -6,6 +6,7 @@ load_settings()
 
 import asyncio
 import atexit
+import dataclasses
 import logging
 import os
 import signal
@@ -60,6 +61,7 @@ from airautomatica.runtime.telemetry_subsystem import (
     TelemetryController,
     TelemetryReconnectResult,
 )
+from airautomatica.services.app_home_store import AppHomeStore
 from airautomatica.services.camera_recording import (
     CameraRecordingService,
     RecordingAutoController,
@@ -90,11 +92,14 @@ logger = logging.getLogger(__name__)
 def _shutdown_cleanup(
     persistence: PersistenceService,
     session_ref: list[int | None],
+    app_home_store: AppHomeStore | None = None,
     log_shutdown: bool = True,
 ) -> None:
     """End current session and optionally log app_shutdown. Idempotent."""
     if log_shutdown:
         logger.info("Shutdown requested")
+    if app_home_store is not None:
+        app_home_store.clear_app_home()
     sid = session_ref[0]
     if sid is not None:
         persistence.insert_system_event(
@@ -212,12 +217,20 @@ async def _telemetry_loop(
     preprocessor: TelemetryPreprocessor | None = None,
     event_recorder: EventPersistenceRecorder | None = None,
     phase_recorder: PhasePersistenceRecorder | None = None,
+    app_home_store: AppHomeStore | None = None,
 ) -> None:
     """Consume telemetry stream and update store."""
     async for state in source.stream():
         store.update(state)
         if preprocessor is not None:
-            preprocessor.on_state(state)
+            preprocessor_state = state
+            if app_home_store is not None and app_home_store.has_override():
+                lat, lon = app_home_store.get_override()
+                if lat is not None and lon is not None:
+                    preprocessor_state = dataclasses.replace(
+                        state, home_lat=lat, home_lon=lon
+                    )
+            preprocessor.on_state(preprocessor_state)
         if sampler is not None:
             sampler.maybe_sample(state)
         if path_recorder is not None:
@@ -366,11 +379,13 @@ def main() -> None:
         camera_recording_service,
         get_mode_fn=get_camera_recording_mode,
     )
+    app_home_store = AppHomeStore()
     session_auto_controller = SessionAutoController(
         persistence,
         session_ref,
         connection_store,
         get_enabled_fn=get_session_auto_start_on_arm,
+        app_home_store=app_home_store,
     )
 
     preprocessor: TelemetryPreprocessor | None = None
@@ -392,7 +407,12 @@ def main() -> None:
 
     def _end_session() -> None:
         try:
-            _shutdown_cleanup(persistence, session_ref, log_shutdown=False)
+            _shutdown_cleanup(
+                persistence,
+                session_ref,
+                app_home_store=app_home_store,
+                log_shutdown=False,
+            )
         except (KeyboardInterrupt, Exception):
             pass  # Avoid "Exception ignored in atexit callback" traceback
 
@@ -431,6 +451,7 @@ def main() -> None:
                 preprocessor,
                 event_recorder,
                 phase_recorder,
+                app_home_store,
                 name="telemetry",
             )
         )
@@ -456,6 +477,7 @@ def main() -> None:
         mission_logic=mission_logic,
         reload_ai_fn=_reload_fn,
         reload_telemetry_fn=_reload_telemetry_fn,
+        app_home_store=app_home_store,
     )
     asgi_app = wrap_app(app)
     host = get_api_host()
@@ -470,6 +492,7 @@ def main() -> None:
         sio,
         interval_sec=1.0,
         camera_recording_service=camera_recording_service,
+        app_home_store=app_home_store,
     )
 
     config = uvicorn.Config(asgi_app, host=host, port=port, log_level="info")
@@ -546,7 +569,7 @@ def main() -> None:
             except asyncio.CancelledError:
                 pass
 
-        _shutdown_cleanup(persistence, session_ref)
+        _shutdown_cleanup(persistence, session_ref, app_home_store=app_home_store)
         camera_recording_service.stop_and_cleanup()
 
         all_tasks = [server_task, telemetry_task, mission_task, publisher_task]

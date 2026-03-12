@@ -64,9 +64,31 @@
 
       <div class="card">
         <h2>Flight Path</h2>
+        <div id="path-home-bar" class="hidden flex flex-wrap items-center gap-2 mb-2 text-sm">
+          <span id="path-home-label" class="text-slate-400" title="Overrides home for replay and debrief only. Does not change the flight controller's RTL home.">Replay home: —</span>
+          <button type="button" id="set-home-first" class="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs" title="Use first path point as replay home">Use first path point</button>
+          <button type="button" id="set-home-manual" class="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs" title="Enter coordinates for replay home override">Enter coordinates…</button>
+          <button type="button" id="clear-home" class="hidden px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs" title="Clear replay home override">Clear override</button>
+        </div>
         <div id="path-container">
           <svg id="path-svg" class="path-svg" viewBox="0 0 200 220" preserveAspectRatio="xMidYMid meet"></svg>
           <div id="path-empty" class="hidden text-center py-8 text-slate-500 text-sm">No path data</div>
+        </div>
+        <div id="home-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div class="bg-slate-800 rounded-lg p-4 max-w-sm w-full mx-4 border border-slate-600">
+            <h3 class="text-lg font-medium text-white mb-3">Override home for replay</h3>
+            <p class="text-xs text-slate-500 mb-3">Affects replay and debrief only. Does not change the flight controller's RTL home.</p>
+            <div class="space-y-2 mb-4">
+              <label class="block text-sm text-slate-400">Latitude</label>
+              <input type="number" id="home-lat-input" step="any" min="-90" max="90" class="w-full rounded bg-slate-700 text-white px-3 py-2 border border-slate-600" placeholder="e.g. 37.6213">
+              <label class="block text-sm text-slate-400">Longitude</label>
+              <input type="number" id="home-lon-input" step="any" min="-180" max="180" class="w-full rounded bg-slate-700 text-white px-3 py-2 border border-slate-600" placeholder="e.g. -122.379">
+            </div>
+            <div class="flex gap-2 justify-end">
+              <button type="button" id="home-modal-cancel" class="px-3 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-sm">Cancel</button>
+              <button type="button" id="home-modal-apply" class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-sm">Apply</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -414,6 +436,7 @@
 
     function renderPathPlot(path, detections, opts) {
       const currentSample = (opts && opts.currentSample) || null;
+      const home = (opts && opts.home) || null;
       const svgEl = document.getElementById('path-svg');
       const emptyEl = document.getElementById('path-empty');
       const points = (path || []).filter(p => p.lat != null && p.lon != null);
@@ -427,7 +450,10 @@
           const w = 200, h = 220, margin = 8, plotW = w - 2 * margin, plotH = h - 2 * margin;
           const toX = (lon) => margin + ((lon - minLon) / (maxLon - minLon)) * plotW;
           const toY = (lat) => h - margin - ((lat - minLat) / (maxLat - minLat)) * plotH;
-          const svg = `<circle cx="${toX(currentSample.lon)}" cy="${toY(currentSample.lat)}" r="4" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>`;
+          let svg = `<circle cx="${toX(currentSample.lon)}" cy="${toY(currentSample.lat)}" r="4" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>`;
+          if (home && home.lat != null && home.lon != null) {
+            svg += `<circle cx="${toX(home.lon)}" cy="${toY(home.lat)}" r="5" fill="#f59e0b" stroke="#0f172a" stroke-width="1"/>`;
+          }
           svgEl.innerHTML = svg;
           svgEl.classList.remove('hidden');
           emptyEl.classList.add('hidden');
@@ -439,8 +465,12 @@
       }
       svgEl.classList.remove('hidden');
       emptyEl.classList.add('hidden');
-      const lats = points.map(p => p.lat);
-      const lons = points.map(p => p.lon);
+      const lats = [...points.map(p => p.lat)];
+      const lons = [...points.map(p => p.lon)];
+      if (home && home.lat != null && home.lon != null) {
+        lats.push(home.lat);
+        lons.push(home.lon);
+      }
       const minLat = Math.min(...lats);
       const maxLat = Math.max(...lats);
       const minLon = Math.min(...lons);
@@ -453,6 +483,9 @@
       const pathD = points.map((p, i) => (i === 0 ? 'M' : 'L') + toX(p.lon) + ' ' + toY(p.lat)).join(' ');
       let svg = `<path d="${pathD}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
       points.forEach(p => svg += `<circle cx="${toX(p.lon)}" cy="${toY(p.lat)}" r="2" fill="#3b82f6"/>`);
+      if (home && home.lat != null && home.lon != null) {
+        svg += `<circle cx="${toX(home.lon)}" cy="${toY(home.lat)}" r="5" fill="#f59e0b" stroke="#0f172a" stroke-width="1"/>`;
+      }
       (detections || []).filter(d => d.lat != null && d.lon != null).forEach(d => {
         svg += `<circle cx="${toX(d.lon)}" cy="${toY(d.lat)}" r="3" fill="#ef4444" opacity="0.8"/>`;
       });
@@ -601,6 +634,9 @@
     ]).then(([sessionMeta, pathData, samplesData, detData, recordingsData, eventsData, intervalsData, replaySamplesData]) => {
       document.getElementById('loading').classList.add('hidden');
       const path = pathData.path || [];
+      const pathHome = (pathData.home_lat != null && pathData.home_lon != null)
+        ? { lat: pathData.home_lat, lon: pathData.home_lon, home_source: pathData.home_source }
+        : null;
       const samples = samplesData.samples || [];
       const detections = detData.detections || [];
       const recordings = recordingsData.recordings || [];
@@ -686,8 +722,86 @@
         </div>
       `;
 
-      renderPathPlot(path, detections);
+      let pathHomeRef = pathHome;
+      const homeSourceLabels = { manual_session: 'Override', autopilot: 'Autopilot', fallback: 'First point' };
+
+      function updatePathHomeBar() {
+        const bar = document.getElementById('path-home-bar');
+        const label = document.getElementById('path-home-label');
+        const clearBtn = document.getElementById('clear-home');
+        if (path.length > 0 || pathHomeRef) {
+          bar.classList.remove('hidden');
+          label.textContent = pathHomeRef
+            ? 'Replay home: ' + (homeSourceLabels[pathHomeRef.home_source] || pathHomeRef.home_source || '—')
+            : 'Replay home: —';
+          clearBtn.classList.toggle('hidden', pathHomeRef?.home_source !== 'manual_session');
+        } else {
+          bar.classList.add('hidden');
+        }
+      }
+
+      let onPathHomeRefreshed = null;
+      async function refreshPathHome() {
+        const r = await fetch(`/sessions/${sessionId}/path`);
+        const p = await r.json();
+        pathHomeRef = (p.home_lat != null && p.home_lon != null)
+          ? { lat: p.home_lat, lon: p.home_lon, home_source: p.home_source }
+          : null;
+        renderPathPlot(path, detections, { home: pathHomeRef });
+        updatePathHomeBar();
+        loadDebrief();
+        if (onPathHomeRefreshed) onPathHomeRefreshed();
+      }
+
+      renderPathPlot(path, detections, { home: pathHomeRef });
       renderSparklines(samples);
+      updatePathHomeBar();
+
+      document.getElementById('set-home-first')?.addEventListener('click', async () => {
+        if (path.length === 0) return;
+        const first = path[0];
+        if (first.lat == null || first.lon == null) return;
+        const res = await fetch(`/sessions/${sessionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ home_lat: first.lat, home_lon: first.lon }),
+        });
+        if (res.ok) await refreshPathHome();
+      });
+      document.getElementById('set-home-manual')?.addEventListener('click', () => {
+        document.getElementById('home-modal').classList.remove('hidden');
+        if (pathHomeRef) {
+          document.getElementById('home-lat-input').value = pathHomeRef.lat;
+          document.getElementById('home-lon-input').value = pathHomeRef.lon;
+        } else {
+          document.getElementById('home-lat-input').value = '';
+          document.getElementById('home-lon-input').value = '';
+        }
+      });
+      document.getElementById('home-modal-cancel')?.addEventListener('click', () => {
+        document.getElementById('home-modal').classList.add('hidden');
+      });
+      document.getElementById('home-modal-apply')?.addEventListener('click', async () => {
+        const lat = parseFloat(document.getElementById('home-lat-input').value);
+        const lon = parseFloat(document.getElementById('home-lon-input').value);
+        if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
+        document.getElementById('home-modal').classList.add('hidden');
+        const res = await fetch(`/sessions/${sessionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ home_lat: lat, home_lon: lon }),
+        });
+        if (res.ok) await refreshPathHome();
+      });
+      document.getElementById('clear-home')?.addEventListener('click', async () => {
+        const res = await fetch(`/sessions/${sessionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clear_home: true }),
+        });
+        if (res.ok) await refreshPathHome();
+      });
+
       renderReplayTimeline(phaseIntervals, flightEvents, sessionStart, sessionEnd, replaySamples);
 
       if (replaySamples.length > 0) {
@@ -724,6 +838,7 @@
           const s = Math.floor((ms % 60000) / 1000);
           return m + ':' + String(s).padStart(2, '0');
         }
+        onPathHomeRefreshed = () => updateFromIndex(currentIndex);
         function updateFromIndex(idx) {
           currentIndex = Math.max(0, Math.min(idx, replaySamples.length - 1));
           const s = replaySamples[currentIndex];
@@ -746,7 +861,7 @@
           document.getElementById('replay-metric-voltage').textContent = s.voltage_v != null ? s.voltage_v.toFixed(2) + ' V' : '—';
           document.getElementById('replay-metric-alt').textContent = s.rel_alt_m != null ? s.rel_alt_m.toFixed(0) + ' m' : '—';
           document.getElementById('replay-metric-speed').textContent = s.groundspeed_m_s != null ? s.groundspeed_m_s.toFixed(1) + ' m/s' : '—';
-          renderPathPlot(path, detections, { currentSample: s });
+          renderPathPlot(path, detections, { currentSample: s, home: pathHomeRef });
           document.querySelectorAll('.replay-event-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
           document.querySelectorAll('.replay-phase-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
           flightEvents.forEach((ev, i) => {

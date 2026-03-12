@@ -10,6 +10,7 @@ from airautomatica.models.connection_state import ConnectionState, SessionState
 
 if TYPE_CHECKING:
     from airautomatica.models.state import AircraftState
+    from airautomatica.services.app_home_store import AppHomeStore
     from airautomatica.services.connection_state_store import ConnectionStateStore
     from airautomatica.services.persistence import (
         PersistenceService,
@@ -42,11 +43,13 @@ class SessionAutoController:
         connection_store: "ConnectionStateStore",
         get_enabled_fn: Callable[[], bool],
         debounce_sec: Optional[float] = None,
+        app_home_store: Optional["AppHomeStore"] = None,
     ) -> None:
         self._persistence = persistence
         self._session_ref = session_ref
         self._connection_store = connection_store
         self._get_enabled = get_enabled_fn
+        self._app_home_store = app_home_store
         self._debounce_sec = (
             debounce_sec
             if debounce_sec is not None
@@ -90,6 +93,8 @@ class SessionAutoController:
                 )
                 self._persistence.end_session(sid)
                 self._session_ref[0] = None
+                if self._app_home_store is not None:
+                    self._app_home_store.clear_app_home()
                 self._connection_store.set_session_state(SessionState.NONE)
                 self._disarm_since = None
             else:

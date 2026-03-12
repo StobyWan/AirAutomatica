@@ -15,7 +15,7 @@ Target: **Matek F405-WING V2** running **ArduPilot Plane** over MAVLink.
 | HOME_POSITION | 242 | Home latitude, longitude (ArduPilot) |
 | GPS_GLOBAL_ORIGIN | 49 | Home latitude, longitude (INAV) |
 
-**Home origin**: ArduPilot sends HOME_POSITION (id 242); INAV sends GPS_GLOBAL_ORIGIN (id 49). Both map to home_lat, home_lon. See [docs/mavlink_schema.md](docs/mavlink_schema.md).
+**Home origin**: ArduPilot sends HOME_POSITION (id 242); INAV sends GPS_GLOBAL_ORIGIN (id 49). Both map to home_lat, home_lon. See [docs/mavlink_schema.md](docs/mavlink_schema.md). AirAutomatica does not send any command to set home on the FC; app home overrides affect only app calculations and UI.
 
 ---
 

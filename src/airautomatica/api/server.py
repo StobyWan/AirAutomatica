@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, cast
 
 if TYPE_CHECKING:
+    from airautomatica.services.app_home_store import AppHomeStore
     from airautomatica.services.mission_logic import MissionLogic
     from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
 
@@ -104,6 +105,7 @@ def create_app(
     reload_telemetry_fn: Optional[
         Callable[[], Awaitable[TelemetryReconnectResult]]
     ] = None,
+    app_home_store: Optional["AppHomeStore"] = None,
 ) -> FastAPI:
     """Create FastAPI app with state store dependency.
     When ai_holder is provided, task_service is read from it (supports hot-reload).
@@ -119,6 +121,7 @@ def create_app(
     _task_service_fallback = task_service
     _reload_ai_fn = reload_ai_fn
     _reload_telemetry_fn = reload_telemetry_fn
+    _app_home_store = app_home_store
 
     def _get_task_service() -> Optional[OllamaTaskService]:
         if _ai_holder is not None:
@@ -313,10 +316,53 @@ def create_app(
         if sid is not None and persistence is not None:
             persistence.end_session(sid)
         _session_ref[0] = None
+        if _app_home_store is not None:
+            _app_home_store.clear_app_home()
         # State transition: session_state active → none
         if _connection_store is not None:
             _connection_store.set_session_state(SessionState.NONE)
         return {"ok": True}
+
+    @app.post("/live/home")
+    def post_live_home(
+        lat: Optional[float] = Body(None),
+        lon: Optional[float] = Body(None),
+        use_current: Optional[bool] = Body(None),
+        clear: Optional[bool] = Body(None),
+    ) -> dict:
+        """Set or clear live app home override. Does not change flight controller RTL home."""
+        if _app_home_store is None:
+            raise HTTPException(status_code=503, detail="App home store not available")
+        if clear is True:
+            _app_home_store.clear_app_home()
+            return {"ok": True}
+        if use_current is True:
+            state = store.get()
+            if state is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No telemetry state; cannot use current position",
+                )
+            lat_val = nan_to_none(state.lat)
+            lon_val = nan_to_none(state.lon)
+            if lat_val is None or lon_val is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Current position unavailable",
+                )
+            if not (-90 <= lat_val <= 90) or not (-180 <= lon_val <= 180):
+                raise HTTPException(status_code=400, detail="Invalid position")
+            _app_home_store.set_app_home(lat_val, lon_val)
+            return {"ok": True}
+        if lat is not None and lon is not None:
+            if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                raise HTTPException(status_code=400, detail="Invalid lat/lon")
+            _app_home_store.set_app_home(lat, lon)
+            return {"ok": True}
+        raise HTTPException(
+            status_code=400,
+            detail="Provide lat and lon, use_current=true, or clear=true",
+        )
 
     @app.get("/health")
     def health() -> dict:
@@ -498,13 +544,47 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found")
         return session_data
 
+    @app.patch("/sessions/{sid:int}")
+    def patch_session(
+        sid: int,
+        home_lat: Optional[float] = Body(None),
+        home_lon: Optional[float] = Body(None),
+        clear_home: bool = Body(False),
+    ) -> dict:
+        """Update session. Set home_lat/home_lon to set manual home; clear_home=true to clear."""
+        if persistence is None:
+            raise HTTPException(status_code=404, detail="Persistence not available")
+        session_data = persistence.get_session(sid)
+        if session_data is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if clear_home:
+            persistence.clear_session_home(sid)
+        elif home_lat is not None and home_lon is not None:
+            if not (-90 <= home_lat <= 90) or not (-180 <= home_lon <= 180):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid coordinates: lat in [-90,90], lon in [-180,180]",
+                )
+            if not persistence.update_session_home(sid, home_lat, home_lon):
+                raise HTTPException(
+                    status_code=500, detail="Failed to update session home"
+                )
+        return persistence.get_session(sid) or session_data
+
     @app.get("/sessions/{sid:int}/path")
     def get_session_path(sid: int) -> dict:
         """Return flight path for a session (lat/lon points, oldest first). For map display or export."""
         if persistence is None:
             return {"path": [], "session_id": sid}
         path = persistence.get_session_path(sid)
-        return {"path": path, "session_id": sid}
+        home_lat, home_lon, home_source = persistence.get_session_home(sid)
+        out: dict = {"path": path, "session_id": sid}
+        if home_lat is not None and home_lon is not None:
+            out["home_lat"] = home_lat
+            out["home_lon"] = home_lon
+        if home_source is not None:
+            out["home_source"] = home_source
+        return out
 
     @app.get("/sessions/{sid:int}/detections")
     def get_session_detections(sid: int) -> dict:
