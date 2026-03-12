@@ -98,11 +98,43 @@
     .settings-advanced-toggle { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 0.8125rem; padding: 0.25rem 0; display: flex; align-items: center; gap: 0.375rem; }
     .settings-advanced-toggle:hover { color: var(--text); }
     .settings-legacy { opacity: 0.85; }
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+    .landing-btn { display: block; width: 100%; max-width: 20rem; margin: 0.5rem 0; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9375rem; font-weight: 500; cursor: pointer; transition: background 0.15s, border-color 0.15s; text-align: center; }
+    .landing-btn-primary { background: var(--connecting); color: #fff; border: 1px solid transparent; }
+    .landing-btn-primary:hover { background: #2563eb; }
+    .landing-btn-secondary { background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid rgba(255,255,255,0.2); }
+    .landing-btn-secondary:hover { background: rgba(255,255,255,0.12); }
   </style>
 </head>
 <body>
+  <div id="view-landing" class="view-panel active">
+    <h1>AIRAUTOMATICA</h1>
+    <h2 class="text-slate-400 font-normal text-base mb-4">Connection Setup</h2>
+    <p class="text-slate-200 text-sm mb-6">Choose how to connect to your flight controller or continue in mock mode.</p>
+    <p class="text-slate-500 text-xs mb-4">No hardware? Continue in Mock Mode to develop without a flight controller.</p>
+    <div class="flex flex-col items-start gap-2 mb-6">
+      <button type="button" id="landing-auto-detect" class="landing-btn landing-btn-primary">Auto Detect</button>
+      <button type="button" id="landing-use-ardupilot" class="landing-btn landing-btn-secondary">Use ArduPilot</button>
+      <button type="button" id="landing-use-inav" class="landing-btn landing-btn-secondary">Use iNav</button>
+      <button type="button" id="landing-mock-mode" class="landing-btn landing-btn-secondary">Continue in Mock Mode</button>
+    </div>
+    <div id="landing-status" class="text-sm text-slate-500 min-h-[1.5rem]">Ready</div>
+    <details class="mt-6 text-xs text-slate-500">
+      <summary class="cursor-pointer hover:text-slate-400">Diagnostics</summary>
+      <div id="landing-diagnostics" class="mt-2 font-mono text-slate-600">—</div>
+    </details>
+  </div>
+
+  <div id="view-idle" class="view-panel">
   <h1>AIRAUTOMATICA Dashboard</h1>
-  <div class="connection-status" id="connection-status">Connecting…</div>
+  <div class="flex items-center justify-between gap-4 mb-4 flex-wrap">
+    <div class="connection-status" id="connection-status">Connecting…</div>
+    <div class="flex gap-2">
+      <button type="button" id="idle-retry-detect" class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm">Retry Detection</button>
+      <button type="button" id="idle-disconnect" class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm">Disconnect</button>
+    </div>
+  </div>
 
   <nav class="flex gap-1 mb-4 border-b border-gray-700/50">
     <button type="button" class="tab-btn active" data-tab="main">Live</button>
@@ -202,6 +234,14 @@
 
   <div class="card">
     <h2>Session / Persistence</h2>
+    <div id="session-status-area" class="mb-4">
+      <p id="session-status-text" class="text-sm text-slate-400 mb-2">No active session. Click Start Session to begin recording telemetry and detections.</p>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="session-start-btn" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-colors">Start Session</button>
+        <button type="button" id="session-start-mock-btn" class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium transition-colors">Start Mock Session</button>
+        <button type="button" id="session-stop-btn" class="hidden px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium transition-colors">Stop Session</button>
+      </div>
+    </div>
     <div class="grid" id="session-fields"></div>
   </div>
 
@@ -379,9 +419,72 @@
     </form>
   </div>
   </div>
+  </div>
 
   <script>
     const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','CAMERA_RECORDING_MODE','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
+
+    function showView(viewId) {
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+      const el = document.getElementById(viewId);
+      if (el) el.classList.add('active');
+    }
+
+    function initConnectionView() {
+      fetch('/connection/state').then(r => r.json()).then(d => {
+        const conn = d.connection_state || 'setup';
+        if (conn === 'setup') {
+          showView('view-landing');
+          const diag = document.getElementById('landing-diagnostics');
+          if (diag && d.detection_result) diag.textContent = JSON.stringify(d.detection_result, null, 2);
+        } else {
+          showView('view-idle');
+        }
+      }).catch(() => showView('view-landing'));
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initConnectionView();
+      document.getElementById('landing-auto-detect')?.addEventListener('click', () => {
+        document.getElementById('landing-status').textContent = 'Scanning…';
+        fetch('/connection/detect', { method: 'POST' }).then(r => r.json()).then(d => {
+          if (d.detected) {
+            document.getElementById('landing-status').textContent = d.message || 'Detected';
+          } else {
+            document.getElementById('landing-status').textContent = 'No flight controller detected. Check USB connection and try again, or continue in Mock Mode.';
+          }
+          if (d.connection_state && d.connection_state !== 'setup' && d.connection_state !== 'detecting' && d.connection_state !== 'not_detected') {
+            showView('view-idle');
+          }
+          const diag = document.getElementById('landing-diagnostics');
+          if (diag) diag.textContent = JSON.stringify(d, null, 2);
+        }).catch(() => {
+          document.getElementById('landing-status').textContent = 'Detection failed. Continue in Mock Mode to develop without hardware.';
+        });
+      });
+      document.getElementById('landing-use-ardupilot')?.addEventListener('click', () => {
+        document.getElementById('landing-status').textContent = 'Use ArduPilot selected…';
+        fetch('/connection/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'ardupilot' }) }).then(r => r.json()).then(d => {
+          document.getElementById('landing-status').textContent = d.restart_required ? 'Restart required to connect.' : 'Ready';
+          showView('view-idle');
+        }).catch(() => { document.getElementById('landing-status').textContent = 'Failed'; showView('view-idle'); });
+      });
+      document.getElementById('landing-use-inav')?.addEventListener('click', () => {
+        document.getElementById('landing-status').textContent = 'Use iNav selected…';
+        fetch('/connection/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'inav' }) }).then(r => r.json()).then(d => {
+          document.getElementById('landing-status').textContent = d.restart_required ? 'Restart required to connect.' : 'Ready';
+          showView('view-idle');
+        }).catch(() => { document.getElementById('landing-status').textContent = 'Failed'; showView('view-idle'); });
+      });
+      document.getElementById('landing-mock-mode')?.addEventListener('click', () => {
+        document.getElementById('landing-status').textContent = 'Mock mode selected…';
+        fetch('/connection/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'mock' }) }).then(r => r.json()).then(() => {
+          showView('view-idle');
+        }).catch(() => showView('view-idle'));
+      });
+    });
+  </script>
+  <script>
 
     function updateProviderVisibility() {
       const p = document.getElementById('LOCAL_LLM_PROVIDER').value;
@@ -465,6 +568,79 @@
         backoff: 'status-backoff', connecting: 'status-connecting', starting: 'status-starting' };
       return m[s] || 'status-starting';
     }
+
+    function updateSessionUI(sid) {
+      const sessionStatusText = document.getElementById('session-status-text');
+      const sessionStartBtn = document.getElementById('session-start-btn');
+      const sessionStartMockBtn = document.getElementById('session-start-mock-btn');
+      const sessionStopBtn = document.getElementById('session-stop-btn');
+      if (!sessionStatusText || !sessionStartBtn || !sessionStartMockBtn || !sessionStopBtn) return;
+      if (sid != null && sid !== '') {
+        sessionStatusText.textContent = 'Session active #' + sid;
+        sessionStartBtn.classList.add('hidden');
+        sessionStartMockBtn.classList.add('hidden');
+        sessionStopBtn.classList.remove('hidden');
+      } else {
+        sessionStatusText.textContent = 'No active session. Click Start Session to begin recording telemetry and detections.';
+        sessionStartBtn.classList.remove('hidden');
+        sessionStartMockBtn.classList.remove('hidden');
+        sessionStopBtn.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('session-start-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('session-start-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const r = await fetch('/session/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const d = await r.json();
+        if (d.ok && d.session_id != null) {
+          currentSessionId = d.session_id;
+          updateSessionUI(d.session_id);
+          refreshRecordingsUI();
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+    document.getElementById('session-start-mock-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('session-start-mock-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const r = await fetch('/session/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mock: true }) });
+        const d = await r.json();
+        if (d.ok && d.session_id != null) {
+          currentSessionId = d.session_id;
+          updateSessionUI(d.session_id);
+          refreshRecordingsUI();
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+    document.getElementById('idle-retry-detect')?.addEventListener('click', () => {
+      fetch('/connection/detect', { method: 'POST' }).then(r => r.json()).then(d => {
+        if (d.connection_state && d.connection_state !== 'setup' && d.connection_state !== 'detecting' && d.connection_state !== 'not_detected') {
+          showView('view-idle');
+        }
+      }).catch(() => {});
+    });
+    document.getElementById('idle-disconnect')?.addEventListener('click', () => {
+      fetch('/connection/disconnect', { method: 'POST' }).then(() => showView('view-landing')).catch(() => showView('view-landing'));
+    });
+
+    document.getElementById('session-stop-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('session-stop-btn');
+      if (btn) btn.disabled = true;
+      try {
+        await fetch('/session/stop', { method: 'POST' });
+        currentSessionId = null;
+        updateSessionUI(null);
+        refreshRecordingsUI();
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
 
     document.getElementById('telemetry-summary-btn').addEventListener('click', async () => {
       const btn = document.getElementById('telemetry-summary-btn');
@@ -653,6 +829,7 @@
       } else {
         btnWrap.classList.add('hidden');
       }
+      updateSessionUI(sid);
       const prevSessionId = currentSessionId;
       currentSessionId = d.session_id;
       if (prevSessionId !== currentSessionId) {

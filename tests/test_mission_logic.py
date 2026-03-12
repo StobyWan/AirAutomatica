@@ -45,7 +45,7 @@ def test_low_confidence_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -65,7 +65,7 @@ def test_error_label_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.0,
     )
     result = AiResult(
@@ -85,7 +85,7 @@ def test_empty_summary_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -105,7 +105,7 @@ def test_no_response_summary_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -125,7 +125,7 @@ def test_raw_length_zero_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -146,7 +146,7 @@ def test_placeholder_label_lmstudio_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -167,7 +167,7 @@ def test_placeholder_label_ollama_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -188,7 +188,7 @@ def test_guided_label_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -208,7 +208,7 @@ def test_device_status_label_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -228,7 +228,7 @@ def test_battery_label_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -257,7 +257,7 @@ def test_none_label_not_persisted() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.9,
     )
     result = AiResult(
@@ -277,7 +277,7 @@ def test_heading_label_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -297,7 +297,7 @@ def test_altitude_label_ignored() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -317,7 +317,7 @@ def test_unknown_label_rejected() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -337,7 +337,7 @@ def test_ground_vehicle_normalized_accepted() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -357,7 +357,7 @@ def test_empty_label_no_response() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -378,7 +378,7 @@ def test_perception_counts_accepted() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -400,7 +400,7 @@ def test_perception_counts_suppressed() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
         duplicate_window_sec=30.0,
     )
@@ -425,7 +425,7 @@ def test_perception_counts_no_detection() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.9,
     )
     result = AiResult(
@@ -447,7 +447,7 @@ def test_perception_counts_non_perception_label() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -469,7 +469,7 @@ def test_perception_counts_unknown_label() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -491,7 +491,7 @@ def test_perception_counts_parse_error() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.0,
     )
     result = AiResult(
@@ -512,7 +512,7 @@ def test_duplicate_suppressed() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
         duplicate_window_sec=30.0,
     )
@@ -535,7 +535,7 @@ def test_accepted_detection_persisted() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=42,
+        session_ref=[42],
         min_confidence=0.5,
     )
     result = AiResult(
@@ -562,7 +562,7 @@ def test_duplicate_after_window_persisted() -> None:
     logic = MissionLogic(
         store=StateStore(),
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         min_confidence=0.5,
         duplicate_window_sec=0.1,
     )
@@ -602,7 +602,7 @@ async def test_run_calls_process_result() -> None:
         store=store,
         ai_service=ai_service,
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         interval_sec=10.0,
         ai_interval_sec=0.1,
         min_confidence=0.5,
@@ -649,7 +649,7 @@ async def test_mission_loop_survives_ai_exception() -> None:
         store=store,
         ai_service=ai_service,
         persistence=persistence,
-        session_id=1,
+        session_ref=[1],
         interval_sec=0.05,
         ai_interval_sec=0.05,
         min_confidence=0.5,

@@ -243,7 +243,7 @@ def test_health_includes_persistence_info_when_enabled(
         assert session_id is not None
 
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get("/health")
         assert r.status_code == 200
@@ -266,7 +266,7 @@ def test_recent_detections_empty_when_no_persistence(client: TestClient) -> None
 def test_recent_detections_empty_when_no_session(store: StateStore) -> None:
     """GET /recent-detections returns empty when session_id is None."""
     persistence = PersistenceService()
-    client = TestClient(create_app(store, persistence=persistence, session_id=None))
+    client = TestClient(create_app(store, session_ref=[None], persistence=persistence))
     r = client.get("/recent-detections")
     assert r.status_code == 200
     data = r.json()
@@ -298,7 +298,7 @@ def test_recent_detections_returns_persisted(monkeypatch: pytest.MonkeyPatch) ->
         persistence.insert_detection(session_id, result, 37.0, -122.0, 100.0)
 
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get("/recent-detections")
         assert r.status_code == 200
@@ -355,7 +355,7 @@ def test_recent_detections_newest_first(monkeypatch: pytest.MonkeyPatch) -> None
         )
 
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get("/recent-detections")
         assert r.status_code == 200
@@ -395,7 +395,7 @@ def test_recent_detections_limit(monkeypatch: pytest.MonkeyPatch) -> None:
             )
 
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get("/recent-detections")
         assert r.status_code == 200
@@ -431,7 +431,7 @@ def test_recent_events_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
             {"from": "connected", "to": "disconnected"},
         )
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get("/recent-events")
         assert r.status_code == 200
@@ -479,7 +479,7 @@ def test_sessions_telemetry_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         persistence.insert_telemetry_sample(session_id, state)
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get(f"/sessions/{session_id}/telemetry-samples")
         assert r.status_code == 200
@@ -507,7 +507,7 @@ def test_sessions_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
         persistence = PersistenceService()
         session_id = persistence.start_session("mock", "mock")
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get("/sessions")
         assert r.status_code == 200
@@ -703,7 +703,7 @@ def test_get_session_path_returns_path(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
         client = TestClient(
-            create_app(store, persistence=persistence, session_id=session_id)
+            create_app(store, session_ref=[session_id], persistence=persistence)
         )
         r = client.get(f"/sessions/{session_id}/path")
         assert r.status_code == 200

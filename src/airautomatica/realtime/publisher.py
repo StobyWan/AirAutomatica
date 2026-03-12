@@ -111,7 +111,7 @@ class DashboardPublisher:
         self,
         store: "StateStore",
         persistence: Optional["PersistenceService"],
-        session_id: Optional[int],
+        session_ref: list[int | None],
         ai_mode: str,
         telemetry_backend: str,
         sio: socketio.AsyncServer,
@@ -120,7 +120,7 @@ class DashboardPublisher:
     ) -> None:
         self._store = store
         self._persistence = persistence
-        self._session_id = session_id
+        self._session_ref = session_ref
         self._ai_mode = ai_mode
         self._telemetry_backend = telemetry_backend
         self._sio = sio
@@ -152,13 +152,14 @@ class DashboardPublisher:
                             }
                         )
 
+                session_id = self._session_ref[0] if self._session_ref else None
                 caps = self._store.get_capabilities()
                 caps_dict = caps.to_dict() if caps is not None else None
                 health = _build_health_payload(
                     state,
                     self._ai_mode,
                     self._telemetry_backend,
-                    self._session_id,
+                    session_id,
                     persistence_enabled,
                     last_error,
                     capabilities=caps_dict,
@@ -187,11 +188,11 @@ class DashboardPublisher:
                 await self._sio.emit("state_update", state_payload)
 
                 detections: list[dict] = []
-                if self._persistence is not None and self._session_id is not None:
+                if self._persistence is not None and session_id is not None:
                     detections = self._persistence.get_recent_detections(
-                        self._session_id, limit=20
+                        session_id, limit=20
                     )
-                det_payload = _build_detections_payload(detections, self._session_id)
+                det_payload = _build_detections_payload(detections, session_id)
                 await self._sio.emit("detections_update", det_payload)
 
                 sessions: list[dict] = []
@@ -199,7 +200,7 @@ class DashboardPublisher:
                     sessions = self._persistence.get_recent_sessions(
                         limit=10, include_detection_count=True
                     )
-                sessions_payload = _build_sessions_payload(sessions, self._session_id)
+                sessions_payload = _build_sessions_payload(sessions, session_id)
                 await self._sio.emit("sessions_update", sessions_payload)
 
                 # Throttled events (every 5s)
@@ -212,10 +213,8 @@ class DashboardPublisher:
 
                     path: list[dict] = []
                     current_position = None
-                    if self._persistence is not None and self._session_id is not None:
-                        path = self._persistence.get_session_path(
-                            self._session_id, limit=500
-                        )
+                    if self._persistence is not None and session_id is not None:
+                        path = self._persistence.get_session_path(session_id, limit=500)
                     if state is not None:
                         lat = nan_to_none(state.lat)
                         lon = nan_to_none(state.lon)
@@ -229,7 +228,7 @@ class DashboardPublisher:
                         "path": path,
                         "current_position": current_position,
                         "detections": detections,
-                        "session_id": self._session_id,
+                        "session_id": session_id,
                     }
                     await self._sio.emit("telemetry_path_update", path_payload)
 
@@ -238,9 +237,9 @@ class DashboardPublisher:
                     rel_alt_m_list: list[float] = []
                     groundspeed_m_s: list[float] = []
                     heartbeat_age_s: list[float] = []
-                    if self._persistence is not None and self._session_id is not None:
+                    if self._persistence is not None and session_id is not None:
                         samples = self._persistence.get_recent_telemetry_samples(
-                            self._session_id, limit=30
+                            session_id, limit=30
                         )
                         # Samples are newest first; reverse for oldest-first
                         for s in reversed(samples):

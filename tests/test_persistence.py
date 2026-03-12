@@ -360,7 +360,8 @@ def test_path_recorder_distance_based() -> None:
         session_id = persistence.start_session("mock", "mock")
         assert session_id is not None
 
-        recorder = PathRecorder(persistence, session_id, min_distance_m=100.0)
+        session_ref = [session_id]
+        recorder = PathRecorder(persistence, session_ref, min_distance_m=100.0)
         now = datetime.now(timezone.utc)
 
         def make_state(lat: float, lon: float) -> AircraftState:
@@ -458,7 +459,8 @@ def test_lifecycle_logger_logs_on_status_change() -> None:
         session_id = persistence.start_session("mock", "mock")
         assert session_id is not None
 
-        logger = TelemetryLifecycleLogger(persistence, session_id)
+        session_ref = [session_id]
+        logger = TelemetryLifecycleLogger(persistence, session_ref)
 
         logger.maybe_log_transition(_make_state("starting"))
         logger.maybe_log_transition(_make_state("connecting"))
@@ -490,7 +492,8 @@ def test_lifecycle_logger_includes_reconnect_metadata() -> None:
         init_db(str(path))
         persistence = PersistenceService()
         session_id = persistence.start_session("mock", "mock")
-        logger = TelemetryLifecycleLogger(persistence, session_id)
+        session_ref = [session_id]
+        logger = TelemetryLifecycleLogger(persistence, session_ref)
 
         logger.maybe_log_transition(_make_state("disconnected"))
         logger.maybe_log_transition(
@@ -529,7 +532,8 @@ def test_lifecycle_logger_no_duplicate_when_status_unchanged() -> None:
         init_db(str(path))
         persistence = PersistenceService()
         session_id = persistence.start_session("mock", "mock")
-        logger = TelemetryLifecycleLogger(persistence, session_id)
+        session_ref = [session_id]
+        logger = TelemetryLifecycleLogger(persistence, session_ref)
 
         for _ in range(5):
             logger.maybe_log_transition(_make_state("connected"))
