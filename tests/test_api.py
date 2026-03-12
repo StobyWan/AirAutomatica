@@ -548,6 +548,58 @@ def test_sessions_telemetry_empty_when_no_persistence(client: TestClient) -> Non
     assert r.json() == {"samples": [], "session_id": 1}
 
 
+def test_sessions_telemetry_limit_and_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /sessions/{id}/telemetry-samples accepts limit and order query params."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        base = datetime.now(timezone.utc)
+        for i in range(5):
+            state = AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=37.5 + i * 0.001,
+                lon=-122.2,
+                rel_alt_m=100.0 + i,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=base + timedelta(seconds=i),
+                telemetry_status="connected",
+            )
+            persistence.insert_telemetry_sample(session_id, state)
+        client = TestClient(
+            create_app(store, session_ref=[session_id], persistence=persistence)
+        )
+        r_desc = client.get(
+            f"/sessions/{session_id}/telemetry-samples?limit=3&order=desc"
+        )
+        assert r_desc.status_code == 200
+        samples_desc = r_desc.json()["samples"]
+        assert len(samples_desc) == 3
+        assert samples_desc[0]["rel_alt_m"] == 104.0
+        assert samples_desc[2]["rel_alt_m"] == 102.0
+        r_asc = client.get(
+            f"/sessions/{session_id}/telemetry-samples?limit=3&order=asc"
+        )
+        assert r_asc.status_code == 200
+        samples_asc = r_asc.json()["samples"]
+        assert len(samples_asc) == 3
+        assert samples_asc[0]["rel_alt_m"] == 100.0
+        assert samples_asc[2]["rel_alt_m"] == 102.0
+
+
 def test_get_session_flight_events_empty_when_no_persistence(
     client: TestClient,
 ) -> None:

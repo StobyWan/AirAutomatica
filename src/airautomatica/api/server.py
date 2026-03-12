@@ -523,11 +523,19 @@ def create_app(
         return {"events": events}
 
     @app.get("/sessions/{sid:int}/telemetry-samples")
-    def get_session_telemetry_samples(sid: int) -> dict:
-        """Return recent telemetry samples for a session (path + sparklines)."""
+    def get_session_telemetry_samples(
+        sid: int,
+        limit: int = Query(60, ge=1, le=10000),
+        order: str = Query("desc"),
+    ) -> dict:
+        """Return telemetry samples for a session. Default: 60 newest (sparklines). Use limit=5000&order=asc for replay."""
         if persistence is None:
             return {"samples": [], "session_id": sid}
-        samples = persistence.get_recent_telemetry_samples(sid, limit=60)
+        samples = persistence.get_recent_telemetry_samples(
+            sid,
+            limit=limit,
+            order=order if order.lower() in ("asc", "desc") else "desc",
+        )
         return {"samples": samples, "session_id": sid}
 
     @app.get("/sessions/{sid:int}/flight-events")

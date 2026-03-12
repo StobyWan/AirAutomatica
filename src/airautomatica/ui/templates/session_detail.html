@@ -24,6 +24,10 @@
     @media (min-width: 640px) { .detection-cards { grid-template-columns: repeat(2, 1fr); } }
     @media (min-width: 1024px) { .detection-cards { grid-template-columns: repeat(3, 1fr); } }
     .na { color: var(--muted); }
+    .replay-timeline-svg { width: 100%; height: 48px; display: block; }
+    .replay-legend { font-size: 0.7rem; }
+    #replay-scrubber { transition: left 0.08s ease-out; }
+    #replay-scrubber.replay-no-transition { transition: none; }
   </style>
 </head>
 <body>
@@ -58,6 +62,45 @@
     <div id="content" class="hidden">
       <div id="stats" class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4"></div>
 
+      <div id="replay-section" class="card hidden">
+        <h2>Replay</h2>
+        <p class="text-xs text-slate-500 mb-3">Flight phases and events timeline</p>
+        <div id="replay-timeline-container" class="relative">
+          <div id="replay-time-labels" class="flex justify-between text-xs text-slate-500 mb-1"></div>
+          <div id="replay-timeline-track" class="relative cursor-ew-resize">
+            <svg id="replay-timeline-svg" class="replay-timeline-svg rounded" viewBox="0 0 400 48" preserveAspectRatio="none"></svg>
+            <div id="replay-scrubber" class="hidden absolute top-0 bottom-0 w-1 bg-cyan-400 rounded pointer-events-auto cursor-ew-resize" style="left: 0%; transform: translateX(-50%);"></div>
+          </div>
+        </div>
+        <div id="replay-controls" class="hidden mt-2 flex flex-wrap items-center gap-3">
+          <button type="button" id="replay-prev-event" class="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-sm" title="Previous event">⏮</button>
+          <button type="button" id="replay-play-pause" class="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-sm" title="Play/Pause">▶</button>
+          <button type="button" id="replay-next-event" class="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-sm" title="Next event">⏭</button>
+          <select id="replay-speed" class="rounded bg-slate-700 text-slate-200 text-sm px-2 py-1 border border-slate-600">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+          </select>
+          <span id="replay-time-display" class="text-sm font-mono text-slate-400">0:00 / 0:00</span>
+          <div id="replay-metrics" class="flex flex-wrap gap-4 text-sm items-center">
+            <span><span class="text-slate-500">Phase</span> <span id="replay-metric-phase" class="font-mono text-cyan-400">—</span></span>
+            <span><span class="text-slate-500">V</span> <span id="replay-metric-voltage" class="font-mono text-cyan-400">—</span></span>
+            <span><span class="text-slate-500">Alt</span> <span id="replay-metric-alt" class="font-mono text-cyan-400">—</span></span>
+            <span><span class="text-slate-500">Spd</span> <span id="replay-metric-speed" class="font-mono text-cyan-400">—</span></span>
+          </div>
+        </div>
+        <details id="replay-events-list" class="hidden mt-2">
+          <summary class="cursor-pointer text-sm text-slate-400 hover:text-slate-300">Events</summary>
+          <div id="replay-events-items" class="mt-1 space-y-1 max-h-32 overflow-y-auto"></div>
+        </details>
+        <details id="replay-phases-list" class="hidden mt-2">
+          <summary class="cursor-pointer text-sm text-slate-400 hover:text-slate-300">Phases</summary>
+          <div id="replay-phases-items" class="mt-1 space-y-1 max-h-32 overflow-y-auto"></div>
+        </details>
+        <div id="replay-legend" class="replay-legend mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-400"></div>
+        <div id="replay-empty" class="hidden py-4 text-center text-slate-500 text-sm">No phase or event data for this session.</div>
+      </div>
+
       <div id="debrief-section" class="card">
         <h2 class="text-slate-200 font-semibold tracking-tight">Debrief</h2>
         <p class="text-xs text-slate-500 mb-3">Post-flight summary from telemetry</p>
@@ -74,11 +117,15 @@
               <div id="debrief-summary-text"></div>
               <div id="debrief-summary-timestamp" class="hidden text-xs text-slate-500 mt-2"></div>
               <div id="debrief-summary-error" class="hidden text-xs text-amber-400 mt-2">Regeneration failed.</div>
-              <button type="button" id="debrief-summary-regenerate-btn" class="mt-2 px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-white text-sm font-medium">Regenerate AI Summary</button>
+              <div class="mt-2 flex flex-wrap gap-2 items-center">
+                <button type="button" id="debrief-summary-regenerate-btn" class="px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-white text-sm font-medium">Regenerate AI Summary</button>
+                <button type="button" id="debrief-view-replay" class="px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-cyan-300 text-sm font-medium">View in replay</button>
+              </div>
             </div>
             <div id="debrief-summary-placeholder" class="hidden text-slate-500 text-sm py-2">
               <span>AI summary not generated yet.</span>
               <button type="button" id="debrief-summary-generate-btn" class="ml-2 px-3 py-1 rounded-lg bg-cyan-600/80 hover:bg-cyan-600 text-white text-sm font-medium">Generate AI Summary</button>
+              <button type="button" id="debrief-view-replay-placeholder" class="ml-2 px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-cyan-300 text-sm font-medium">View in replay</button>
             </div>
           </div>
         </div>
@@ -182,7 +229,8 @@
         const name = (e.name || '').replace(/_/g, ' ');
         const dur = e.duration_sec != null ? formatDuration(e.duration_sec) : '';
         const count = e.count != null ? ` (${e.count})` : '';
-        return `<span class="text-slate-300 text-sm">${name}${count}${dur !== '—' ? ' · ' + dur : ''}</span>`;
+        const rawName = e.name || '';
+        return `<button type="button" class="debrief-event-link text-slate-300 hover:text-cyan-400 hover:underline text-sm cursor-pointer" data-event-name="${(rawName || '').replace(/"/g, '&quot;')}">${name}${count}${dur !== '—' ? ' · ' + dur : ''}</button>`;
       }).join('<span class="text-slate-600 mx-1">·</span>');
     }
     function renderAssessmentTags(tags) {
@@ -202,19 +250,35 @@
       const avgP = summary.average_power_w;
       const peakP = summary.peak_power_w;
       const minV = summary.minimum_voltage_v;
-      document.getElementById('debrief-metrics').innerHTML = `
+      const phaseContent = phase
+        ? `<button type="button" class="debrief-phase-link text-slate-200 hover:text-cyan-400 hover:underline font-mono text-sm cursor-pointer" data-phase="${(phase || '').replace(/"/g, '&quot;')}">${phase || '—'}</button>`
+        : `<p class="text-sm font-mono text-slate-200">—</p>`;
+      const metricsEl = document.getElementById('debrief-metrics');
+      metricsEl.innerHTML = `
         <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Duration</span><p class="text-sm font-mono text-slate-200">${formatDuration(dur)}</p></div>
-        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Dominant phase</span><p class="text-sm font-mono text-slate-200">${phase || '—'}</p></div>
+        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Dominant phase</span><div class="mt-0.5">${phaseContent}</div></div>
         <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Peak distance</span><p class="text-sm font-mono text-slate-200">${formatMetersOrKm(dist)}</p></div>
         <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Avg power</span><p class="text-sm font-mono text-slate-200">${formatWatts(avgP)}</p></div>
         <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Peak power</span><p class="text-sm font-mono text-slate-200">${formatWatts(peakP)}</p></div>
         <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Min voltage</span><p class="text-sm font-mono text-slate-200">${formatVolts(minV)}</p></div>
       `;
+      metricsEl.querySelectorAll('.debrief-phase-link').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const p = btn.dataset.phase;
+          if (p && typeof window.__replaySeekToPhase === 'function') window.__replaySeekToPhase(p);
+        });
+      });
       const eventsEl = document.getElementById('debrief-events');
       const eventsHtml = renderTopEvents(summary.top_events, 5);
       if (eventsHtml) {
-        eventsEl.innerHTML = `<div class="text-xs text-slate-500 mb-1">Top events</div><div class="flex flex-wrap gap-x-1 gap-y-0.5">${eventsHtml}</div>`;
+        eventsEl.innerHTML = `<div class="text-xs text-slate-500 mb-1">Top events <span class="text-slate-600">(click to seek replay)</span></div><div class="flex flex-wrap gap-x-1 gap-y-0.5">${eventsHtml}</div>`;
         eventsEl.classList.remove('hidden');
+        eventsEl.querySelectorAll('.debrief-event-link').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const name = btn.dataset.eventName;
+            if (name && typeof window.__replaySeekToEvent === 'function') window.__replaySeekToEvent(name);
+          });
+        });
       } else {
         eventsEl.classList.add('hidden');
       }
@@ -344,8 +408,12 @@
     }
     document.getElementById('debrief-summary-generate-btn')?.addEventListener('click', handleGenerateOrRegenerate);
     document.getElementById('debrief-summary-regenerate-btn')?.addEventListener('click', handleGenerateOrRegenerate);
+    const scrollToReplay = () => document.getElementById('replay-section')?.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('debrief-view-replay')?.addEventListener('click', scrollToReplay);
+    document.getElementById('debrief-view-replay-placeholder')?.addEventListener('click', scrollToReplay);
 
-    function renderPathPlot(path, detections) {
+    function renderPathPlot(path, detections, opts) {
+      const currentSample = (opts && opts.currentSample) || null;
       const svgEl = document.getElementById('path-svg');
       const emptyEl = document.getElementById('path-empty');
       const points = (path || []).filter(p => p.lat != null && p.lon != null);
@@ -373,6 +441,9 @@
       (detections || []).filter(d => d.lat != null && d.lon != null).forEach(d => {
         svg += `<circle cx="${toX(d.lon)}" cy="${toY(d.lat)}" r="3" fill="#ef4444" opacity="0.8"/>`;
       });
+      if (currentSample && currentSample.lat != null && currentSample.lon != null) {
+        svg += `<circle cx="${toX(currentSample.lon)}" cy="${toY(currentSample.lat)}" r="4" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>`;
+      }
       svgEl.innerHTML = svg;
     }
 
@@ -415,19 +486,121 @@
       if (!r.ok) throw new Error(r.status === 404 ? 'Session not found' : 'Failed to load session');
       return r.json();
     });
+    const PHASE_COLORS = { disarmed: '#475569', takeoff: '#d97706', climb: '#0891b2', cruise: '#2563eb', loiter: '#7c3aed', descent: '#4f46e5', rtl: '#ea580c', landing: '#dc2626', unknown: '#64748b' };
+    const SEVERITY_COLORS = { info: '#94a3b8', warn: '#f59e0b', error: '#ef4444', critical: '#b91c1c' };
+
+    function renderReplayTimeline(intervals, events, sessionStart, sessionEnd, replaySamples) {
+      const container = document.getElementById('replay-section');
+      const svgEl = document.getElementById('replay-timeline-svg');
+      const labelsEl = document.getElementById('replay-time-labels');
+      const legendEl = document.getElementById('replay-legend');
+      const emptyEl = document.getElementById('replay-empty');
+      const hasIntervals = (intervals || []).length > 0;
+      const hasEvents = (events || []).length > 0;
+      const hasReplaySamples = (replaySamples || []).length > 0;
+      if (!hasIntervals && !hasEvents && !hasReplaySamples) {
+        container.classList.remove('hidden');
+        emptyEl.classList.remove('hidden');
+        svgEl.classList.add('hidden');
+        legendEl.classList.add('hidden');
+        labelsEl.classList.add('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+      svgEl.classList.remove('hidden');
+      let tStart = sessionStart ? new Date(sessionStart).getTime() : null;
+      let tEnd = sessionEnd ? new Date(sessionEnd).getTime() : null;
+      if (hasReplaySamples && (!tStart || !tEnd)) {
+        tStart = new Date(replaySamples[0].timestamp).getTime();
+        tEnd = new Date(replaySamples[replaySamples.length - 1].timestamp).getTime();
+      }
+      const range = tStart != null && tEnd != null && tEnd > tStart ? tEnd - tStart : 1;
+      const toX = (ts) => {
+        const t = new Date(ts).getTime();
+        if (tStart == null || tEnd == null) return 0;
+        return Math.max(0, Math.min(400, ((t - tStart) / range) * 400));
+      };
+      let svg = '';
+      if (!hasIntervals && hasReplaySamples) {
+        svg += '<rect x="0" y="4" width="400" height="40" fill="#334155" opacity="0.5" rx="2"/>';
+      }
+      function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+      if (hasIntervals) {
+        (intervals || []).forEach(iv => {
+          const x = toX(iv.started_at);
+          const endTs = iv.ended_at ? new Date(iv.ended_at).getTime() : tEnd;
+          const w = Math.max(2, toX(iv.ended_at || sessionEnd) - x);
+          const fill = PHASE_COLORS[iv.phase] || PHASE_COLORS.unknown;
+          const ts = (iv.started_at || '').replace(/"/g, '&quot;');
+          const phaseLabel = (iv.phase || 'unknown').replace(/_/g, ' ');
+          const startStr = iv.started_at ? new Date(iv.started_at).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' }) : '';
+          const endStr = iv.ended_at ? new Date(iv.ended_at).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' }) : '';
+          const tip = phaseLabel + (startStr && endStr ? ' · ' + startStr + ' – ' + endStr : '');
+          svg += `<rect x="${x}" y="4" width="${w}" height="40" fill="${fill}" opacity="0.7" rx="2" data-seek-ts="${ts}" class="cursor-pointer"><title>${esc(tip)}</title></rect>`;
+        });
+      }
+      if (hasEvents) {
+        (events || []).forEach(ev => {
+          const x = toX(ev.started_at);
+          const fill = SEVERITY_COLORS[ev.severity] || SEVERITY_COLORS.info;
+          const ts = (ev.started_at || '').replace(/"/g, '&quot;');
+          const name = (ev.event_name || '').replace(/_/g, ' ');
+          const sev = ev.severity || 'info';
+          const startStr = ev.started_at ? new Date(ev.started_at).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' }) : '';
+          const tip = name + ' (' + sev + ')' + (startStr ? ' · ' + startStr : '');
+          svg += `<rect x="${Math.max(0, x - 2)}" y="4" width="4" height="40" fill="${fill}" opacity="0.9" data-seek-ts="${ts}" class="cursor-pointer"><title>${esc(tip)}</title></rect>`;
+        });
+      }
+      svgEl.innerHTML = svg;
+      if (tStart != null && tEnd != null) {
+        labelsEl.classList.remove('hidden');
+        const startLabel = sessionStart ? new Date(sessionStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(tStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const endLabel = sessionEnd ? new Date(sessionEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(tEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        labelsEl.innerHTML = `<span>${startLabel}</span><span>${endLabel}</span>`;
+      } else {
+        labelsEl.classList.add('hidden');
+      }
+      let legendHtml = '';
+      if (hasIntervals) {
+        const phases = [...new Set((intervals || []).map(iv => iv.phase))];
+        legendHtml += '<span class="text-slate-500">Phases:</span> ' + phases.map(p => `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded" style="background:' + (PHASE_COLORS[p] || PHASE_COLORS.unknown) + '"></span>${(p || 'unknown').replace(/_/g, ' ')}</span>`).join(' ');
+      }
+      if (hasEvents) {
+        const severities = [...new Set((events || []).map(e => e.severity))];
+        legendHtml += (legendHtml ? ' &nbsp;|&nbsp; ' : '') + '<span class="text-slate-500">Events:</span> ' + severities.map(s => `<span class="inline-flex items-center gap-1"><span class="w-1 h-3" style="background:' + (SEVERITY_COLORS[s] || SEVERITY_COLORS.info) + '"></span>${s}</span>`).join(' ');
+      }
+      legendEl.innerHTML = legendHtml || '';
+      legendEl.classList.toggle('hidden', !legendHtml);
+      container.classList.remove('hidden');
+    }
+
     Promise.all([
       sessionMetaPromise,
       fetch(`/sessions/${sessionId}/path`).then(r => r.json()),
       fetch(`/sessions/${sessionId}/telemetry-samples`).then(r => r.json()),
       fetch(`/sessions/${sessionId}/detections`).then(r => r.json()),
       fetch(`/sessions/${sessionId}/recordings`).then(r => r.json()),
-    ]).then(([sessionMeta, pathData, samplesData, detData, recordingsData]) => {
+      fetch(`/sessions/${sessionId}/flight-events`).then(r => r.json()).catch(() => ({ events: [] })),
+      fetch(`/sessions/${sessionId}/phase-intervals`).then(r => r.json()).catch(() => ({ intervals: [] })),
+      fetch(`/sessions/${sessionId}/telemetry-samples?limit=5000&order=asc`).then(r => r.json()).catch(() => ({ samples: [] })),
+    ]).then(([sessionMeta, pathData, samplesData, detData, recordingsData, eventsData, intervalsData, replaySamplesData]) => {
       document.getElementById('loading').classList.add('hidden');
       const path = pathData.path || [];
       const samples = samplesData.samples || [];
       const detections = detData.detections || [];
       const recordings = recordingsData.recordings || [];
+      const flightEvents = eventsData.events || [];
+      const phaseIntervals = intervalsData.intervals || [];
+      const replaySamples = replaySamplesData.samples || [];
       const sessionResolved = recordingsData.session_resolved !== false;
+      let sessionStart = sessionMeta.started_at || (path[0] && path[0].timestamp) || null;
+      let sessionEnd = sessionMeta.ended_at || (path[path.length - 1] && path[path.length - 1].timestamp) || null;
+      if (!sessionStart && phaseIntervals.length) sessionStart = phaseIntervals[0].started_at;
+      if (!sessionEnd && phaseIntervals.length) sessionEnd = phaseIntervals[phaseIntervals.length - 1].ended_at;
+      if (!sessionStart && flightEvents.length) sessionStart = flightEvents[0].started_at;
+      if (!sessionEnd && flightEvents.length) sessionEnd = flightEvents[flightEvents.length - 1].ended_at || flightEvents[flightEvents.length - 1].started_at;
+      if (!sessionStart && replaySamples.length) sessionStart = replaySamples[0].timestamp;
+      if (!sessionEnd && replaySamples.length) sessionEnd = replaySamples[replaySamples.length - 1].timestamp;
       const contentEl = document.getElementById('content');
       contentEl.classList.remove('hidden');
 
@@ -500,6 +673,181 @@
 
       renderPathPlot(path, detections);
       renderSparklines(samples);
+      renderReplayTimeline(phaseIntervals, flightEvents, sessionStart, sessionEnd, replaySamples);
+
+      if (replaySamples.length > 0) {
+        let currentIndex = 0;
+        let isPlaying = false;
+        let playRaf = null;
+        let lastPlayTime = 0;
+        const scrubberEl = document.getElementById('replay-scrubber');
+        const controlsEl = document.getElementById('replay-controls');
+        const timeDisplayEl = document.getElementById('replay-time-display');
+        const trackEl = document.getElementById('replay-timeline-track');
+        const svgEl = document.getElementById('replay-timeline-svg');
+        const playBtn = document.getElementById('replay-play-pause');
+        const prevEventBtn = document.getElementById('replay-prev-event');
+        const nextEventBtn = document.getElementById('replay-next-event');
+        const speedSelect = document.getElementById('replay-speed');
+        const tStart = sessionStart ? new Date(sessionStart).getTime() : new Date(replaySamples[0].timestamp).getTime();
+        const tEnd = sessionEnd ? new Date(sessionEnd).getTime() : new Date(replaySamples[replaySamples.length - 1].timestamp).getTime();
+        const range = tEnd - tStart || 1;
+        function seekToTimestamp(ts) {
+          const t = new Date(ts).getTime();
+          let lo = 0, hi = replaySamples.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi + 1) >>> 1;
+            if (new Date(replaySamples[mid].timestamp).getTime() <= t) lo = mid;
+            else hi = mid - 1;
+          }
+          updateFromIndex(lo);
+        }
+        function fmtTime(ts) {
+          const ms = new Date(ts).getTime() - tStart;
+          const m = Math.floor(ms / 60000);
+          const s = Math.floor((ms % 60000) / 1000);
+          return m + ':' + String(s).padStart(2, '0');
+        }
+        function updateFromIndex(idx) {
+          currentIndex = Math.max(0, Math.min(idx, replaySamples.length - 1));
+          const s = replaySamples[currentIndex];
+          const pct = replaySamples.length > 1 ? (currentIndex / (replaySamples.length - 1)) * 100 : 0;
+          scrubberEl.style.left = pct + '%';
+          const currentPhase = phaseIntervals.find(iv => {
+            const start = new Date(iv.started_at).getTime();
+            const end = new Date(iv.ended_at || sessionEnd).getTime();
+            const t = new Date(s.timestamp).getTime();
+            return t >= start && t <= end;
+          });
+          document.getElementById('replay-metric-phase').textContent = currentPhase ? (currentPhase.phase || 'unknown').replace(/_/g, ' ') : '—';
+          scrubberEl.classList.remove('hidden');
+          controlsEl.classList.remove('hidden');
+          const totalMs = tEnd - tStart;
+          const totalM = Math.floor(totalMs / 60000);
+          const totalS = Math.floor((totalMs % 60000) / 1000);
+          timeDisplayEl.textContent = fmtTime(s.timestamp) + ' / ' + totalM + ':' + String(totalS).padStart(2, '0');
+          document.getElementById('replay-metric-voltage').textContent = s.voltage_v != null ? s.voltage_v.toFixed(2) + ' V' : '—';
+          document.getElementById('replay-metric-alt').textContent = s.rel_alt_m != null ? s.rel_alt_m.toFixed(0) + ' m' : '—';
+          document.getElementById('replay-metric-speed').textContent = s.groundspeed_m_s != null ? s.groundspeed_m_s.toFixed(1) + ' m/s' : '—';
+          renderPathPlot(path, detections, { currentSample: s });
+          document.querySelectorAll('.replay-event-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
+          document.querySelectorAll('.replay-phase-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
+          flightEvents.forEach((ev, i) => {
+            const start = new Date(ev.started_at).getTime();
+            const end = ev.ended_at ? new Date(ev.ended_at).getTime() : tEnd;
+            const t = new Date(s.timestamp).getTime();
+            if (t >= start && t <= end) {
+              const item = document.querySelectorAll('.replay-event-item')[i];
+              if (item) item.classList.add('ring-1', 'ring-cyan-500');
+            }
+          });
+          phaseIntervals.forEach((iv, i) => {
+            const start = new Date(iv.started_at).getTime();
+            const end = new Date(iv.ended_at || sessionEnd).getTime();
+            const t = new Date(s.timestamp).getTime();
+            if (t >= start && t <= end) {
+              const item = document.querySelectorAll('.replay-phase-item')[i];
+              if (item) item.classList.add('ring-1', 'ring-cyan-500');
+            }
+          });
+          if (prevEventBtn) prevEventBtn.disabled = flightEvents.length === 0 || !flightEvents.some(ev => new Date(ev.started_at).getTime() < new Date(s.timestamp).getTime());
+          if (nextEventBtn) nextEventBtn.disabled = flightEvents.length === 0 || !flightEvents.some(ev => new Date(ev.started_at).getTime() > new Date(s.timestamp).getTime());
+        }
+        if (flightEvents.length > 0) {
+          const listEl = document.getElementById('replay-events-list');
+          const itemsEl = document.getElementById('replay-events-items');
+          listEl.classList.remove('hidden');
+          itemsEl.innerHTML = flightEvents.map(ev => {
+            const name = (ev.event_name || '').replace(/_/g, ' ');
+            const sev = ev.severity || 'info';
+            const ts = (ev.started_at || '').replace(/"/g, '&quot;');
+            return `<div class="replay-event-item px-2 py-1 rounded text-sm cursor-pointer hover:bg-slate-700/50" data-seek-ts="${ts}">${name} <span class="text-slate-500">${sev}</span></div>`;
+          }).join('');
+          itemsEl.querySelectorAll('.replay-event-item').forEach(el => { el.addEventListener('click', () => seekToTimestamp(el.dataset.seekTs)); });
+        }
+        if (phaseIntervals.length > 0) {
+          const listEl = document.getElementById('replay-phases-list');
+          const itemsEl = document.getElementById('replay-phases-items');
+          listEl.classList.remove('hidden');
+          itemsEl.innerHTML = phaseIntervals.map(iv => {
+            const phase = (iv.phase || 'unknown').replace(/_/g, ' ');
+            const ts = (iv.started_at || '').replace(/"/g, '&quot;');
+            const endTs = (iv.ended_at || '').replace(/"/g, '&quot;');
+            return `<div class="replay-phase-item px-2 py-1 rounded text-sm cursor-pointer hover:bg-slate-700/50" data-seek-ts="${ts}" data-range="${ts},${endTs}">${phase}</div>`;
+          }).join('');
+          itemsEl.querySelectorAll('.replay-phase-item').forEach(el => { el.addEventListener('click', () => seekToTimestamp(el.dataset.seekTs)); });
+        }
+        updateFromIndex(0);
+        function playLoop(now) {
+          if (!isPlaying) return;
+          const elapsed = (now - lastPlayTime) / 1000;
+          lastPlayTime = now;
+          const speed = parseFloat(speedSelect.value) || 1;
+          const samplesPerSec = replaySamples.length / (range / 1000);
+          const advance = Math.floor(elapsed * samplesPerSec * speed);
+          if (currentIndex + advance >= replaySamples.length - 1) { updateFromIndex(replaySamples.length - 1); isPlaying = false; playBtn.textContent = '▶'; return; }
+          updateFromIndex(currentIndex + advance);
+          playRaf = requestAnimationFrame(playLoop);
+        }
+        playBtn.addEventListener('click', () => {
+          isPlaying = !isPlaying;
+          playBtn.textContent = isPlaying ? '⏸' : '▶';
+          if (isPlaying) { lastPlayTime = performance.now(); playRaf = requestAnimationFrame(playLoop); } else if (playRaf) { cancelAnimationFrame(playRaf); }
+        });
+        function jumpToPrevEvent() {
+          const t = new Date(replaySamples[currentIndex].timestamp).getTime();
+          for (let i = flightEvents.length - 1; i >= 0; i--) {
+            if (new Date(flightEvents[i].started_at).getTime() < t) { seekToTimestamp(flightEvents[i].started_at); return; }
+          }
+        }
+        function jumpToNextEvent() {
+          const t = new Date(replaySamples[currentIndex].timestamp).getTime();
+          for (let i = 0; i < flightEvents.length; i++) {
+            if (new Date(flightEvents[i].started_at).getTime() > t) { seekToTimestamp(flightEvents[i].started_at); return; }
+          }
+        }
+        prevEventBtn.addEventListener('click', jumpToPrevEvent);
+        nextEventBtn.addEventListener('click', jumpToNextEvent);
+        prevEventBtn.disabled = flightEvents.length === 0;
+        nextEventBtn.disabled = flightEvents.length === 0;
+        let dragging = false;
+        function handleMove(clientX) {
+          if (!trackEl) return;
+          const rect = trackEl.getBoundingClientRect();
+          const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          const idx = Math.round(frac * (replaySamples.length - 1));
+          updateFromIndex(idx);
+        }
+        trackEl.addEventListener('mousedown', (e) => { dragging = true; scrubberEl.classList.add('replay-no-transition'); handleMove(e.clientX); });
+        document.addEventListener('mousemove', (e) => { if (dragging) handleMove(e.clientX); });
+        document.addEventListener('mouseup', () => { dragging = false; scrubberEl.classList.remove('replay-no-transition'); });
+        svgEl.addEventListener('click', (e) => {
+          const target = e.target.closest('[data-seek-ts]');
+          if (target && target.dataset.seekTs) { seekToTimestamp(target.dataset.seekTs); return; }
+          const rect = svgEl.getBoundingClientRect();
+          const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          updateFromIndex(Math.round(frac * (replaySamples.length - 1)));
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.target.closest('input, textarea, select')) return;
+          if (e.code === 'Space') { e.preventDefault(); playBtn.click(); }
+          if (e.code === 'ArrowLeft') { e.preventDefault(); updateFromIndex(currentIndex - 1); }
+          if (e.code === 'ArrowRight') { e.preventDefault(); updateFromIndex(currentIndex + 1); }
+        });
+        window.__replaySeekToEvent = (eventName) => {
+          const norm = (s) => (s || '').replace(/-/g, '_');
+          const ev = flightEvents.find(e => norm(e.event_name) === norm(eventName));
+          if (ev) { seekToTimestamp(ev.started_at); document.getElementById('replay-section')?.scrollIntoView({ behavior: 'smooth' }); }
+        };
+        window.__replaySeekToPhase = (phaseName) => {
+          const norm = (s) => (s || '').replace(/-/g, '_');
+          const iv = phaseIntervals.find(i => norm(i.phase) === norm(phaseName));
+          if (iv) { seekToTimestamp(iv.started_at); document.getElementById('replay-section')?.scrollIntoView({ behavior: 'smooth' }); }
+        };
+      } else {
+        window.__replaySeekToEvent = () => {};
+        window.__replaySeekToPhase = () => {};
+      }
 
       const detEl = document.getElementById('detections-list');
       const detEmpty = document.getElementById('detections-empty');
