@@ -23,6 +23,10 @@ class FlightSession(Base):
     telemetry_backend: Mapped[str] = mapped_column(String(64), nullable=False)
     ai_backend: Mapped[str] = mapped_column(String(64), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_port: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    autopilot: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    connection_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    baud: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     telemetry_samples = relationship("TelemetrySample", back_populates="session")
     path_points = relationship("PathPoint", back_populates="session")

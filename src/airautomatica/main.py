@@ -45,6 +45,7 @@ from airautomatica.config import (
     get_local_llm_timeout,
     get_serial_baud,
     get_serial_port,
+    get_session_auto_start_on_arm,
     get_sqlite_db_path,
     get_telemetry_backend,
 )
@@ -63,6 +64,7 @@ from airautomatica.services.persistence import (
     TelemetryLifecycleLogger,
     TelemetrySampler,
 )
+from airautomatica.services.session_auto_controller import SessionAutoController
 from airautomatica.services.state_store import StateStore
 from airautomatica.telemetry import (
     MockTelemetry,
@@ -201,6 +203,7 @@ async def _telemetry_loop(
     path_recorder: PathRecorder | None = None,
     lifecycle_logger: TelemetryLifecycleLogger | None = None,
     recording_auto_controller: RecordingAutoController | None = None,
+    session_auto_controller: SessionAutoController | None = None,
 ) -> None:
     """Consume telemetry stream and update store."""
     async for state in source.stream():
@@ -213,6 +216,8 @@ async def _telemetry_loop(
             lifecycle_logger.maybe_log_transition(state)
         if recording_auto_controller is not None:
             recording_auto_controller.maybe_auto_record(state)
+        if session_auto_controller is not None:
+            session_auto_controller.maybe_auto_start_stop(state)
 
 
 def _create_task_service(
@@ -288,6 +293,12 @@ def main() -> None:
         camera_recording_service,
         get_mode_fn=get_camera_recording_mode,
     )
+    session_auto_controller = SessionAutoController(
+        persistence,
+        session_ref,
+        connection_store,
+        get_enabled_fn=get_session_auto_start_on_arm,
+    )
 
     def _end_session() -> None:
         try:
@@ -357,6 +368,7 @@ def main() -> None:
                 path_recorder,
                 lifecycle_logger,
                 recording_auto_controller,
+                session_auto_controller,
                 name="telemetry",
             )
         )

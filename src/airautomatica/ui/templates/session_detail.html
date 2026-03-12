@@ -42,6 +42,7 @@
         Session <span id="session-id" class="text-cyan-400 font-mono">—</span>
       </h1>
       <p class="text-slate-500 text-sm mt-1">Flight path, telemetry trends, and detections</p>
+      <div id="session-metadata" class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400"></div>
     </header>
 
     <div id="loading" class="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
@@ -192,12 +193,17 @@
       }).join('');
     }
 
+    const sessionMetaPromise = fetch(`/sessions/${sessionId}`).then(r => {
+      if (!r.ok) throw new Error(r.status === 404 ? 'Session not found' : 'Failed to load session');
+      return r.json();
+    });
     Promise.all([
+      sessionMetaPromise,
       fetch(`/sessions/${sessionId}/path`).then(r => r.json()),
       fetch(`/sessions/${sessionId}/telemetry-samples`).then(r => r.json()),
       fetch(`/sessions/${sessionId}/detections`).then(r => r.json()),
       fetch(`/sessions/${sessionId}/recordings`).then(r => r.json()),
-    ]).then(([pathData, samplesData, detData, recordingsData]) => {
+    ]).then(([sessionMeta, pathData, samplesData, detData, recordingsData]) => {
       document.getElementById('loading').classList.add('hidden');
       const path = pathData.path || [];
       const samples = samplesData.samples || [];
@@ -206,6 +212,47 @@
       const sessionResolved = recordingsData.session_resolved !== false;
       const contentEl = document.getElementById('content');
       contentEl.classList.remove('hidden');
+
+      const labelMode = (s) => {
+        const m = s.connection_mode || (s.telemetry_backend === 'mock' ? 'mock' : null);
+        if (m === 'mock') return 'Mock';
+        if (m === 'ardupilot') return 'ArduPilot';
+        if (m === 'inav') return 'iNav';
+        return m || '—';
+      };
+      const labelAutopilot = (s) => {
+        const a = s.autopilot;
+        if (a === 'mock' || (s.connection_mode === 'mock' && !a)) return 'Mock session';
+        if (a === 'ardupilot') return 'ArduPilot';
+        if (a === 'inav') return 'iNav';
+        if (a === 'generic') return 'iNav/Generic';
+        return 'Unknown autopilot';
+      };
+      const labelSource = (s) => {
+        if (s.connection_mode === 'mock' || s.telemetry_backend === 'mock') return 'Mock session';
+        if (s.source_port) return s.source_port + (s.baud ? ' @ ' + s.baud : '');
+        return 'No port';
+      };
+      const fmtDuration = (started, ended) => {
+        if (!started || !ended) return '—';
+        try {
+          const sec = Math.round((new Date(ended) - new Date(started)) / 1000);
+          if (sec < 60) return sec + ' s';
+          if (sec < 3600) return Math.floor(sec / 60) + ' m';
+          return Math.floor(sec / 3600) + ' h ' + Math.floor((sec % 3600) / 60) + ' m';
+        } catch { return '—'; }
+      };
+      const fmtDate = (s) => s ? new Date(s).toLocaleString() : '—';
+      const metaEl = document.getElementById('session-metadata');
+      const duration = fmtDuration(sessionMeta.started_at, sessionMeta.ended_at);
+      metaEl.innerHTML = [
+        '<span>Mode: ' + labelMode(sessionMeta) + '</span>',
+        '<span>Autopilot: ' + labelAutopilot(sessionMeta) + '</span>',
+        '<span>Source: ' + labelSource(sessionMeta) + '</span>',
+        '<span>' + fmtDate(sessionMeta.started_at) + ' → ' + (sessionMeta.ended_at ? fmtDate(sessionMeta.ended_at) : 'active') + '</span>',
+        duration !== '—' ? '<span>' + duration + '</span>' : '',
+        sessionMeta.notes ? '<span class="w-full mt-1">' + fmt(sessionMeta.notes) + '</span>' : '',
+      ].filter(Boolean).join(' · ');
 
       const statsEl = document.getElementById('stats');
       const first = path[0];

@@ -5,7 +5,11 @@ import logging
 import os
 from pathlib import Path
 
-from airautomatica.config import get_ai_hat_enabled, get_local_llm_provider
+from airautomatica.config import (
+    get_ai_hat_enabled,
+    get_local_llm_provider,
+    get_session_auto_start_on_arm,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,7 @@ CANONICAL_SETTINGS_KEYS = [
     "AI_DUPLICATE_WINDOW_SEC",
     "AI_SCHEDULER_COOLDOWN_SEC",
     "CAMERA_RECORDING_MODE",
+    "SESSION_AUTO_START_ON_ARM",
 ]
 
 # Legacy keys accepted when loading from file or in POST body; never persisted.
@@ -110,6 +115,7 @@ def get_settings() -> dict:
         "AI_DUPLICATE_WINDOW_SEC": "30",
         "AI_SCHEDULER_COOLDOWN_SEC": "8",
         "CAMERA_RECORDING_MODE": "manual",
+        "SESSION_AUTO_START_ON_ARM": "0",
     }
     result: dict[str, str] = {}
     for k in CANONICAL_SETTINGS_KEYS:
@@ -117,6 +123,8 @@ def get_settings() -> dict:
             result[k] = get_local_llm_provider()
         elif k == "AI_HAT_ENABLED":
             result[k] = "1" if get_ai_hat_enabled() else "0"
+        elif k == "SESSION_AUTO_START_ON_ARM":
+            result[k] = "1" if get_session_auto_start_on_arm() else "0"
         else:
             result[k] = os.environ.get(k, defaults.get(k, ""))
     return result
