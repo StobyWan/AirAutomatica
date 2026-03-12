@@ -2,20 +2,18 @@
 
 AIRAUTOMATICA uses a single AI service abstraction with mode-based implementations. Mission logic consumes only normalized `AiResult`—it does not depend on which mode produced it.
 
-## Architecture: Local LLM + Optional AI HAT
+## Architecture: Mission Loop + Advisory LLM + Optional AI HAT
 
-Local LLM provider (mock or ollama) and AI HAT are **complementary**, not mutually exclusive:
-
-- **Local LLM provider**: Handles inference/text reasoning (mock or ollama).
-- **AI HAT**: Optional hardware-accelerated vision layer; runs **alongside** the local provider when enabled.
-- **ComposedAiService**: When AI HAT is enabled, composes both. AI HAT result is used when meaningful; otherwise the local provider's result is used.
+- **Mission loop perception**: Uses mock or AI HAT only. Ollama is not used for live perception.
+- **Ollama (advisory)**: Used only for dashboard tasks—telemetry summary, debrief summary, event classification. Consumes compact preprocessed context only.
+- **AI HAT**: Optional hardware-accelerated vision layer; runs **alongside** mock when enabled. ComposedAiService tries AI HAT first; if meaningful, uses it; else uses mock.
 
 ## Modes
 
 | Mode | Purpose | Environment |
 |------|---------|-------------|
 | **mock** | Deterministic fake results for tests and early development. No network or hardware. | macOS, Raspberry Pi |
-| **ollama** | Local inference via [Ollama](https://ollama.com/) HTTP API (POST /api/generate). Simulates AI HAT-like outputs for development. | macOS, Linux |
+| **ollama** | Local inference via [Ollama](https://ollama.com/) HTTP API (POST /api/generate). Provides reasoning/advisory on preprocessed summaries (telemetry summary, debrief, event classification). AI HAT provides vision/perception. They are complementary, not substitutes. | macOS, Linux |
 | **aihat** | Raspberry Pi AI HAT+ onboard perception. Vision/detection only—runs **with** mock or ollama, not instead. | Raspberry Pi 5 |
 
 ## Configuration
@@ -42,7 +40,7 @@ export AIHAT_DEVICE=auto
 
 ## Local Development (macOS / Linux)
 
-1. **Ollama mode** (default): Install [Ollama](https://ollama.com/), pull a model (`ollama pull gemma3:1b`), start the server (runs automatically). Ollama simulates AI outputs at the contract level—useful for testing mission logic without hardware.
+1. **Ollama mode** (default): Install [Ollama](https://ollama.com/), pull a model (`ollama pull gemma3:1b`), start the server (runs automatically). Ollama provides reasoning/advisory on preprocessed summaries (telemetry summary, debrief, event classification).
    ```bash
    make setup-ollama
    python -m airautomatica.main
@@ -52,7 +50,7 @@ export AIHAT_DEVICE=auto
    ```bash
    LOCAL_LLM_PROVIDER=mock python -m airautomatica.main
    ```
-   Ollama mode is intended to simulate **perception-style outputs** (e.g. person, vehicle, object), not aircraft status or system summaries. Mission logic rejects mode/status labels (GUIDED, AUTO, device_status, battery, etc.) so only detection-like results are persisted.
+   Mission loop perception uses mock or AI HAT. Ollama is used only for dashboard advisory tasks (telemetry summary, debrief, event classification).
 
 ## What AI HAT Mode Really Means
 
@@ -62,7 +60,7 @@ AI HAT mode = **onboard vision perception** on Raspberry Pi 5 + AI HAT+.
 - **Not**: An LLM, a drop-in for Ollama, or general "AI reasoning."
 - **Input**: Camera frames (rpicam). **Output**: Detections (label, confidence, bbox).
 - **In this project**: Mission logic gets AiResult; applies rules. Non-flight-critical.
-- **Ollama**: Simulates the AiResult *contract* on macOS/Linux. Same JSON shape, different engine.
+- **Ollama**: Used for advisory tasks (telemetry summary, debrief, event classification). Consumes only compact preprocessed context—never raw telemetry.
 
 ## AI HAT Mode: Onboard Perception
 

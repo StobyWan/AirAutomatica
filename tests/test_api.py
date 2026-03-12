@@ -1612,6 +1612,30 @@ def test_post_telemetry_summary_error_when_no_task_service(
     assert data.get("error") == "AI task service not available"
 
 
+def test_post_telemetry_summary_error_when_ollama_no_preprocessor(
+    store: StateStore,
+) -> None:
+    """POST /ai/telemetry-summary returns error when provider=ollama and preprocessor is None."""
+    ollama_svc = OllamaAiService(
+        base_url="http://127.0.0.1:11434",
+        model="gemma3:1b",
+        timeout_sec=5.0,
+    )
+    task_service = OllamaTaskService(provider="ollama", ollama_service=ollama_svc)
+    client = TestClient(
+        create_app(
+            store,
+            task_service=task_service,
+            preprocessor=None,
+        )
+    )
+    r = client.post("/ai/telemetry-summary")
+    assert r.status_code == 200
+    data = r.json()
+    assert "error" in data
+    assert "Preprocessing required" in data["error"]
+
+
 def test_post_event_classification_returns_structured_result(
     store: StateStore,
 ) -> None:

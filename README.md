@@ -48,7 +48,7 @@ Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `htt
 ## What Works Today
 
 - **Mock mode**: Simulated telemetry and AI. No hardware. Run locally for development.
-- **Ollama mode**: Local LLM via [Ollama](https://ollama.com/) simulates perception-style outputs. Useful for testing mission logic.
+- **Ollama mode**: Local LLM via [Ollama](https://ollama.com/) provides reasoning/advisory on preprocessed summaries (telemetry summary, debrief, event classification). AI HAT provides vision/perception—they are complementary, not substitutes.
 - **Serial MAVLink mode**: Real telemetry from ArduPilot over USB/serial (Matek F405-WING, CP2102, etc.).
 - **API**: `/health`, `/state`, `/recent-detections`. SQLite persistence for sessions and detections.
 - **Live Dashboard**: Real-time UI at `GET /dashboard` with Socket.IO updates (health, state, detections, session history). Session detail pages show flight path (lat/lon). Read-only, non-flight-critical. Works with persistence disabled.
@@ -59,7 +59,7 @@ Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `htt
 | Component | Mock | Real |
 |-----------|------|------|
 | Telemetry | Simulated orbit/state | MAVLink over serial |
-| AI | Deterministic fake or Ollama | Raspberry Pi AI HAT+ (scaffold only) |
+| AI | Mission loop: mock. Advisory (telemetry summary, debrief): Ollama. Vision: AI HAT+ (scaffold only) |
 | Persistence | SQLite (optional) | Same |
 
 AI HAT mode exists as a scaffold; real Hailo integration is not yet implemented.

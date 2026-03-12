@@ -95,9 +95,19 @@ Event priority for inclusion: gps_degraded, battery_sag, weak_return_margin, uns
 - Thresholds are tuned for typical fixed-wing; may need adjustment for other platforms
 - Phase hysteresis is sample-based, not time-based
 
+## Ollama Input Policy
+
+Ollama receives only compact, preprocessed context—never raw telemetry:
+
+- **Telemetry summary:** `LlmContextPayload` (phase, mode, trend_summary, top 3 events, top 5 metrics). When preprocessing is disabled and provider=ollama, the API returns an error; preprocessing is required.
+- **Debrief summary:** `CompactDebriefPayload` (duration, dominant phase, top events, top metrics, assessment).
+- **Event classification:** Up to 5 events as `event_type: message[:60]`.
+
+Raw `TelemetrySample` rows, full `AircraftState`, or unbounded arrays are never sent to Ollama.
+
 ## API Changes
 
-- No breaking changes. Fallback behavior preserved when preprocessor is None.
+- No breaking changes. Fallback behavior preserved when preprocessor is None and provider=mock. When provider=ollama, preprocessing is required for telemetry summary.
 
 ---
 

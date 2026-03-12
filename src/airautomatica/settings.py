@@ -9,6 +9,7 @@ from typing import Literal
 from airautomatica.config import (
     get_ai_hat_enabled,
     get_local_llm_provider,
+    get_preprocessing_enabled,
     get_session_auto_start_on_arm,
 )
 
@@ -32,6 +33,7 @@ SETTING_APPLY_MODES: dict[str, ApplyMode] = {
     "LOCAL_LLM_TIMEOUT": "reconnect",
     "OLLAMA_NUM_THREAD": "reconnect",
     "AI_HAT_ENABLED": "restart",
+    "AIRAUTOMATICA_PREPROCESSING_ENABLED": "restart",
     "AI_MIN_CONFIDENCE": "reconnect",
     "AI_DUPLICATE_WINDOW_SEC": "reconnect",
     "AI_SCHEDULER_COOLDOWN_SEC": "live",
@@ -50,6 +52,7 @@ CANONICAL_SETTINGS_KEYS = [
     "LOCAL_LLM_TIMEOUT",
     "OLLAMA_NUM_THREAD",
     "AI_HAT_ENABLED",
+    "AIRAUTOMATICA_PREPROCESSING_ENABLED",
     "AI_MIN_CONFIDENCE",
     "AI_DUPLICATE_WINDOW_SEC",
     "AI_SCHEDULER_COOLDOWN_SEC",
@@ -159,6 +162,7 @@ def get_raw_settings() -> dict:
         "LOCAL_LLM_TIMEOUT": "30",
         "OLLAMA_NUM_THREAD": "4",
         "AI_HAT_ENABLED": "0",
+        "AIRAUTOMATICA_PREPROCESSING_ENABLED": "1",
         "AI_MIN_CONFIDENCE": "0.5",
         "AI_DUPLICATE_WINDOW_SEC": "30",
         "AI_SCHEDULER_COOLDOWN_SEC": "8",
@@ -188,6 +192,8 @@ def get_raw_settings() -> dict:
                 result[k] = ""  # Unset; discovered at runtime
         elif k == "AI_HAT_ENABLED":
             result[k] = "1" if get_ai_hat_enabled() else "0"
+        elif k == "AIRAUTOMATICA_PREPROCESSING_ENABLED":
+            result[k] = "1" if get_preprocessing_enabled() else "0"
         elif k == "SESSION_AUTO_START_ON_ARM":
             result[k] = "1" if get_session_auto_start_on_arm() else "0"
         else:
