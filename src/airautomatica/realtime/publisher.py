@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Optional
 import socketio
 
 from airautomatica.ai.ollama_tasks import get_telemetry_summary_counts
-from airautomatica.config import get_camera_recording_mode, get_sqlite_db_path
+from airautomatica.config import (
+    get_camera_recording_mode,
+    get_sqlite_db_path,
+    get_telemetry_backend,
+)
 from airautomatica.db.base import get_engine, get_last_init_error
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.camera_ready_state import get as get_camera_ready
@@ -162,7 +166,7 @@ class DashboardPublisher:
                 health = _build_health_payload(
                     state,
                     self._ai_mode,
-                    self._telemetry_backend,
+                    get_telemetry_backend(),
                     session_id,
                     persistence_enabled,
                     last_error,

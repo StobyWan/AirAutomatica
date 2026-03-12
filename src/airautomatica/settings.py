@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Literal
 
 from airautomatica.config import (
     get_ai_hat_enabled,
@@ -15,6 +16,28 @@ logger = logging.getLogger(__name__)
 
 _SETTINGS_DIR = Path.home() / ".airautomatica"
 _SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
+
+# Whether LOCAL_LLM_PROVIDER was explicitly set (file or env) vs discovered at runtime.
+_provider_explicit: bool = True
+
+# Apply mode per setting: live (immediate), reconnect (subsystem reload), restart (full app).
+ApplyMode = Literal["live", "reconnect", "restart"]
+SETTING_APPLY_MODES: dict[str, ApplyMode] = {
+    "TELEMETRY_BACKEND": "restart",
+    "SERIAL_PORT": "restart",
+    "SERIAL_BAUD": "restart",
+    "LOCAL_LLM_PROVIDER": "reconnect",
+    "LOCAL_LLM_BASE_URL": "reconnect",
+    "LOCAL_LLM_MODEL": "reconnect",
+    "LOCAL_LLM_TIMEOUT": "reconnect",
+    "OLLAMA_NUM_THREAD": "reconnect",
+    "AI_HAT_ENABLED": "restart",
+    "AI_MIN_CONFIDENCE": "reconnect",
+    "AI_DUPLICATE_WINDOW_SEC": "reconnect",
+    "AI_SCHEDULER_COOLDOWN_SEC": "live",
+    "CAMERA_RECORDING_MODE": "live",
+    "SESSION_AUTO_START_ON_ARM": "live",
+}
 
 # Canonical keys: returned by GET /settings and persisted on save. No legacy keys.
 CANONICAL_SETTINGS_KEYS = [
@@ -81,31 +104,56 @@ def _migrate_legacy_to_canonical(data: dict) -> dict:
 
 
 def load_settings() -> None:
-    """Load settings from file into os.environ. Call before any config is read."""
-    if not _SETTINGS_FILE.exists():
-        return
-    try:
-        with open(_SETTINGS_FILE) as f:
-            data = json.load(f)
-        for k, v in data.items():
-            if k in _LOAD_ACCEPTED_KEYS and v is not None:
-                os.environ[k] = str(v)
-        if any(k in data for k in _LEGACY_KEYS):
-            logger.debug(
-                "Legacy AI_MODE/AI_BACKEND in settings; consider LOCAL_LLM_PROVIDER and AI_HAT_ENABLED"
+    """Load settings from file into os.environ. Call before any config is read.
+    When LOCAL_LLM_PROVIDER is unset, discovers Ollama at runtime and sets
+    effective provider (ollama if ready, mock otherwise). Does not persist discovery."""
+    global _provider_explicit
+    provider_explicit_before = bool(os.environ.get("LOCAL_LLM_PROVIDER", "").strip())
+    data: dict = {}
+    if _SETTINGS_FILE.exists():
+        try:
+            with open(_SETTINGS_FILE) as f:
+                data = json.load(f)
+            for k, v in data.items():
+                if k in _LOAD_ACCEPTED_KEYS and v is not None:
+                    os.environ[k] = str(v)
+            if any(k in data for k in _LEGACY_KEYS):
+                logger.debug(
+                    "Legacy AI_MODE/AI_BACKEND in settings; consider LOCAL_LLM_PROVIDER and AI_HAT_ENABLED"
+                )
+            provider_explicit_before = (
+                provider_explicit_before
+                or bool(data.get("LOCAL_LLM_PROVIDER"))
+                or bool(data.get("AI_MODE") or data.get("AI_BACKEND"))
             )
-    except Exception as e:
-        logger.warning("Failed to load settings from %s: %s", _SETTINGS_FILE, e)
+        except Exception as e:
+            logger.warning("Failed to load settings from %s: %s", _SETTINGS_FILE, e)
+
+    if not provider_explicit_before:
+        from airautomatica.ai.ollama_readiness import check_ollama_ready
+
+        base = os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434")
+        model = os.environ.get("LOCAL_LLM_MODEL", "gemma3:1b")
+        result = check_ollama_ready(base, model=model, timeout_sec=2.0)
+        effective = "ollama" if result.ready else "mock"
+        os.environ["LOCAL_LLM_PROVIDER"] = effective
+        _provider_explicit = False
+        logger.info(
+            "AI provider unset; discovered %s (ollama_ready=%s)",
+            effective,
+            result.ready,
+        )
+    else:
+        _provider_explicit = True
 
 
-def get_settings() -> dict:
-    """Return current settings as canonical keys only. Uses config getters for
-    LOCAL_LLM_PROVIDER and AI_HAT_ENABLED so legacy AI_MODE is correctly derived."""
+def get_raw_settings() -> dict:
+    """Return raw saved settings: file content + env for keys not in file.
+    For LOCAL_LLM_PROVIDER when unset (discovered at runtime), returns empty string."""
     defaults: dict[str, str] = {
         "TELEMETRY_BACKEND": "mock",
         "SERIAL_PORT": "/dev/ttyUSB0",
         "SERIAL_BAUD": "921600",
-        "LOCAL_LLM_PROVIDER": "ollama",
         "LOCAL_LLM_BASE_URL": "http://127.0.0.1:11434",
         "LOCAL_LLM_MODEL": "gemma3:1b",
         "LOCAL_LLM_TIMEOUT": "30",
@@ -117,10 +165,27 @@ def get_settings() -> dict:
         "CAMERA_RECORDING_MODE": "manual",
         "SESSION_AUTO_START_ON_ARM": "0",
     }
+    file_data: dict = {}
+    if _SETTINGS_FILE.exists():
+        try:
+            with open(_SETTINGS_FILE) as f:
+                file_data = {
+                    k: str(v)
+                    for k, v in json.load(f).items()
+                    if k in CANONICAL_SETTINGS_KEYS and v is not None
+                }
+        except Exception:
+            pass
+
     result: dict[str, str] = {}
     for k in CANONICAL_SETTINGS_KEYS:
-        if k == "LOCAL_LLM_PROVIDER":
-            result[k] = get_local_llm_provider()
+        if k in file_data:
+            result[k] = file_data[k]
+        elif k == "LOCAL_LLM_PROVIDER":
+            if _provider_explicit:
+                result[k] = get_local_llm_provider()
+            else:
+                result[k] = ""  # Unset; discovered at runtime
         elif k == "AI_HAT_ENABLED":
             result[k] = "1" if get_ai_hat_enabled() else "0"
         elif k == "SESSION_AUTO_START_ON_ARM":
@@ -128,6 +193,41 @@ def get_settings() -> dict:
         else:
             result[k] = os.environ.get(k, defaults.get(k, ""))
     return result
+
+
+def get_effective_settings() -> dict:
+    """Return effective runtime settings including discovered defaults.
+    Use for display when showing current runtime behavior."""
+    raw = get_raw_settings()
+    effective = dict(raw)
+    # Effective provider: explicit value or discovered (already in env)
+    if raw.get("LOCAL_LLM_PROVIDER") == "":
+        effective["LOCAL_LLM_PROVIDER"] = get_local_llm_provider()
+    return effective
+
+
+def get_settings() -> dict:
+    """Return current settings as canonical keys only. Uses config getters for
+    LOCAL_LLM_PROVIDER and AI_HAT_ENABLED so legacy AI_MODE is correctly derived.
+    Returns effective values (includes discovered provider when unset)."""
+    return get_effective_settings()
+
+
+def get_apply_modes() -> dict[str, ApplyMode]:
+    """Return apply mode for each canonical setting."""
+    return dict(SETTING_APPLY_MODES)
+
+
+def get_provider_reason() -> str:
+    """Return why the current AI provider was chosen.
+    Values: explicit_mock, explicit_ollama, discovered_ollama_ready, discovered_mock_ollama_unavailable.
+    """
+    provider = get_local_llm_provider()
+    if _provider_explicit:
+        return f"explicit_{provider}"
+    if provider == "ollama":
+        return "discovered_ollama_ready"
+    return "discovered_mock_ollama_unavailable"
 
 
 def save_settings(updates: dict) -> None:

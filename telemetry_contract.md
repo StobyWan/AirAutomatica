@@ -7,10 +7,15 @@ Target: **Matek F405-WING V2** running **ArduPilot Plane** over MAVLink.
 | Message | ID | Purpose |
 |---------|-----|---------|
 | HEARTBEAT | 0 | Flight mode, connection liveness |
-| GLOBAL_POSITION_INT | 33 | Position, altitude, heading |
+| GLOBAL_POSITION_INT | 33 | Position, altitude, heading, climb rate |
 | ATTITUDE | 30 | Roll, pitch, yaw (radians) |
 | SYS_STATUS | 1 | Battery voltage, current |
 | VFR_HUD | 74 | Heading, groundspeed, airspeed |
+| GPS_RAW_INT | 24 | GPS fix type, satellites visible |
+| HOME_POSITION | 242 | Home latitude, longitude (ArduPilot) |
+| GPS_GLOBAL_ORIGIN | 49 | Home latitude, longitude (INAV) |
+
+**Home origin**: ArduPilot sends HOME_POSITION (id 242); INAV sends GPS_GLOBAL_ORIGIN (id 49). Both map to home_lat, home_lon. See [docs/mavlink_schema.md](docs/mavlink_schema.md).
 
 ---
 

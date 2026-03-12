@@ -55,6 +55,11 @@ from airautomatica.config import (
 from airautomatica.db import init_db
 from airautomatica.logging_config import setup_logging
 from airautomatica.realtime import DashboardPublisher, sio, wrap_app
+from airautomatica.runtime.ai_subsystem import AiSubsystemHolder, ReloadResult
+from airautomatica.runtime.telemetry_subsystem import (
+    TelemetryController,
+    TelemetryReconnectResult,
+)
 from airautomatica.services.camera_recording import (
     CameraRecordingService,
     RecordingAutoController,
@@ -255,6 +260,65 @@ def _create_task_service(
     return OllamaTaskService(provider="mock", ollama_service=None)
 
 
+def _reload_ai_subsystem(
+    holder: AiSubsystemHolder,
+    mission_logic: MissionLogic,
+    scheduler: AiInferenceScheduler | None,
+    provider_before: str,
+) -> ReloadResult:
+    """Recreate ai_service and task_service from current config and swap into holder.
+    Returns failure if provider changed (requires restart) or creation fails."""
+    provider_after = get_local_llm_provider()
+    if provider_before != provider_after:
+        logger.warning(
+            "AI reload skipped: provider change %s -> %s requires app restart",
+            provider_before,
+            provider_after,
+        )
+        return ReloadResult(
+            success=False,
+            error="Provider change requires app restart",
+            provider_before=provider_before,
+            provider_after=provider_after,
+        )
+    if provider_after == "ollama" and scheduler is None:
+        logger.warning(
+            "AI reload skipped: switching to ollama requires app restart (no scheduler)"
+        )
+        return ReloadResult(
+            success=False,
+            error="Switching to Ollama requires app restart",
+            provider_before=provider_before,
+            provider_after=provider_after,
+        )
+    try:
+        ollama_transport: OllamaAiService | None = None
+        if provider_after == "ollama":
+            ollama_transport = OllamaAiService(
+                base_url=get_local_llm_base_url("ollama"),
+                model=get_local_llm_model("ollama"),
+                timeout_sec=get_local_llm_timeout(),
+            )
+        new_ai = _create_ai_service(ollama_transport, scheduler)
+        new_task = _create_task_service(ollama_transport, scheduler)
+        holder.swap(new_ai, new_task)
+        mission_logic.set_ai_service(new_ai)
+        logger.info("AI subsystem reloaded: provider=%s", provider_after)
+        return ReloadResult(
+            success=True,
+            provider_before=provider_before,
+            provider_after=provider_after,
+        )
+    except Exception as e:
+        logger.exception("AI subsystem reload failed: %s", e)
+        return ReloadResult(
+            success=False,
+            error=str(e),
+            provider_before=provider_before,
+            provider_after=provider_after,
+        )
+
+
 def main() -> None:
     """Run API server, telemetry loop, and mission logic."""
     setup_logging()
@@ -320,14 +384,62 @@ def main() -> None:
 
     atexit.register(_end_session)
 
+    ai_holder = AiSubsystemHolder(ai_service, task_service)
+
+    mission_logic = MissionLogic(
+        store,
+        ai_service=ai_service,
+        persistence=persistence,
+        session_ref=session_ref,
+        min_confidence=get_ai_min_confidence(),
+        duplicate_window_sec=get_ai_duplicate_window_sec(),
+    )
+
+    def _reload_fn(provider_before: str) -> ReloadResult:
+        return _reload_ai_subsystem(
+            ai_holder, mission_logic, scheduler, provider_before
+        )
+
+    def _create_telemetry_source_fn() -> TelemetrySource:
+        return _create_telemetry_source(store, persistence, session_ref)
+
+    def _start_telemetry_task(src: TelemetrySource) -> asyncio.Task[None]:
+        return asyncio.create_task(
+            _run_with_restart(
+                _telemetry_loop,
+                store,
+                src,
+                sampler,
+                path_recorder,
+                lifecycle_logger,
+                recording_auto_controller,
+                session_auto_controller,
+                preprocessor,
+                name="telemetry",
+            )
+        )
+
+    telemetry_controller = TelemetryController(
+        source=source,
+        create_source_fn=_create_telemetry_source_fn,
+        get_backend_fn=get_telemetry_backend,
+        start_task_fn=_start_telemetry_task,
+    )
+
+    async def _reload_telemetry_fn() -> TelemetryReconnectResult:
+        return await telemetry_controller.reconnect()
+
     app = create_app(
         store,
         connection_store=connection_store,
         session_ref=session_ref,
         persistence=persistence,
-        task_service=task_service,
+        ai_holder=ai_holder,
         camera_recording_service=camera_recording_service,
         preprocessor=preprocessor,
+        mission_logic=mission_logic,
+        reload_ai_fn=_reload_fn,
+        reload_telemetry_fn=_reload_telemetry_fn,
     )
     asgi_app = wrap_app(app)
     host = get_api_host()
@@ -346,15 +458,6 @@ def main() -> None:
 
     config = uvicorn.Config(asgi_app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
-
-    mission_logic = MissionLogic(
-        store,
-        ai_service=ai_service,
-        persistence=persistence,
-        session_ref=session_ref,
-        min_confidence=get_ai_min_confidence(),
-        duplicate_window_sec=get_ai_duplicate_window_sec(),
-    )
 
     async def run_all() -> None:
         shutdown_event = asyncio.Event()
@@ -409,20 +512,7 @@ def main() -> None:
         scheduler_task: asyncio.Task[None] | None = None
         if scheduler is not None:
             scheduler_task = asyncio.create_task(scheduler.run())
-        telemetry_task = asyncio.create_task(
-            _run_with_restart(
-                _telemetry_loop,
-                store,
-                source,
-                sampler,
-                path_recorder,
-                lifecycle_logger,
-                recording_auto_controller,
-                session_auto_controller,
-                preprocessor,
-                name="telemetry",
-            )
-        )
+        telemetry_task = telemetry_controller.start()
         mission_task = asyncio.create_task(
             _run_with_restart(mission_logic.run, name="mission")
         )

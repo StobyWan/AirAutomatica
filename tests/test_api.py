@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from airautomatica.ai.mock_service import MockAiService
 from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_readiness import OllamaReadinessResult
 from airautomatica.ai.ollama_service import OllamaAiService
@@ -858,11 +859,16 @@ def test_sessions_empty_when_no_persistence(client: TestClient) -> None:
 
 
 def test_get_settings(client: TestClient) -> None:
-    """GET /settings returns canonical keys only (no AI_MODE)."""
+    """GET /settings returns raw settings, effective_settings, apply_modes, Ollama status."""
     r = client.get("/settings")
     assert r.status_code == 200
     data = r.json()
     assert "settings" in data
+    assert "effective_settings" in data
+    assert "apply_modes" in data
+    assert "ollama_available" in data
+    assert "ollama_ready" in data
+    assert "provider_reason" in data
     s = data["settings"]
     assert "TELEMETRY_BACKEND" in s
     assert "LOCAL_LLM_PROVIDER" in s
@@ -870,8 +876,14 @@ def test_get_settings(client: TestClient) -> None:
     assert "AI_HAT_ENABLED" in s
     assert "AI_MODE" not in s
     assert s["TELEMETRY_BACKEND"] in ("mock", "serial")
-    assert s["LOCAL_LLM_PROVIDER"] in ("mock", "ollama")
+    assert s["LOCAL_LLM_PROVIDER"] in ("mock", "ollama", "")
     assert s["AI_HAT_ENABLED"] in ("0", "1")
+    assert data["provider_reason"] in (
+        "explicit_mock",
+        "explicit_ollama",
+        "discovered_ollama_ready",
+        "discovered_mock_ollama_unavailable",
+    )
 
 
 def test_load_settings_with_legacy_file_then_get_returns_canonical(
@@ -922,17 +934,24 @@ def test_get_settings_ai_hat_enabled_when_aihat_mode(
     store: StateStore,
 ) -> None:
     """When AI_MODE=aihat, GET /settings returns AI_HAT_ENABLED=1, LOCAL_LLM_PROVIDER=mock."""
-    monkeypatch.setenv("AI_MODE", "aihat")
-    monkeypatch.delenv("LOCAL_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("AI_HAT_ENABLED", raising=False)
-    monkeypatch.delenv("AI_BACKEND", raising=False)
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("AI_MODE", "aihat")
+        monkeypatch.delenv("LOCAL_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("AI_HAT_ENABLED", raising=False)
+        monkeypatch.delenv("AI_BACKEND", raising=False)
 
-    client = TestClient(create_app(store))
-    r = client.get("/settings")
-    assert r.status_code == 200
-    s = r.json()["settings"]
-    assert s.get("AI_HAT_ENABLED") == "1"
-    assert s.get("LOCAL_LLM_PROVIDER") == "mock"
+        client = TestClient(create_app(store))
+        r = client.get("/settings")
+        assert r.status_code == 200
+        s = r.json()["settings"]
+        assert s.get("AI_HAT_ENABLED") == "1"
+        assert s.get("LOCAL_LLM_PROVIDER") == "mock"
 
 
 def test_post_settings_persists_canonical_only(
@@ -1007,12 +1026,480 @@ def test_post_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         data = r.json()
         assert data.get("ok") is True
         assert "restart" in data.get("message", "").lower()
+        assert "changed_keys" in data
+        assert "restart_required" in data
+        assert "reconnect_required" in data
         assert settings_file.exists()
         with open(settings_file) as f:
             saved = json.load(f)
         assert saved.get("TELEMETRY_BACKEND") == "mock"
         assert saved.get("LOCAL_LLM_PROVIDER") == "mock"
         assert "AI_MODE" not in saved
+
+
+def test_post_settings_returns_structured_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST /settings returns structured result with live/reconnect/restart classification."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+
+        store = StateStore()
+        client = TestClient(create_app(store))
+
+        r = client.post(
+            "/settings",
+            json={
+                "CAMERA_RECORDING_MODE": "manual",
+                "SESSION_AUTO_START_ON_ARM": "0",
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert "live" in data
+        assert "reconnect" in data
+        assert "restart" in data
+        assert "restart_required" in data
+        assert "reconnect_required" in data
+        assert "message" in data
+        assert data["restart_required"] is False
+        assert "CAMERA_RECORDING_MODE" in data["live"]
+        assert "SESSION_AUTO_START_ON_ARM" in data["live"]
+
+
+def test_load_settings_discovers_provider_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When LOCAL_LLM_PROVIDER is unset, load_settings discovers Ollama and sets effective provider."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        settings_file = settings_dir / "settings.json"
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_FILE", settings_file)
+        monkeypatch.delenv("LOCAL_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("AI_MODE", raising=False)
+        monkeypatch.delenv("AI_BACKEND", raising=False)
+
+        with patch(
+            "airautomatica.ai.ollama_readiness.check_ollama_ready",
+            return_value=OllamaReadinessResult(ready=False, reason="unreachable"),
+        ):
+            load_settings()
+
+        import os
+
+        assert os.environ.get("LOCAL_LLM_PROVIDER") == "mock"
+        assert not settings_file.exists()
+
+
+def test_load_settings_does_not_override_explicit_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When LOCAL_LLM_PROVIDER is explicitly set, load_settings does not run discovery."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        settings_file = settings_dir / "settings.json"
+        settings_file.write_text('{"LOCAL_LLM_PROVIDER": "ollama"}')
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_FILE", settings_file)
+        monkeypatch.delenv("LOCAL_LLM_PROVIDER", raising=False)
+
+        load_settings()
+
+        import os
+
+        assert os.environ.get("LOCAL_LLM_PROVIDER") == "ollama"
+
+
+def test_post_settings_reconfigures_mission_logic(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """POST /settings with AI_MIN_CONFIDENCE/AI_DUPLICATE_WINDOW_SEC reconfigures MissionLogic when available."""
+    from airautomatica.services.mission_logic import MissionLogic
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("AI_MIN_CONFIDENCE", "0.5")
+        monkeypatch.setenv("AI_DUPLICATE_WINDOW_SEC", "30")
+
+        mission_logic = MissionLogic(
+            store=store,
+            min_confidence=0.5,
+            duplicate_window_sec=30.0,
+        )
+        client = TestClient(create_app(store, mission_logic=mission_logic))
+
+        r = client.post(
+            "/settings",
+            json={
+                "AI_MIN_CONFIDENCE": "0.7",
+                "AI_DUPLICATE_WINDOW_SEC": "45",
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert "AI_MIN_CONFIDENCE" in data["live"]
+        assert "AI_DUPLICATE_WINDOW_SEC" in data["live"]
+        assert data["reconnect_required"] is False
+        assert "apply immediately" in data["message"].lower()
+
+
+def test_post_settings_mission_logic_unavailable_reports_reconnect(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When MissionLogic is unavailable, AI_MIN_CONFIDENCE/AI_DUPLICATE_WINDOW_SEC report as reconnect."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+
+        client = TestClient(create_app(store))
+
+        r = client.post(
+            "/settings",
+            json={
+                "AI_MIN_CONFIDENCE": "0.7",
+                "AI_DUPLICATE_WINDOW_SEC": "45",
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert "AI_MIN_CONFIDENCE" in data["reconnect"]
+        assert "AI_DUPLICATE_WINDOW_SEC" in data["reconnect"]
+        assert "AI_MIN_CONFIDENCE" not in data["live"]
+        assert "AI_DUPLICATE_WINDOW_SEC" not in data["live"]
+        assert "reconnect" in data["message"].lower()
+
+
+def test_post_settings_reloads_ai_subsystem_when_holder_available(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When ai_holder and reload_ai_fn are provided, POST with AI settings reloads and reports live."""
+    from airautomatica.runtime.ai_subsystem import AiSubsystemHolder, ReloadResult
+    from airautomatica.services.mission_logic import MissionLogic
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("LOCAL_LLM_PROVIDER", "mock")
+
+        task_service = OllamaTaskService(provider="mock", ollama_service=None)
+        ai_service = MockAiService()
+        holder = AiSubsystemHolder(ai_service, task_service)
+        mission_logic = MissionLogic(
+            store, ai_service=ai_service, min_confidence=0.5, duplicate_window_sec=30.0
+        )
+
+        def reload_fn(provider_before: str) -> ReloadResult:
+            from airautomatica.main import _reload_ai_subsystem
+
+            return _reload_ai_subsystem(holder, mission_logic, None, provider_before)
+
+        client = TestClient(
+            create_app(
+                store,
+                ai_holder=holder,
+                mission_logic=mission_logic,
+                reload_ai_fn=reload_fn,
+            )
+        )
+
+        r = client.post(
+            "/settings",
+            json={
+                "LOCAL_LLM_MODEL": "gemma3:2b",
+                "LOCAL_LLM_BASE_URL": "http://127.0.0.1:11434",
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert "LOCAL_LLM_MODEL" in data["live"]
+        assert "LOCAL_LLM_BASE_URL" in data["live"]
+        assert "apply immediately" in data["message"].lower()
+
+
+def test_get_settings_ai_live_when_reload_available(
+    store: StateStore,
+) -> None:
+    """GET /settings returns AI subsystem keys as live when reload_ai_fn is provided."""
+    from airautomatica.runtime.ai_subsystem import AiSubsystemHolder, ReloadResult
+    from airautomatica.services.mission_logic import MissionLogic
+
+    task_service = OllamaTaskService(provider="mock", ollama_service=None)
+    ai_service = MockAiService()
+    holder = AiSubsystemHolder(ai_service, task_service)
+    mission_logic = MissionLogic(store, ai_service=ai_service)
+
+    def reload_fn(provider_before: str) -> ReloadResult:
+        from airautomatica.main import _reload_ai_subsystem
+
+        return _reload_ai_subsystem(holder, mission_logic, None, provider_before)
+
+    client = TestClient(
+        create_app(
+            store,
+            ai_holder=holder,
+            mission_logic=mission_logic,
+            reload_ai_fn=reload_fn,
+        )
+    )
+    r = client.get("/settings")
+    assert r.status_code == 200
+    apply_modes = r.json()["apply_modes"]
+    assert apply_modes["LOCAL_LLM_PROVIDER"] == "live"
+    assert apply_modes["LOCAL_LLM_MODEL"] == "live"
+    assert apply_modes["LOCAL_LLM_BASE_URL"] == "live"
+
+
+def test_post_settings_ai_reload_failure_reports_truthfully(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When AI reload fails (e.g. provider change), POST reports failure and AI keys stay in reconnect."""
+    from airautomatica.runtime.ai_subsystem import AiSubsystemHolder, ReloadResult
+    from airautomatica.services.mission_logic import MissionLogic
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("LOCAL_LLM_PROVIDER", "mock")
+
+        task_service = OllamaTaskService(provider="mock", ollama_service=None)
+        ai_service = MockAiService()
+        holder = AiSubsystemHolder(ai_service, task_service)
+        mission_logic = MissionLogic(store, ai_service=ai_service)
+
+        def reload_fn(provider_before: str) -> ReloadResult:
+            from airautomatica.main import _reload_ai_subsystem
+
+            return _reload_ai_subsystem(holder, mission_logic, None, provider_before)
+
+        client = TestClient(
+            create_app(
+                store,
+                ai_holder=holder,
+                mission_logic=mission_logic,
+                reload_ai_fn=reload_fn,
+            )
+        )
+
+        r = client.post(
+            "/settings",
+            json={"LOCAL_LLM_PROVIDER": "ollama", "LOCAL_LLM_MODEL": "gemma3:2b"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert "LOCAL_LLM_PROVIDER" in data["reconnect"] or "restart" in data["restart"]
+        assert (
+            "ai reload failed" in data["message"].lower()
+            or "restart" in data["message"].lower()
+        )
+        assert holder.get_ai_service() is ai_service
+
+
+def test_get_settings_telemetry_live_when_reload_available(
+    store: StateStore,
+) -> None:
+    """GET /settings returns telemetry keys as live when reload_telemetry_fn is provided."""
+    from airautomatica.runtime.telemetry_subsystem import TelemetryReconnectResult
+
+    async def mock_reload() -> TelemetryReconnectResult:
+        return TelemetryReconnectResult(
+            success=True, backend_before="mock", backend_after="mock"
+        )
+
+    client = TestClient(
+        create_app(store, reload_telemetry_fn=mock_reload),
+    )
+    r = client.get("/settings")
+    assert r.status_code == 200
+    apply_modes = r.json()["apply_modes"]
+    assert apply_modes["TELEMETRY_BACKEND"] == "live"
+    assert apply_modes["SERIAL_PORT"] == "live"
+    assert apply_modes["SERIAL_BAUD"] == "live"
+
+
+@pytest.mark.asyncio
+async def test_post_settings_telemetry_reconnect_success(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When reload_telemetry_fn is provided and succeeds, POST reports telemetry keys as live."""
+    from airautomatica.runtime.telemetry_subsystem import TelemetryReconnectResult
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("TELEMETRY_BACKEND", "mock")
+
+        async def mock_reload() -> TelemetryReconnectResult:
+            return TelemetryReconnectResult(
+                success=True, backend_before="mock", backend_after="mock"
+            )
+
+        client = TestClient(
+            create_app(store, reload_telemetry_fn=mock_reload),
+        )
+        r = client.post(
+            "/settings",
+            json={"TELEMETRY_BACKEND": "mock", "SERIAL_PORT": "/dev/ttyUSB0"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert "TELEMETRY_BACKEND" in data["live"]
+        assert "SERIAL_PORT" in data["live"]
+        assert "apply immediately" in data["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_post_settings_telemetry_reconnect_failure_reports_truthfully(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When telemetry reconnect fails, POST reports failure truthfully."""
+    from airautomatica.runtime.telemetry_subsystem import TelemetryReconnectResult
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("TELEMETRY_BACKEND", "mock")
+
+        async def mock_reload_fail() -> TelemetryReconnectResult:
+            return TelemetryReconnectResult(
+                success=False,
+                error="Port /dev/nonexistent not found",
+                backend_before="mock",
+                backend_after="serial",
+            )
+
+        client = TestClient(
+            create_app(store, reload_telemetry_fn=mock_reload_fail),
+        )
+        r = client.post(
+            "/settings",
+            json={"TELEMETRY_BACKEND": "serial", "SERIAL_PORT": "/dev/nonexistent"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert "telemetry reconnect failed" in data["message"].lower()
+        assert (
+            "TELEMETRY_BACKEND" in data["reconnect"]
+            or "TELEMETRY_BACKEND" in data["restart"]
+        )
+
+
+def test_post_settings_serial_validation_blocks_reconnect(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """When switching to serial with non-existent port, validation fails before reconnect."""
+    from airautomatica.runtime.telemetry_subsystem import TelemetryReconnectResult
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("TELEMETRY_BACKEND", "mock")
+
+        reload_called = []
+
+        async def track_reload() -> TelemetryReconnectResult:
+            reload_called.append(True)
+            return TelemetryReconnectResult(success=True)
+
+        client = TestClient(
+            create_app(store, reload_telemetry_fn=track_reload),
+        )
+        r = client.post(
+            "/settings",
+            json={"TELEMETRY_BACKEND": "serial", "SERIAL_PORT": "/dev/nonexistent999"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert (
+            "not found" in data["message"].lower() or "port" in data["message"].lower()
+        )
+        assert len(reload_called) == 0
+
+
+def test_post_settings_returns_active_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """POST /settings returns active_summary with current backend and provider."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("TELEMETRY_BACKEND", "mock")
+        monkeypatch.setenv("LOCAL_LLM_PROVIDER", "mock")
+
+        client = TestClient(create_app(store))
+        r = client.post("/settings", json={"CAMERA_RECORDING_MODE": "manual"})
+        assert r.status_code == 200
+        data = r.json()
+        assert "active_summary" in data
+        assert "Telemetry:" in data["active_summary"]
+        assert "AI:" in data["active_summary"]
+
+
+def test_get_settings_returns_active_summary(store: StateStore) -> None:
+    """GET /settings returns active_summary with current backend and provider."""
+    client = TestClient(create_app(store))
+    r = client.get("/settings")
+    assert r.status_code == 200
+    data = r.json()
+    assert "active_summary" in data
+    assert "Telemetry:" in data["active_summary"]
+    assert "AI:" in data["active_summary"]
 
 
 def test_get_session_path_returns_path(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -92,7 +92,9 @@ async def test_vcm_selects_ardupilot_adapter() -> None:
 @pytest.mark.asyncio
 async def test_vcm_selects_inav_adapter() -> None:
     """VehicleConnectionManager selects INAV adapter when autopilot=13."""
-    hb = make_heartbeat(autopilot=13, custom_mode=4)
+    hb = make_heartbeat(
+        autopilot=13, custom_mode=11
+    )  # RTL; INAV sends ArduPilot custom_mode
     transport = MockTransport([hb, None, None])
 
     manager = VehicleConnectionManager(transport, heartbeat_timeout_sec=10.0)
@@ -105,7 +107,7 @@ async def test_vcm_selects_inav_adapter() -> None:
     assert manager.selected_adapter == "inav"
     assert manager.capability_info is not None
     assert manager.capability_info.profile.supports_message_interval is False
-    assert states[0][0].mode == "NAV_POSHOLD"
+    assert states[0][0].mode == "RTL"
 
 
 @pytest.mark.asyncio

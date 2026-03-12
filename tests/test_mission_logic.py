@@ -39,6 +39,79 @@ def _make_state(
     )
 
 
+def test_reconfigure_updates_values() -> None:
+    """reconfigure() updates min_confidence and duplicate_window_sec at runtime."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_ref=[1],
+        min_confidence=0.5,
+        duplicate_window_sec=30.0,
+    )
+    result_person_06 = AiResult(
+        label="person",
+        confidence=0.6,
+        summary="Detected",
+        source_backend="mock",
+        timestamp=datetime.now(timezone.utc),
+    )
+    result_vehicle_04 = AiResult(
+        label="vehicle",
+        confidence=0.4,
+        summary="Detected",
+        source_backend="mock",
+        timestamp=datetime.now(timezone.utc),
+    )
+    result_vehicle_08 = AiResult(
+        label="vehicle",
+        confidence=0.8,
+        summary="Detected",
+        source_backend="mock",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result_person_06)
+    assert persistence.insert_detection.call_count == 1
+    logic.process_result(_make_state(), result_vehicle_04)
+    assert persistence.insert_detection.call_count == 1
+    logic.reconfigure(min_confidence=0.7)
+    logic.process_result(_make_state(), result_vehicle_08)
+    assert persistence.insert_detection.call_count == 2
+    logic.reconfigure(min_confidence=0.3)
+    result_building_04 = AiResult(
+        label="building",
+        confidence=0.4,
+        summary="Detected",
+        source_backend="mock",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result_building_04)
+    assert persistence.insert_detection.call_count == 3
+
+
+def test_reconfigure_clamps_min_confidence() -> None:
+    """reconfigure() clamps min_confidence to 0-1 and takes effect on process_result."""
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=StateStore(),
+        persistence=persistence,
+        session_ref=[1],
+        min_confidence=0.5,
+    )
+    result = AiResult(
+        label="person",
+        confidence=0.6,
+        summary="Detected",
+        source_backend="mock",
+        timestamp=datetime.now(timezone.utc),
+    )
+    logic.process_result(_make_state(), result)
+    persistence.insert_detection.assert_called_once()
+    logic.reconfigure(min_confidence=0.9)
+    logic.process_result(_make_state(), result)
+    assert persistence.insert_detection.call_count == 1
+
+
 def test_low_confidence_ignored() -> None:
     """Low-confidence result is not persisted."""
     persistence = MagicMock()

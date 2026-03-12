@@ -159,8 +159,8 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 | `GET /sessions` | Recent flight sessions with detection counts |
 | `GET /sessions/{id}/path` | Flight path JSON (lat, lon, rel_alt_m, timestamp) |
 | `GET /sessions/{id}/telemetry-samples` | Recent telemetry samples for path/sparklines |
-| `GET /settings` | Current settings (telemetry, AI, serial, etc.) |
-| `POST /settings` | Save settings (restart required to apply) |
+| `GET /settings` | Current settings (raw, effective, apply_modes, Ollama status) |
+| `POST /settings` | Save settings (returns structured result: live/reconnect/restart) |
 | `GET /dashboard` | Real-time flight dashboard (HTML + Socket.IO) |
 | `GET /dashboard/sessions/{id}` | Session detail page with flight path (lat/lon) |
 
@@ -177,7 +177,7 @@ SQLite stores flight sessions, telemetry samples, detections, system events (inc
 - **Event Log** — Recent system events (telemetry lifecycle, app shutdown)
 - **Session History** — Sessions with duration, detection count; click to view path
 - **Session Detail** — `GET /dashboard/sessions/{id}` shows the flight path (lat/lon points) for a session
-- **Settings** — Configure telemetry backend, AI mode, serial port, Ollama URL/model, etc. Saves to `~/.airautomatica/settings.json`; restart required to apply
+- **Settings** — Configure telemetry backend, AI mode, serial port, Ollama URL/model, etc. Saves to `~/.airautomatica/settings.json`; some apply immediately, others require reconnect or restart
 
 Uses Socket.IO for live updates. Read-only, non-flight-critical. Works with persistence disabled. See [docs/dashboard.md](docs/dashboard.md) for details.
 

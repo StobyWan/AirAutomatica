@@ -11,25 +11,9 @@ logger = logging.getLogger(__name__)
 # MAV_AUTOPILOT_INAV (mavlink.io/common)
 MAV_AUTOPILOT_INAV = 13
 
-# INAV flight mode mapping (custom_mode). Minimal set; unknown -> UNKNOWN.
-# Based on INAV NAV modes and common stabilization modes.
-MODE_MAPPING_INAV: dict[int, str] = {
-    0: "MANUAL",
-    1: "ACRO",
-    2: "ANGLE",
-    3: "HORIZON",
-    4: "NAV_POSHOLD",
-    5: "NAV_ALTHOLD",
-    6: "NAV_COURSEHOLD",
-    7: "NAV_CRUISE",
-    10: "NAV_RTH",
-    11: "NAV_WP",
-    12: "NAV_LAUNCH",
-    13: "NAV_WP",
-    14: "NAV_RTH",
-    15: "GUIDED",
-    16: "NAV_EMERGENCY_LANDING",
-}
+# INAV MAVLink emits ArduPilot-style custom_mode values in HEARTBEAT for GCS
+# compatibility (see inav mavlink.c inavToArduCopterMap/inavToArduPlaneMap).
+# Use default APM mapping; do NOT override with INAV-specific mapping.
 
 
 class INAVAdapter:
@@ -45,8 +29,7 @@ class INAVAdapter:
         return inav_profile()
 
     def handle_message(self, msg: Any, normalizer: MavlinkNormalizer) -> None:
-        """Use INAV mode mapping. Delegate telemetry parsing to normalizer."""
-        normalizer.set_mode_mapping(MODE_MAPPING_INAV)
+        """Delegate to normalizer. INAV sends ArduPilot custom_mode; use default APM mapping."""
         normalizer.apply(msg)
 
     def request_initial_state(self, transport: Any) -> None:

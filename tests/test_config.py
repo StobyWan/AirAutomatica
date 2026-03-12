@@ -1,8 +1,14 @@
 """Tests for config getters."""
 
+import sys
+
 import pytest
 
-from airautomatica.config import get_ollama_num_thread, get_ollama_required
+from airautomatica.config import (
+    get_ollama_num_thread,
+    get_ollama_required,
+    validate_serial_config,
+)
 
 
 def test_get_ollama_num_thread_default() -> None:
@@ -71,3 +77,26 @@ def test_get_ollama_required_airautomatica_wins() -> None:
         assert get_ollama_required() is False
         m.setenv("AIRAUTOMATICA_OLLAMA_REQUIRED", "true")
         assert get_ollama_required() is True
+
+
+def test_validate_serial_config_mock_always_ok() -> None:
+    """Mock backend always passes validation."""
+    ok, err = validate_serial_config("mock", "")
+    assert ok is True
+    assert err is None
+
+
+def test_validate_serial_config_serial_empty_port_fails() -> None:
+    """Serial backend with empty port fails."""
+    ok, err = validate_serial_config("serial", "")
+    assert ok is False
+    assert "required" in (err or "").lower()
+
+
+def test_validate_serial_config_serial_nonexistent_port_fails() -> None:
+    """Serial backend with non-existent port fails on Unix."""
+    if sys.platform not in ("linux", "darwin"):
+        pytest.skip("Port existence check only on Unix")
+    ok, err = validate_serial_config("serial", "/dev/nonexistent999")
+    assert ok is False
+    assert "not found" in (err or "").lower()

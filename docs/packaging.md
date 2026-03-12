@@ -4,13 +4,16 @@ AirAutomatica can be installed as a systemd-managed service on Debian and Raspbe
 
 ## Default Packaged Behavior
 
-Packaged installs start in **mock mode** by default:
+Packaged installs start in **mock telemetry** by default:
 
 - `TELEMETRY_BACKEND=mock` — no flight controller required
-- `LOCAL_LLM_PROVIDER=mock` — no Ollama required
+- `LOCAL_LLM_PROVIDER` — **unset by default**; app discovers Ollama at startup:
+  - If Ollama is discovered and ready, uses Ollama
+  - Otherwise falls back to mock
+  - Set explicitly in env or settings.json to override (e.g. `LOCAL_LLM_PROVIDER=ollama`) — never persisted over user choice
 - `CAMERA_RECORDING_MODE=manual` — camera recording off by default
 
-This ensures the service starts cleanly after install, is demoable immediately, and does not fail if `/dev/ttyUSB0` or Ollama are missing.
+This ensures the service starts cleanly after install, prefers Ollama when available (e.g. Raspberry Pi with Ollama installed), and does not fail if `/dev/ttyUSB0` or Ollama are missing.
 
 To switch to real hardware, edit `/etc/airautomatica/airautomatica.env` and restart the service.
 
@@ -21,6 +24,24 @@ To switch to real hardware, edit `/etc/airautomatica/airautomatica.env` and rest
 3. **Internal defaults** — in config.py when neither above sets a value
 
 Use the env file for deployment configuration; settings.json remains for dashboard-driven changes.
+
+### Raw vs Effective Settings
+
+- **Raw settings** — what is persisted in settings.json or set in env (explicit values).
+
+- **Effective settings** — runtime values including discovered defaults. When `LOCAL_LLM_PROVIDER` is unset, the app discovers Ollama at startup and uses it if ready; otherwise mock. This discovery is not persisted.
+
+### Apply Modes (live / reconnect / restart)
+
+Settings apply in different ways:
+
+- **live** — apply immediately: `CAMERA_RECORDING_MODE`, `SESSION_AUTO_START_ON_ARM`, `AI_SCHEDULER_COOLDOWN_SEC`, `AI_MIN_CONFIDENCE`, `AI_DUPLICATE_WINDOW_SEC` (MissionLogic reconfigure when available); when AI hot-reload is available: `LOCAL_LLM_PROVIDER`, `LOCAL_LLM_BASE_URL`, `LOCAL_LLM_MODEL`, `LOCAL_LLM_TIMEOUT`, `OLLAMA_NUM_THREAD`; when telemetry reconnect is available: `TELEMETRY_BACKEND`, `SERIAL_PORT`, `SERIAL_BAUD`
+- **reconnect** — require subsystem reload. AI and telemetry settings use hot-reload/reconnect when available.
+- **restart** — require full app restart (e.g. AI HAT, or changing AI provider between mock and ollama)
+
+**AI subsystem hot-reload:** When running the normal app (not test-only setups), AI provider/model/URL/timeout/thread settings are reloaded on save without restart. If reload fails (e.g. switching provider mock↔ollama, or Ollama unreachable), the old services stay active and the save response reports the failure.
+
+**Telemetry reconnect:** When running the normal app, telemetry backend/port/baud settings are reapplied on save without restart. Serial port is validated before reconnect (must exist on Unix). The current telemetry source is stopped, a new one is created from the updated config, and the loop restarts. If reconnect fails (e.g. invalid port), the old source is restarted and the save response reports the failure.
 
 ## Install Layout
 
