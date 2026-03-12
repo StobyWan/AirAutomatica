@@ -1,10 +1,12 @@
 """Tests for config getters."""
 
 import sys
+from pathlib import Path
 
 import pytest
 
 from airautomatica.config import (
+    get_camera_recording_mode,
     get_ollama_num_thread,
     get_ollama_required,
     validate_serial_config,
@@ -100,3 +102,22 @@ def test_validate_serial_config_serial_nonexistent_port_fails() -> None:
     ok, err = validate_serial_config("serial", "/dev/nonexistent999")
     assert ok is False
     assert "not found" in (err or "").lower()
+
+
+def test_get_camera_recording_mode_live_update_from_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """save_settings updates persisted value; get_camera_recording_mode reads it for live updates."""
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr("airautomatica.settings._SETTINGS_FILE", settings_file)
+    monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", tmp_path)
+    monkeypatch.delenv("CAMERA_RECORDING_MODE", raising=False)
+
+    from airautomatica.settings import save_settings
+
+    assert get_camera_recording_mode() == "manual"
+    save_settings({"CAMERA_RECORDING_MODE": "auto"})
+    assert get_camera_recording_mode() == "auto"
+
+    save_settings({"CAMERA_RECORDING_MODE": "off"})
+    assert get_camera_recording_mode() == "off"
