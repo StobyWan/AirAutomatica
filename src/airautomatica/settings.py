@@ -41,6 +41,22 @@ SETTING_APPLY_MODES: dict[str, ApplyMode] = {
     "SESSION_AUTO_START_ON_ARM": "live",
 }
 
+# Keys that trigger AI subsystem hot-reload when _reload_ai_fn is available.
+AI_SUBSYSTEM_KEYS = frozenset(
+    {
+        "LOCAL_LLM_PROVIDER",
+        "LOCAL_LLM_BASE_URL",
+        "LOCAL_LLM_MODEL",
+        "LOCAL_LLM_TIMEOUT",
+        "OLLAMA_NUM_THREAD",
+    }
+)
+
+# Keys that trigger telemetry reconnect when _reload_telemetry_fn is available.
+TELEMETRY_SUBSYSTEM_KEYS = frozenset(
+    {"TELEMETRY_BACKEND", "SERIAL_PORT", "SERIAL_BAUD"}
+)
+
 # Canonical keys: returned by GET /settings and persisted on save. No legacy keys.
 CANONICAL_SETTINGS_KEYS = [
     "TELEMETRY_BACKEND",

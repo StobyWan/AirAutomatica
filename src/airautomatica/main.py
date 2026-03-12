@@ -378,6 +378,7 @@ def main() -> None:
     recording_auto_controller = RecordingAutoController(
         camera_recording_service,
         get_mode_fn=get_camera_recording_mode,
+        session_ref=session_ref,
     )
     app_home_store = AppHomeStore()
     session_auto_controller = SessionAutoController(

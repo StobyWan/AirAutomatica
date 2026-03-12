@@ -98,3 +98,9 @@ When MissionLogic is unavailable (e.g. in some test setups), AI_MIN_CONFIDENCE a
 ## Read-Only Nature
 
 The dashboard does not expose command-back controls. It only displays data. Use the API or other tools for any control operations.
+
+## See also
+
+- [persistence.md](persistence.md) — Session data, path points, telemetry samples
+- [preprocessing.md](preprocessing.md) — Telemetry preprocessing and debrief
+- [packaging.md](packaging.md) — Apply modes, settings precedence

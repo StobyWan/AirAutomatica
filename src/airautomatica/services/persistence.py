@@ -4,7 +4,6 @@ import json
 import logging
 import math
 import threading
-import time
 import typing
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
@@ -691,16 +690,50 @@ class PersistenceService:
             logger.exception("get_recent_system_events failed: %s", e)
             return []
 
-    def get_recent_telemetry_samples(
+    def _sample_to_api_dict(
+        self, row: TelemetrySample, for_debrief: bool = False
+    ) -> dict:
+        """Convert TelemetrySample row to dict. Consistent ISO timestamp.
+        for_debrief=True adds armed, climb_rate_m_s, home_lat, home_lon, gps_fix_type, satellites_visible.
+        for_debrief=False adds heartbeat_age_s, reconnect_count."""
+        base = {
+            "timestamp": row.timestamp.isoformat(),
+            "lat": row.lat,
+            "lon": row.lon,
+            "rel_alt_m": row.rel_alt_m,
+            "voltage_v": row.voltage_v,
+            "current_a": row.current_a,
+            "groundspeed_m_s": row.groundspeed_m_s,
+            "mode": row.mode,
+            "heading_deg": row.heading_deg,
+            "roll_rad": row.roll_rad,
+            "pitch_rad": row.pitch_rad,
+            "yaw_rad": row.yaw_rad,
+            "airspeed_m_s": row.airspeed_m_s,
+            "connected": row.connected,
+            "watts": row.watts,
+        }
+        if for_debrief:
+            base["armed"] = row.armed
+            base["climb_rate_m_s"] = row.climb_rate_m_s
+            base["gps_fix_type"] = row.gps_fix_type
+            base["satellites_visible"] = row.satellites_visible
+            base["home_lat"] = row.home_lat
+            base["home_lon"] = row.home_lon
+        else:
+            base["heartbeat_age_s"] = row.heartbeat_age_s
+            base["reconnect_count"] = row.reconnect_count
+        return base
+
+    def get_session_telemetry(
         self,
         session_id: int | None,
-        limit: int = 60,
         order: str = "desc",
+        limit: int = 60,
+        for_debrief: bool = False,
     ) -> list[dict]:
-        """Fetch telemetry samples for session. Returns [] when DB disabled or on error.
-
-        order: "desc" (newest first, default) or "asc" (oldest first, for replay).
-        limit: max 10000.
+        """Unified telemetry sample access. order: asc|desc. limit: max 10000.
+        for_debrief=True returns debrief-oriented fields (armed, climb_rate_m_s, home_lat, etc).
         """
         if get_engine() is None or session_id is None:
             return []
@@ -723,31 +756,27 @@ class PersistenceService:
                 result = session.execute(stmt)
                 rows = result.scalars().all()
                 return [
-                    {
-                        "timestamp": r.timestamp.isoformat(),
-                        "lat": r.lat,
-                        "lon": r.lon,
-                        "rel_alt_m": r.rel_alt_m,
-                        "voltage_v": r.voltage_v,
-                        "current_a": r.current_a,
-                        "groundspeed_m_s": r.groundspeed_m_s,
-                        "heartbeat_age_s": r.heartbeat_age_s,
-                        "mode": r.mode,
-                        "heading_deg": r.heading_deg,
-                        "roll_rad": r.roll_rad,
-                        "pitch_rad": r.pitch_rad,
-                        "yaw_rad": r.yaw_rad,
-                        "airspeed_m_s": r.airspeed_m_s,
-                        "connected": r.connected,
-                        "reconnect_count": r.reconnect_count,
-                        "watts": r.watts,
-                    }
-                    for r in rows
+                    self._sample_to_api_dict(r, for_debrief=for_debrief) for r in rows
                 ]
         except Exception as e:
             self._record_error(str(e))
-            logger.exception("get_recent_telemetry_samples failed: %s", e)
+            logger.exception("get_session_telemetry failed: %s", e)
             return []
+
+    def get_recent_telemetry_samples(
+        self,
+        session_id: int | None,
+        limit: int = 60,
+        order: str = "desc",
+    ) -> list[dict]:
+        """Fetch telemetry samples for session. Returns [] when DB disabled or on error.
+
+        order: "desc" (newest first, default) or "asc" (oldest first, for replay).
+        limit: max 10000.
+        """
+        return self.get_session_telemetry(
+            session_id, order=order, limit=limit, for_debrief=False
+        )
 
     def get_session_telemetry_for_debrief(
         self,
@@ -755,49 +784,9 @@ class PersistenceService:
         limit: int = 10000,
     ) -> list[dict]:
         """Fetch all telemetry samples for session, oldest first. For debrief analysis."""
-        if get_engine() is None:
-            return []
-        try:
-            with get_session() as session:
-                if session is None:
-                    return []
-                result = session.execute(
-                    select(TelemetrySample)
-                    .where(TelemetrySample.session_id == session_id)
-                    .order_by(TelemetrySample.timestamp.asc())
-                    .limit(limit)
-                )
-                rows = result.scalars().all()
-                return [
-                    {
-                        "timestamp": r.timestamp,
-                        "lat": r.lat,
-                        "lon": r.lon,
-                        "rel_alt_m": r.rel_alt_m,
-                        "voltage_v": r.voltage_v,
-                        "current_a": r.current_a,
-                        "groundspeed_m_s": r.groundspeed_m_s,
-                        "mode": r.mode,
-                        "heading_deg": r.heading_deg,
-                        "roll_rad": r.roll_rad,
-                        "pitch_rad": r.pitch_rad,
-                        "yaw_rad": r.yaw_rad,
-                        "airspeed_m_s": r.airspeed_m_s,
-                        "connected": r.connected,
-                        "armed": r.armed,
-                        "climb_rate_m_s": r.climb_rate_m_s,
-                        "gps_fix_type": r.gps_fix_type,
-                        "satellites_visible": r.satellites_visible,
-                        "home_lat": r.home_lat,
-                        "home_lon": r.home_lon,
-                        "watts": r.watts,
-                    }
-                    for r in rows
-                ]
-        except Exception as e:
-            self._record_error(str(e))
-            logger.exception("get_session_telemetry_for_debrief failed: %s", e)
-            return []
+        return self.get_session_telemetry(
+            session_id, order="asc", limit=limit, for_debrief=True
+        )
 
     def save_generated_debrief(
         self,
@@ -1023,269 +1012,23 @@ class PersistenceService:
             return []
 
 
-class EventPersistenceRecorder:
-    """Persists EventEngine output when events close. Tracks open events, persists on close."""
+# Re-export recorders for backward compatibility. Implementations live in persistence_recorders.py.
+from airautomatica.services.persistence_recorders import (
+    EventPersistenceRecorder,
+    PathRecorder,
+    PhasePersistenceRecorder,
+    TelemetryLifecycleLogger,
+    TelemetrySampler,
+    _haversine_m,
+)
 
-    def __init__(
-        self,
-        persistence: PersistenceService,
-        session_ref: list[int | None],
-        get_events_fn: typing.Callable[[], list],
-    ) -> None:
-        self._persistence = persistence
-        self._session_ref = session_ref
-        self._get_events_fn = get_events_fn
-        self._open_events: dict[str, dict] = {}
-        self._last_session_id: int | None = None
-
-    def maybe_persist_events(self, now: datetime) -> None:
-        """Detect closed events and persist them. Update open-event tracking."""
-        session_id = self._session_ref[0] if self._session_ref else None
-        if session_id is None:
-            if self._last_session_id is not None and self._open_events:
-                self._flush_open_events(self._last_session_id, now)
-                self._open_events.clear()
-            self._last_session_id = None
-            return
-        self._last_session_id = session_id
-        if get_engine() is None:
-            return
-        current = self._get_events_fn()
-        current_names = {e.name for e in current}
-        for name in list(self._open_events.keys()):
-            if name not in current_names:
-                info = self._open_events.pop(name)
-                self._persistence.insert_flight_event(
-                    session_id=session_id,
-                    event_name=name,
-                    severity=info["severity"],
-                    started_at=info["started_at"],
-                    ended_at=now,
-                    evidence=info["evidence"],
-                    operator_hint=info.get("operator_hint"),
-                )
-        for e in current:
-            if e.name not in self._open_events:
-                self._open_events[e.name] = {
-                    "started_at": e.started_at,
-                    "severity": e.severity,
-                    "evidence": dict(e.evidence),
-                    "operator_hint": e.operator_hint,
-                }
-
-    def _flush_open_events(self, session_id: int, ended_at: datetime) -> None:
-        """Persist all open events (e.g. on session end)."""
-        if get_engine() is None:
-            return
-        for name, info in self._open_events.items():
-            self._persistence.insert_flight_event(
-                session_id=session_id,
-                event_name=name,
-                severity=info["severity"],
-                started_at=info["started_at"],
-                ended_at=ended_at,
-                evidence=info["evidence"],
-                operator_hint=info.get("operator_hint"),
-            )
-
-
-class PhasePersistenceRecorder:
-    """Persists FlightPhaseEngine output when phase transitions. Tracks current phase."""
-
-    def __init__(
-        self,
-        persistence: PersistenceService,
-        session_ref: list[int | None],
-        get_phase_fn: typing.Callable[[], str],
-    ) -> None:
-        self._persistence = persistence
-        self._session_ref = session_ref
-        self._get_phase_fn = get_phase_fn
-        self._last_phase: str | None = None
-        self._interval_started_at: datetime | None = None
-        self._last_session_id: int | None = None
-
-    def maybe_persist_phase(self, now: datetime) -> None:
-        """Detect phase transitions and persist closed intervals."""
-        session_id = self._session_ref[0] if self._session_ref else None
-        if session_id is None:
-            if self._last_session_id is not None and self._last_phase is not None:
-                self._flush_open_interval(self._last_session_id, now)
-            self._last_phase = None
-            self._interval_started_at = None
-            self._last_session_id = None
-            return
-        self._last_session_id = session_id
-        if get_engine() is None:
-            return
-        current_phase = self._get_phase_fn()
-        if self._last_phase is None:
-            self._last_phase = current_phase
-            self._interval_started_at = now
-            return
-        if current_phase != self._last_phase:
-            if self._interval_started_at is not None:
-                self._persistence.insert_phase_interval(
-                    session_id=session_id,
-                    phase=self._last_phase,
-                    started_at=self._interval_started_at,
-                    ended_at=now,
-                )
-            self._last_phase = current_phase
-            self._interval_started_at = now
-
-    def _flush_open_interval(self, session_id: int, ended_at: datetime) -> None:
-        """Persist current open interval (e.g. on session end)."""
-        if (
-            get_engine() is None
-            or self._last_phase is None
-            or self._interval_started_at is None
-        ):
-            return
-        self._persistence.insert_phase_interval(
-            session_id=session_id,
-            phase=self._last_phase,
-            started_at=self._interval_started_at,
-            ended_at=ended_at,
-        )
-        self._last_phase = None
-        self._interval_started_at = None
-
-
-class TelemetryLifecycleLogger:
-    """Logs telemetry_status transitions as system_events. Only logs when status changes."""
-
-    def __init__(
-        self,
-        persistence: PersistenceService,
-        session_ref: list[int | None],
-    ) -> None:
-        self._persistence = persistence
-        self._session_ref = session_ref
-        self._last_status: str | None = None
-
-    def maybe_log_transition(self, state: "AircraftState") -> None:
-        """If telemetry_status changed, log system_event. No-op if persistence unavailable."""
-        session_id = self._session_ref[0] if self._session_ref else None
-        if session_id is None:
-            return
-        if get_engine() is None:
-            return
-        status = state.telemetry_status
-        if self._last_status == status:
-            return
-        prev = self._last_status
-        self._last_status = status
-
-        metadata: dict = {"from": prev, "to": status}
-        if state.reconnect_count > 0:
-            metadata["reconnect_count"] = state.reconnect_count
-        if state.last_disconnect_reason is not None:
-            metadata["last_disconnect_reason"] = state.last_disconnect_reason
-
-        event_type = "telemetry_status_transition"
-        message = f"Telemetry {prev or 'initial'} -> {status}"
-        level = (
-            "info"
-            if status == "connected"
-            else "warning" if status in ("stale", "backoff") else "info"
-        )
-        self._persistence.insert_system_event(
-            session_id=session_id,
-            level=level,
-            event_type=event_type,
-            message=message,
-            metadata=metadata,
-        )
-
-
-def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Approximate distance in meters between two lat/lon points."""
-    R = 6_371_000  # Earth radius in m
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlam = math.radians(lon2 - lon1)
-    a = (
-        math.sin(dphi / 2) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    )
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-
-
-class PathRecorder:
-    """Distance-based path recorder. Stores a point only when aircraft has moved > min_distance_m."""
-
-    def __init__(
-        self,
-        persistence: PersistenceService,
-        session_ref: list[int | None],
-        min_distance_m: float = 5.0,
-    ) -> None:
-        self._persistence = persistence
-        self._session_ref = session_ref
-        self._min_distance_m = min_distance_m
-        self._last_lat: float | None = None
-        self._last_lon: float | None = None
-
-    def maybe_record(self, state: "AircraftState") -> None:
-        """If moved enough from last point (or first valid point), insert path point."""
-        session_id = self._session_ref[0] if self._session_ref else None
-        if session_id is None:
-            return
-        if get_engine() is None:
-            return
-        lat = nan_to_none(state.lat)
-        lon = nan_to_none(state.lon)
-        if lat is None or lon is None:
-            return
-        if self._last_lat is None or self._last_lon is None:
-            self._persistence.insert_path_point(
-                session_id,
-                state.timestamp,
-                lat,
-                lon,
-                nan_to_none(state.rel_alt_m),
-            )
-            self._last_lat = lat
-            self._last_lon = lon
-            return
-        dist = _haversine_m(self._last_lat, self._last_lon, lat, lon)
-        if dist >= self._min_distance_m:
-            self._persistence.insert_path_point(
-                session_id,
-                state.timestamp,
-                lat,
-                lon,
-                nan_to_none(state.rel_alt_m),
-            )
-            self._last_lat = lat
-            self._last_lon = lon
-
-
-class TelemetrySampler:
-    """Throttled sampling wrapper. Samples at most once per interval_sec."""
-
-    def __init__(
-        self,
-        persistence: PersistenceService,
-        session_ref: list[int | None],
-        interval_sec: float = 1.0,
-    ) -> None:
-        self._persistence = persistence
-        self._session_ref = session_ref
-        self._interval_sec = interval_sec
-        self._last_sample_time: float = 0.0
-
-    def maybe_sample(self, state: "AircraftState") -> None:
-        """If session_id and persistence available, and interval elapsed, insert sample."""
-        session_id = self._session_ref[0] if self._session_ref else None
-        if session_id is None:
-            return
-        if get_engine() is None:
-            return
-        now = time.monotonic()
-        if now - self._last_sample_time >= self._interval_sec:
-            self._last_sample_time = now
-            self._persistence.insert_telemetry_sample(session_id, state)
+__all__ = [
+    "PersistenceService",
+    "build_session_start_params",
+    "EventPersistenceRecorder",
+    "PhasePersistenceRecorder",
+    "PathRecorder",
+    "TelemetrySampler",
+    "TelemetryLifecycleLogger",
+    "_haversine_m",
+]

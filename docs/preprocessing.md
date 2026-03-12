@@ -121,7 +121,7 @@ Produce a useful post-flight summary from recorded telemetry/session data for op
 
 ### Inputs
 
-- **Source:** `TelemetrySample` rows via `PersistenceService.get_session_telemetry_for_debrief(session_id)`
+- **Source:** `TelemetrySample` rows via `PersistenceService.get_session_telemetry_for_debrief(session_id)` (see also [persistence.md](persistence.md) for debrief queries)
 - **Data:** Stored telemetry samples (oldest first), including lat, lon, voltage_v, current_a, mode, attitude, etc.
 - **Home:** First sample's lat/lon used as home for distance-to-home and return-margin calculations
 
@@ -165,6 +165,8 @@ Produce a useful post-flight summary from recorded telemetry/session data for op
 - **API (LLM):** `GET /sessions/{sid}/debrief?generate_summary=true` – Adds `generated_summary` when task_service available
 - **Service:** `get_session_debrief(session_id, persistence)` – Helper callable, returns (summary, compact) or (None, None)
 - **Service (LLM):** `get_session_debrief_with_llm(session_id, persistence, task_service)` – Returns (summary, compact, generated_summary)
+
+See also [persistence.md](persistence.md) for telemetry sample storage and debrief queries.
 
 ---
 

@@ -6,6 +6,9 @@
   <title>AIRAUTOMATICA Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="/static/js/formatters.js"></script>
+  <script src="/static/js/path-plot.js"></script>
+  <script src="/static/js/sparklines.js"></script>
   <style>
     :root {
       --bg: #1a1a2e;
@@ -671,6 +674,7 @@
     });
   </script>
   <script>
+    const { fmtDate, fmtDuration, labelAutopilot, labelMode, labelSource } = AiraFormatters;
 
     function updateProviderVisibility() {
       const p = document.getElementById('LOCAL_LLM_PROVIDER').value;
@@ -692,39 +696,6 @@
         el.innerHTML = '<span class="na">No sessions</span>';
         return;
       }
-      const fmtDate = (s) => {
-        if (!s) return '—';
-        try { return new Date(s).toLocaleString(); } catch { return s; }
-      };
-      const fmtDuration = (started, ended) => {
-        if (!started || !ended) return '—';
-        try {
-          const sec = Math.round((new Date(ended) - new Date(started)) / 1000);
-          if (sec < 60) return sec + ' s';
-          if (sec < 3600) return Math.floor(sec / 60) + ' m';
-          return Math.floor(sec / 3600) + ' h ' + Math.floor((sec % 3600) / 60) + ' m';
-        } catch { return '—'; }
-      };
-      const labelAutopilot = (s) => {
-        const a = s.autopilot;
-        if (a === 'mock' || (s.connection_mode === 'mock' && !a)) return 'Mock session';
-        if (a === 'ardupilot') return 'ArduPilot';
-        if (a === 'inav') return 'iNav';
-        if (a === 'generic') return 'iNav/Generic';
-        return 'Unknown autopilot';
-      };
-      const labelMode = (s) => {
-        const m = s.connection_mode || (s.telemetry_backend === 'mock' ? 'mock' : null);
-        if (m === 'mock') return 'Mock';
-        if (m === 'ardupilot') return 'ArduPilot';
-        if (m === 'inav') return 'iNav';
-        return m || '—';
-      };
-      const labelSource = (s) => {
-        if (s.connection_mode === 'mock' || s.telemetry_backend === 'mock') return 'Mock session';
-        if (s.source_port) return s.source_port + (s.baud ? ' @ ' + s.baud : '');
-        return 'No port';
-      };
       const statusBadge = (s) => {
         if (s.id === currentId) return '<span class="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/30 text-blue-300 border border-blue-500/40">current</span>';
         if (!s.ended_at) return '<span class="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">active</span>';
@@ -795,11 +766,20 @@
       btn.querySelector('span').textContent = open ? '▼' : '▲';
     });
 
-    const APPLY_HINT_TEXT = {
-      live: '(applies immediately)',
-      reconnect: '(takes effect after reconnect support is added)',
-      restart: '(requires app restart)'
-    };
+    const TELEMETRY_KEYS = ['TELEMETRY_BACKEND', 'SERIAL_PORT', 'SERIAL_BAUD'];
+    const AI_PROVIDER_KEYS = ['LOCAL_LLM_PROVIDER', 'LOCAL_LLM_BASE_URL', 'LOCAL_LLM_MODEL', 'LOCAL_LLM_TIMEOUT', 'OLLAMA_NUM_THREAD'];
+
+    function getApplyHint(mode, keys, d) {
+      if (mode === 'restart') return '(requires app restart)';
+      if (mode === 'reconnect') return '(requires reconnect, not yet supported)';
+      if (mode === 'live') {
+        const telReconnect = d.telemetry_reconnect_available && keys.some(k => TELEMETRY_KEYS.includes(k));
+        const aiReconnect = d.ai_reconnect_available && keys.some(k => AI_PROVIDER_KEYS.includes(k));
+        if (telReconnect || aiReconnect) return '(applies on save via reconnect)';
+        return '(applies immediately)';
+      }
+      return '';
+    }
 
     function getWorstApplyMode(keys, applyModes) {
       if (!applyModes) return 'live';
@@ -832,10 +812,10 @@
         });
 
         document.querySelectorAll('.settings-section[data-keys]').forEach(section => {
-          const keys = (section.dataset.keys || '').split(',').filter(Boolean);
+          const keys = (section.dataset.keys || '').split(',').map(k => k.trim()).filter(Boolean);
           const mode = getWorstApplyMode(keys, applyModes);
           const hint = section.querySelector('.apply-hint');
-          if (hint) hint.textContent = APPLY_HINT_TEXT[mode] || '';
+          if (hint) hint.textContent = getApplyHint(mode, keys, d) || '';
         });
 
         const statusEl = document.getElementById('ai-provider-status');
@@ -867,8 +847,6 @@
       }).catch(() => {});
     }
 
-    const TELEMETRY_KEYS = ['TELEMETRY_BACKEND', 'SERIAL_PORT', 'SERIAL_BAUD'];
-    const AI_KEYS = ['LOCAL_LLM_PROVIDER', 'LOCAL_LLM_BASE_URL', 'LOCAL_LLM_MODEL', 'LOCAL_LLM_TIMEOUT', 'OLLAMA_NUM_THREAD'];
     document.getElementById('settings-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const updates = {};
@@ -885,7 +863,7 @@
         }
       });
       const telemetryChanged = TELEMETRY_KEYS.some(k => updates[k] !== initial[k]);
-      const aiChanged = AI_KEYS.some(k => updates[k] !== initial[k]);
+      const aiChanged = AI_PROVIDER_KEYS.some(k => updates[k] !== initial[k]);
       const statusEl = document.getElementById('settings-status');
       if (telemetryChanged && aiChanged) {
         statusEl.textContent = 'Saving… (reconnecting telemetry, reloading AI)';
@@ -948,26 +926,11 @@
       if (decimals != null) return n.toFixed(decimals);
       return String(n);
     }
-    function formatDistance(m) {
-      if (m == null || !isFinite(m) || m < 0) return '—';
-      if (m < 1000) return m.toFixed(0) + ' m';
-      return (m / 1000).toFixed(2) + ' km';
-    }
+    const { fmt, fmtNumPrec, formatDistance, fmtRate, fmtNum, fmtHeading, fmtTs, fmtTsTime } = AiraFormatters;
     function enduranceMin(remainingMah, currentA) {
       if (remainingMah == null || currentA == null || !isFinite(remainingMah) || !isFinite(currentA) || currentA <= 0) return null;
       return (remainingMah / 1000) / currentA * 60;
     }
-
-    const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
-    const fmtRate = (v) => v != null && typeof v === 'number' && isFinite(v) ? (v * 100).toFixed(1) + '%' : null;
-    const fmtNum = (v) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : String(v);
-    const fmtNumPrec = (v, decimals) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(decimals);
-    const fmtHeading = (v) => {
-      if (v == null || (typeof v === 'number' && isNaN(v))) return '<span class="na">—</span>';
-      const n = Number(v);
-      if (n < 0 || n > 360 || !isFinite(n) || Math.abs(n) > 1e6) return '<span class="na">—</span>';
-      return n.toFixed(0);
-    };
 
     function statusClass(s) {
       const m = { connected: 'status-connected', stale: 'status-stale', disconnected: 'status-disconnected',
@@ -1338,8 +1301,7 @@
         const el = document.getElementById('events-list');
         if (list.length === 0) el.innerHTML = '<span class="na">No events</span>';
         else {
-          const fmtTs = (ts) => ts ? new Date(ts).toLocaleTimeString() : '—';
-          el.innerHTML = list.map(e => `<div class="event-item"><span class="text-slate-500 font-mono text-[10px]">${fmtTs(e.timestamp)}</span> <span class="text-slate-400">${fmt(e.event_type)}</span> <span class="text-slate-300">${fmt(e.message)}</span></div>`).join('');
+          el.innerHTML = list.map(e => `<div class="event-item"><span class="text-slate-500 font-mono text-[10px]">${fmtTsTime(e.timestamp)}</span> <span class="text-slate-400">${fmt(e.event_type)}</span> <span class="text-slate-300">${fmt(e.message)}</span></div>`).join('');
         }
       }).catch(() => {});
       fetch('/sessions').then(r => r.json()).then(d => {
@@ -1804,7 +1766,6 @@
         el.innerHTML = '<span class="na">No detections</span>';
         return;
       }
-      const fmtTs = (ts) => ts ? new Date(ts).toLocaleString() : '—';
       el.innerHTML = list.map(d => `
         <div class="detection-card">
           <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
@@ -1834,10 +1795,9 @@
         el.innerHTML = '<span class="na">No events</span>';
         return;
       }
-      const fmtTs = (ts) => ts ? new Date(ts).toLocaleTimeString() : '—';
       el.innerHTML = list.map(e => `
         <div class="event-item">
-          <span class="text-slate-500 font-mono text-[10px]">${fmtTs(e.timestamp)}</span>
+          <span class="text-slate-500 font-mono text-[10px]">${fmtTsTime(e.timestamp)}</span>
           <span class="text-slate-400">${fmt(e.event_type)}</span>
           <span class="text-slate-300">${fmt(e.message)}</span>
         </div>
@@ -1865,41 +1825,7 @@
       }
       svgEl.classList.remove('hidden');
       emptyEl.classList.add('hidden');
-      const points = path.map(p => ({ lat: p.lat, lon: p.lon }));
-      if (current && current.lat != null && current.lon != null) {
-        points.push({ lat: current.lat, lon: current.lon });
-      }
-      if (points.length === 0) return;
-      const lats = points.map(p => p.lat).filter(x => x != null);
-      const lons = points.map(p => p.lon).filter(x => x != null);
-      if (lats.length === 0 || lons.length === 0) return;
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLon = Math.min(...lons);
-      const maxLon = Math.max(...lons);
-      const padLat = (maxLat - minLat) * 0.1 || 0.0001;
-      const padLon = (maxLon - minLon) * 0.1 || 0.0001;
-      const w = 200;
-      const h = 180;
-      const margin = 8;
-      const plotW = w - 2 * margin;
-      const plotH = h - 2 * margin;
-      const toX = (lon) => margin + ((lon - (minLon - padLon)) / ((maxLon + padLon) - (minLon - padLon))) * plotW;
-      const toY = (lat) => h - margin - ((lat - (minLat - padLat)) / ((maxLat + padLat) - (minLat - padLat))) * plotH;
-      const pathD = path.filter(p => p.lat != null && p.lon != null)
-        .map((p, i) => (i === 0 ? 'M' : 'L') + toX(p.lon) + ' ' + toY(p.lat))
-        .join(' ');
-      let svg = `<path d="${pathD}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
-      path.filter(p => p.lat != null && p.lon != null).forEach((p, i) => {
-        if (i === path.length - 1 && current) return;
-        svg += `<circle cx="${toX(p.lon)}" cy="${toY(p.lat)}" r="2" fill="#3b82f6"/>`;
-      });
-      if (current && current.lat != null && current.lon != null) {
-        svg += `<circle cx="${toX(current.lon)}" cy="${toY(current.lat)}" r="4" fill="#22c55e" stroke="#fff" stroke-width="1"/>`;
-      }
-      detections.filter(d => d.lat != null && d.lon != null).forEach(d => {
-        svg += `<circle cx="${toX(d.lon)}" cy="${toY(d.lat)}" r="3" fill="#ef4444" opacity="0.8"/>`;
-      });
+      const svg = AiraPathPlot.renderPathPlot(path, current, detections, null, { width: 200, height: 180, currentStroke: '#fff' });
       svgEl.innerHTML = svg;
     });
 
@@ -1918,35 +1844,7 @@
       }
       container.classList.remove('hidden');
       emptyEl.classList.add('hidden');
-      function sparkPoints(arr, minVal, maxVal) {
-        if (arr.length === 0) return '';
-        const m = minVal ?? Math.min(...arr);
-        const M = maxVal ?? Math.max(...arr);
-        const range = M - m || 1;
-        const w = 140;
-        const h = 32;
-        return arr.map((v, i) => {
-          const x = (i / (arr.length - 1 || 1)) * w;
-          const y = h - ((v - m) / range) * h;
-          return x + ',' + y;
-        }).join(' ');
-      }
-      container.innerHTML = [
-        ['Voltage (V)', voltage, 0, 20],
-        ['Alt (m)', relAlt, 0],
-        ['Groundspeed (m/s)', groundspeed, 0],
-        ['Heartbeat age (s)', heartbeat, 0],
-      ].map(([label, arr, minV, maxV]) => {
-        const pts = sparkPoints(arr, minV, maxV);
-        return pts ? `
-          <div class="flex flex-col gap-0.5">
-            <span class="text-xs text-slate-500">${label}</span>
-            <svg class="sparkline" viewBox="0 0 140 32" preserveAspectRatio="none">
-              <polyline fill="none" stroke="#3b82f6" stroke-width="1" points="${pts}"/>
-            </svg>
-          </div>
-        ` : `<div><span class="text-xs text-slate-500">${label}</span><div class="text-slate-600 text-xs">—</div></div>`;
-      }).join('');
+      container.innerHTML = AiraSparklines.renderTrends(voltage, relAlt, groundspeed, heartbeat);
     });
   </script>
 </body>

@@ -1,5 +1,6 @@
 """Camera recording service using rpicam-vid (modern Pi OS) or libcamera-vid (legacy). Supports manual and auto (armed-based) recording."""
 
+import json
 import logging
 import shutil
 import subprocess
@@ -8,11 +9,15 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from airautomatica.config import (
     get_camera_recording_disarm_debounce_sec,
     get_recordings_dir,
+)
+from airautomatica.services.recordings_service import (
+    _FILENAME_PATTERN,
+    _meta_path_for_recording,
 )
 
 if TYPE_CHECKING:
@@ -97,6 +102,22 @@ class CameraRecordingService:
     def recordings_dir(self) -> str:
         """Path to recordings directory."""
         return str(self._recordings_dir)
+
+    def mark_as_auto(self, basename: str, session_id: int) -> None:
+        """Write sidecar .meta marking this recording as auto-triggered for the given session."""
+        if not basename or not _FILENAME_PATTERN.match(basename):
+            logger.debug("mark_as_auto: invalid basename %r", basename)
+            return
+        path = self._recordings_dir / basename
+        meta_path = _meta_path_for_recording(path)
+        try:
+            meta_path.write_text(
+                json.dumps({"trigger": "auto", "session_id": session_id}),
+                encoding="utf-8",
+            )
+            logger.debug("mark_as_auto: wrote %s", meta_path)
+        except OSError as e:
+            logger.warning("mark_as_auto failed for %s: %s", basename, e)
 
     def get_recording_state(self) -> RecordingState:
         """Return current recording state."""
@@ -521,6 +542,7 @@ class RecordingAutoController:
         service: CameraRecordingService,
         get_mode_fn: Callable[[], str],
         debounce_sec: Optional[float] = None,
+        session_ref: Optional[List[Optional[int]]] = None,
     ) -> None:
         self._service = service
         self._get_mode = get_mode_fn
@@ -529,6 +551,7 @@ class RecordingAutoController:
             if debounce_sec is not None
             else get_camera_recording_disarm_debounce_sec()
         )
+        self._session_ref = session_ref
         self._last_armed: Optional[bool] = None
         self._disarm_since: Optional[float] = None
 
@@ -570,8 +593,18 @@ class RecordingAutoController:
                     self._debounce_sec,
                     rec_state.output_file or "recording",
                 )
-                _, _ = self._service.stop_recording()
+                new_state, err = self._service.stop_recording()
                 self._disarm_since = None
+                if (
+                    err is None
+                    and new_state.last_recorded_file
+                    and self._session_ref is not None
+                    and self._session_ref[0] is not None
+                ):
+                    basename = new_state.last_recorded_file
+                    video_path = Path(self._service.recordings_dir) / basename
+                    if video_path.is_file():
+                        self._service.mark_as_auto(basename, self._session_ref[0])
             else:
                 return
         else:

@@ -1992,6 +1992,71 @@ def test_get_recordings_list_with_files(
     assert "2025-03-11_120100_cam.mp4" in filenames
 
 
+def test_get_recordings_returns_trigger_session_id_when_meta_exists(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """GET /recordings returns trigger and session_id when recording has .meta file."""
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / "2025-03-11_120000_cam.mp4").write_bytes(b"video")
+    (rec_dir / "2025-03-11_120000_cam.mp4.meta").write_text(
+        '{"trigger":"auto","session_id":42}', encoding="utf-8"
+    )
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/recordings")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["recordings"]) == 1
+    rec = data["recordings"][0]
+    assert rec["trigger"] == "auto"
+    assert rec["session_id"] == 42
+
+
+def test_get_session_recordings_returns_trigger_session_id_when_meta_exists(
+    store: StateStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /sessions/{id}/recordings returns trigger and session_id when recording has .meta."""
+    import time
+    from datetime import datetime, timezone
+
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "test.db"))
+    init_db(str(tmp_path / "test.db"))
+    persistence = PersistenceService()
+    session_id = persistence.start_session("mock", "mock")
+    assert session_id is not None
+    time.sleep(1.1)  # Ensure recording timestamp is after session started_at
+
+    now = datetime.now(timezone.utc)
+    filename = f"{now.strftime('%Y-%m-%d_%H%M%S')}_cam.mp4"
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / filename).write_bytes(b"video")
+    (rec_dir / f"{filename}.meta").write_text(
+        '{"trigger":"auto","session_id":' + str(session_id) + "}", encoding="utf-8"
+    )
+
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(
+        create_app(
+            store,
+            camera_recording_service=camera_svc,
+            persistence=persistence,
+        )
+    )
+    r = client.get(f"/sessions/{session_id}/recordings")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["session_resolved"] is True
+    assert len(data["recordings"]) == 1
+    rec = data["recordings"][0]
+    assert rec["trigger"] == "auto"
+    assert rec["session_id"] == session_id
+
+
 def test_delete_recording(
     store: StateStore,
     tmp_path: Path,
