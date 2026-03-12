@@ -55,6 +55,7 @@ from airautomatica.services.camera_recording import (
     CameraRecordingService,
     RecordingAutoController,
 )
+from airautomatica.services.connection_state_store import ConnectionStateStore
 from airautomatica.services.mission_logic import MissionLogic
 from airautomatica.services.persistence import (
     PathRecorder,
@@ -268,19 +269,12 @@ def main() -> None:
     init_db(get_sqlite_db_path())
 
     persistence = PersistenceService()
-    session_id = persistence.start_session(
-        telemetry_backend=get_telemetry_backend(),
-        ai_backend=get_effective_ai_backend(),
-    )
-    session_ref: list[int | None] = [session_id]
+    connection_store = ConnectionStateStore()
+    session_ref: list[int | None] = [None]
     source = _create_telemetry_source(store, persistence, session_ref)
-    if session_id is not None:
-        logger.info("Session: id=%s", session_id)
-    else:
-        logger.warning("Session start failed; persistence disabled")
-    sampler = TelemetrySampler(persistence, session_id, interval_sec=1.0)
-    path_recorder = PathRecorder(persistence, session_id, min_distance_m=5.0)
-    lifecycle_logger = TelemetryLifecycleLogger(persistence, session_id)
+    sampler = TelemetrySampler(persistence, session_ref, interval_sec=1.0)
+    path_recorder = PathRecorder(persistence, session_ref, min_distance_m=5.0)
+    lifecycle_logger = TelemetryLifecycleLogger(persistence, session_ref)
 
     camera_recording_service = CameraRecordingService()
     logger.info(
@@ -305,8 +299,9 @@ def main() -> None:
 
     app = create_app(
         store,
+        connection_store=connection_store,
+        session_ref=session_ref,
         persistence=persistence,
-        session_id=session_id,
         task_service=task_service,
         camera_recording_service=camera_recording_service,
     )
@@ -317,7 +312,7 @@ def main() -> None:
     publisher = DashboardPublisher(
         store,
         persistence,
-        session_id,
+        session_ref,
         get_effective_ai_backend(),
         get_telemetry_backend(),
         sio,
@@ -332,7 +327,7 @@ def main() -> None:
         store,
         ai_service=ai_service,
         persistence=persistence,
-        session_id=session_id,
+        session_ref=session_ref,
         min_confidence=get_ai_min_confidence(),
         duplicate_window_sec=get_ai_duplicate_window_sec(),
     )

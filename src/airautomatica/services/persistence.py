@@ -526,15 +526,16 @@ class TelemetryLifecycleLogger:
     def __init__(
         self,
         persistence: PersistenceService,
-        session_id: int | None,
+        session_ref: list[int | None],
     ) -> None:
         self._persistence = persistence
-        self._session_id = session_id
+        self._session_ref = session_ref
         self._last_status: str | None = None
 
     def maybe_log_transition(self, state: "AircraftState") -> None:
         """If telemetry_status changed, log system_event. No-op if persistence unavailable."""
-        if self._session_id is None:
+        session_id = self._session_ref[0] if self._session_ref else None
+        if session_id is None:
             return
         if get_engine() is None:
             return
@@ -558,7 +559,7 @@ class TelemetryLifecycleLogger:
             else "warning" if status in ("stale", "backoff") else "info"
         )
         self._persistence.insert_system_event(
-            session_id=self._session_id,
+            session_id=session_id,
             level=level,
             event_type=event_type,
             message=message,
@@ -587,18 +588,19 @@ class PathRecorder:
     def __init__(
         self,
         persistence: PersistenceService,
-        session_id: int | None,
+        session_ref: list[int | None],
         min_distance_m: float = 5.0,
     ) -> None:
         self._persistence = persistence
-        self._session_id = session_id
+        self._session_ref = session_ref
         self._min_distance_m = min_distance_m
         self._last_lat: float | None = None
         self._last_lon: float | None = None
 
     def maybe_record(self, state: "AircraftState") -> None:
         """If moved enough from last point (or first valid point), insert path point."""
-        if self._session_id is None:
+        session_id = self._session_ref[0] if self._session_ref else None
+        if session_id is None:
             return
         if get_engine() is None:
             return
@@ -608,7 +610,7 @@ class PathRecorder:
             return
         if self._last_lat is None or self._last_lon is None:
             self._persistence.insert_path_point(
-                self._session_id,
+                session_id,
                 state.timestamp,
                 lat,
                 lon,
@@ -620,7 +622,7 @@ class PathRecorder:
         dist = _haversine_m(self._last_lat, self._last_lon, lat, lon)
         if dist >= self._min_distance_m:
             self._persistence.insert_path_point(
-                self._session_id,
+                session_id,
                 state.timestamp,
                 lat,
                 lon,
@@ -636,21 +638,22 @@ class TelemetrySampler:
     def __init__(
         self,
         persistence: PersistenceService,
-        session_id: int | None,
+        session_ref: list[int | None],
         interval_sec: float = 1.0,
     ) -> None:
         self._persistence = persistence
-        self._session_id = session_id
+        self._session_ref = session_ref
         self._interval_sec = interval_sec
         self._last_sample_time: float = 0.0
 
     def maybe_sample(self, state: "AircraftState") -> None:
         """If session_id and persistence available, and interval elapsed, insert sample."""
-        if self._session_id is None:
+        session_id = self._session_ref[0] if self._session_ref else None
+        if session_id is None:
             return
         if get_engine() is None:
             return
         now = time.monotonic()
         if now - self._last_sample_time >= self._interval_sec:
             self._last_sample_time = now
-            self._persistence.insert_telemetry_sample(self._session_id, state)
+            self._persistence.insert_telemetry_sample(session_id, state)

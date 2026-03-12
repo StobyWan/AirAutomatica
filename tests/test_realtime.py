@@ -213,7 +213,7 @@ async def test_dashboard_publisher_emits_camera_fields_when_service_provided(
     publisher = DashboardPublisher(
         store,
         persistence=None,
-        session_id=None,
+        session_ref=[None],
         ai_mode="mock",
         telemetry_backend="mock",
         sio=sio,

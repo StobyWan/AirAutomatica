@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
@@ -20,15 +20,28 @@ from airautomatica.ai.ollama_tasks import (
 from airautomatica.config import (
     get_camera_recording_mode,
     get_effective_ai_backend,
+    get_serial_baud,
+    get_serial_port,
     get_sqlite_db_path,
     get_telemetry_backend,
 )
 from airautomatica.db.base import get_engine
 from airautomatica.logging_config import setup_logging
+from airautomatica.models.connection_state import (
+    ConnectionMode,
+    ConnectionState,
+    SessionState,
+)
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.camera_ready_state import get as get_camera_ready
 from airautomatica.services.camera_ready_state import set_ready as set_camera_ready
 from airautomatica.services.camera_recording import CameraRecordingService
+from airautomatica.services.connection_state_store import (
+    ConnectionStateStore,
+)
+from airautomatica.services.connection_state_store import (
+    DetectionResult as StoreDetectionResult,
+)
 from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.services.persistence import PersistenceService
 from airautomatica.services.recordings_service import RecordingsService
@@ -36,6 +49,7 @@ from airautomatica.services.state_store import StateStore
 from airautomatica.settings import get_settings, save_settings
 from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
+from airautomatica.telemetry.detector import scan_and_detect
 from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
 
 logger = logging.getLogger(__name__)
@@ -50,19 +64,221 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app(
     store: StateStore,
+    connection_store: Optional[ConnectionStateStore] = None,
+    session_ref: Optional[list[int | None]] = None,
     persistence: Optional[PersistenceService] = None,
-    session_id: Optional[int] = None,
     task_service: Optional[OllamaTaskService] = None,
     camera_recording_service: Optional[CameraRecordingService] = None,
 ) -> FastAPI:
     """Create FastAPI app with state store dependency."""
     app = FastAPI(title="AIRAUTOMATICA", version="0.1.0", lifespan=_lifespan)
+    _session_ref = session_ref or [None]
+    _connection_store = connection_store
+
+    @app.get("/")
+    def root() -> RedirectResponse:
+        """Redirect root to dashboard."""
+        return RedirectResponse(url="/dashboard", status_code=302)
+
+    @app.get("/connection/state")
+    def get_connection_state() -> dict:
+        """Return connection/session state for frontend. Primary source of truth for v1."""
+        session_id = _session_ref[0]
+        if _connection_store is None:
+            return {
+                "connection_state": "setup",
+                "session_state": "none",
+                "mode": None,
+                "session_id": session_id,
+                "detection_result": None,
+            }
+        conn = _connection_store.get_connection_state()
+        sess = _connection_store.get_session_state()
+        mode = _connection_store.get_mode()
+        det = _connection_store.get_detection_result()
+        return {
+            "connection_state": conn.value if hasattr(conn, "value") else conn,
+            "session_state": sess.value if hasattr(sess, "value") else sess,
+            "mode": mode.value if mode is not None and hasattr(mode, "value") else mode,
+            "session_id": session_id,
+            "detection_result": (
+                {
+                    "detected": det.detected,
+                    "port": det.port,
+                    "baud": det.baud,
+                    "autopilot": det.autopilot,
+                    "message": det.message,
+                    "heartbeat_age_ms": det.heartbeat_age_ms,
+                }
+                if det is not None
+                else None
+            ),
+        }
+
+    @app.post("/connection/detect")
+    def post_connection_detect() -> dict:
+        """Scan serial ports for MAVLink HEARTBEAT. Updates connection_store state."""
+        # State transition: setup → detecting
+        if _connection_store is not None:
+            _connection_store.set_connection_state(ConnectionState.DETECTING)
+        try:
+            r = scan_and_detect()
+            if _connection_store is not None:
+                store_result = StoreDetectionResult(
+                    detected=r.detected,
+                    port=r.port,
+                    baud=r.baud,
+                    autopilot=r.autopilot,
+                    message=r.message,
+                    heartbeat_age_ms=r.heartbeat_age_ms,
+                )
+                _connection_store.set_detection_result(store_result)
+                # State transition: detecting → connected_ardupilot | connected_inav | not_detected
+                if r.detected:
+                    if r.autopilot == "ardupilot":
+                        _connection_store.set_connection_state(
+                            ConnectionState.CONNECTED_ARDUPILOT
+                        )
+                    else:
+                        _connection_store.set_connection_state(
+                            ConnectionState.CONNECTED_INAV
+                        )
+                else:
+                    _connection_store.set_connection_state(ConnectionState.NOT_DETECTED)
+            mode = r.autopilot if r.autopilot else "inav"
+            if r.autopilot == "generic":
+                mode = "inav"
+            conn_state = (
+                "not_detected"
+                if not r.detected
+                else (
+                    "connected_ardupilot"
+                    if r.autopilot == "ardupilot"
+                    else "connected_inav"
+                )
+            )
+            return {
+                "connection_state": conn_state,
+                "detected": r.detected,
+                "mode": mode,
+                "port": r.port,
+                "baud": r.baud,
+                "autopilot": r.autopilot,
+                "message": r.message,
+                "heartbeat_age_ms": r.heartbeat_age_ms,
+            }
+        except Exception as e:
+            logger.exception("Detection failed: %s", e)
+            if _connection_store is not None:
+                _connection_store.set_connection_state(ConnectionState.NOT_DETECTED)
+                _connection_store.set_detection_result(
+                    StoreDetectionResult(
+                        detected=False,
+                        port=None,
+                        baud=None,
+                        autopilot=None,
+                        message=str(e),
+                        heartbeat_age_ms=None,
+                    )
+                )
+            return {
+                "connection_state": "not_detected",
+                "detected": False,
+                "mode": "inav",
+                "port": None,
+                "baud": None,
+                "autopilot": None,
+                "message": str(e),
+                "heartbeat_age_ms": None,
+            }
+
+    @app.post("/connection/mode")
+    def post_connection_mode(body: dict = Body(...)) -> dict:
+        """Set connection mode. Persists to settings. Serial modes require restart."""
+        mode = (body.get("mode") or "").lower()
+        port = body.get("port") or get_serial_port()
+        baud = body.get("baud") or get_serial_baud()
+        if mode not in ("mock", "ardupilot", "inav"):
+            return {"ok": False, "error": "Invalid mode. Use mock, ardupilot, or inav."}
+        updates = {
+            "TELEMETRY_BACKEND": "mock" if mode == "mock" else "serial",
+            "SERIAL_PORT": str(port),
+            "SERIAL_BAUD": str(int(baud)),
+        }
+        save_settings(updates)
+        restart_required = mode in ("ardupilot", "inav")
+        # State transition: setup → mock_idle | connected_ardupilot | connected_inav
+        if _connection_store is not None:
+            if mode == "mock":
+                _connection_store.set_connection_state(ConnectionState.MOCK_IDLE)
+                _connection_store.set_mode(ConnectionMode.MOCK)
+            elif mode == "ardupilot":
+                _connection_store.set_connection_state(
+                    ConnectionState.CONNECTED_ARDUPILOT
+                )
+                _connection_store.set_mode(ConnectionMode.ARDUPILOT)
+            else:
+                _connection_store.set_connection_state(ConnectionState.CONNECTED_INAV)
+                _connection_store.set_mode(ConnectionMode.INAV)
+        return {"ok": True, "restart_required": restart_required}
+
+    @app.post("/connection/disconnect")
+    def post_connection_disconnect() -> dict:
+        """Return to setup. Clear mode. Preserve detection_result for diagnostics."""
+        # State transition: * → setup
+        if _connection_store is not None:
+            _connection_store.set_connection_state(ConnectionState.SETUP)
+            _connection_store.set_mode(None)
+        return {"ok": True}
+
+    @app.post("/session/start")
+    def post_session_start(body: dict = Body(...)) -> dict:
+        """Start a session. Requires connection_state in mock_idle or connected_*."""
+        if _session_ref[0] is not None:
+            return {
+                "ok": True,
+                "already_active": True,
+                "session_id": _session_ref[0],
+            }
+        mode = _connection_store.get_mode() if _connection_store else None
+        mode_str = mode.value if mode and hasattr(mode, "value") else "mock"
+        telemetry_backend = "mock" if mode_str == "mock" else "serial"
+        if persistence is None:
+            return {"ok": False, "error": "Persistence not available"}
+        sid = persistence.start_session(
+            telemetry_backend=telemetry_backend,
+            ai_backend=get_effective_ai_backend(),
+        )
+        if sid is None:
+            return {"ok": False, "error": "Failed to start session"}
+        _session_ref[0] = sid
+        # State transition: session_state none → active
+        if _connection_store is not None:
+            _connection_store.set_session_state(SessionState.ACTIVE)
+        return {
+            "ok": True,
+            "session_id": sid,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    @app.post("/session/stop")
+    def post_session_stop() -> dict:
+        """End current session. Idempotent when no session active."""
+        sid = _session_ref[0]
+        if sid is not None and persistence is not None:
+            persistence.end_session(sid)
+        _session_ref[0] = None
+        # State transition: session_state active → none
+        if _connection_store is not None:
+            _connection_store.set_session_state(SessionState.NONE)
+        return {"ok": True}
 
     @app.get("/health")
     def health() -> dict:
         """Health check. Includes telemetry_status, connection details, and DB health when available."""
         state = store.get()
         persistence_enabled = get_engine() is not None
+        session_id = _session_ref[0]
         health_data: dict = {
             "status": "ok",
             "ai_mode": get_effective_ai_backend(),
@@ -146,8 +362,9 @@ def create_app(
             return {"error": "AI task service not available"}
         state = store.get()
         samples: list = []
-        if persistence is not None and session_id is not None:
-            samples = persistence.get_recent_telemetry_samples(session_id, limit=30)
+        sid = _session_ref[0]
+        if persistence is not None and sid is not None:
+            samples = persistence.get_recent_telemetry_samples(sid, limit=30)
         result = await task_service.infer_task(
             OllamaTaskType.TELEMETRY_SUMMARY,
             {"state": state, "telemetry_samples": samples},
@@ -192,10 +409,11 @@ def create_app(
     @app.get("/recent-detections")
     def get_recent_detections() -> dict:
         """Return recent persisted detections for current session. For bench testing."""
-        if persistence is None or session_id is None:
+        sid = _session_ref[0]
+        if persistence is None or sid is None:
             return {"detections": [], "session_id": None}
-        detections = persistence.get_recent_detections(session_id, limit=20)
-        return {"detections": detections, "session_id": session_id}
+        detections = persistence.get_recent_detections(sid, limit=20)
+        return {"detections": detections, "session_id": sid}
 
     @app.get("/sessions/{sid:int}/path")
     def get_session_path(sid: int) -> dict:
@@ -232,12 +450,13 @@ def create_app(
     @app.get("/sessions")
     def get_sessions() -> dict:
         """Return recent flight sessions with detection counts. For dashboard initial load."""
+        sid = _session_ref[0]
         if persistence is None:
-            return {"sessions": [], "current_session_id": session_id}
+            return {"sessions": [], "current_session_id": sid}
         sessions = persistence.get_recent_sessions(
             limit=10, include_detection_count=True
         )
-        return {"sessions": sessions, "current_session_id": session_id}
+        return {"sessions": sessions, "current_session_id": sid}
 
     @app.get("/settings")
     def get_settings_endpoint() -> dict:

@@ -116,7 +116,7 @@ class MissionLogic:
         interval_sec: float = 2.0,
         ai_interval_sec: float = 10.0,
         persistence: Optional["PersistenceService"] = None,
-        session_id: Optional[int] = None,
+        session_ref: Optional[list[int | None]] = None,
         min_confidence: float = 0.5,
         duplicate_window_sec: float = 30.0,
     ) -> None:
@@ -125,7 +125,7 @@ class MissionLogic:
         self._interval = interval_sec
         self._ai_interval = ai_interval_sec
         self._persistence = persistence
-        self._session_id = session_id
+        self._session_ref = session_ref or []
         self._min_confidence = min_confidence
         self._duplicate_window_sec = duplicate_window_sec
         self._last_ai_time: float = 0.0
@@ -207,9 +207,10 @@ class MissionLogic:
             result.label,
             result.confidence,
         )
-        if self._persistence is not None and self._session_id is not None:
+        session_id = self._session_ref[0] if self._session_ref else None
+        if self._persistence is not None and session_id is not None:
             self._persistence.insert_detection(
-                self._session_id,
+                session_id,
                 result,
                 state.lat,
                 state.lon,
