@@ -54,7 +54,9 @@ class MockTelemetry(TelemetrySource):
         current_a = 2.5 + 0.5 * math.sin(t * 0.3)
         groundspeed_m_s = 15.0 + 5.0 * math.sin(t * 0.2)
         airspeed_m_s = groundspeed_m_s + 2.0
+        climb_rate_m_s = 0.5 * math.sin(t * 0.4)
         mode = "GUIDED" if (self._heartbeat % 20) > 10 else "AUTO"
+        home_lat, home_lon = 37.6213, -122.3790
         return AircraftState(
             connected=True,
             heartbeat=self._heartbeat,
@@ -77,6 +79,11 @@ class MockTelemetry(TelemetrySource):
             telemetry_status="connected",
             reconnect_count=0,
             last_disconnect_reason=None,
+            climb_rate_m_s=round(climb_rate_m_s, 2),
+            gps_fix_type=3,
+            satellites_visible=12,
+            home_lat=home_lat,
+            home_lon=home_lon,
         )
 
     async def stream(self) -> AsyncIterator[AircraftState]:
@@ -108,6 +115,7 @@ class MockTelemetry(TelemetrySource):
                     telemetry_status="disconnected",
                     reconnect_count=1,
                     last_disconnect_reason="simulated_disconnect",
+                    climb_rate_m_s=0.0,
                 )
                 yield disconnected
                 await asyncio.sleep(1.0)
@@ -133,6 +141,7 @@ class MockTelemetry(TelemetrySource):
                     telemetry_status="backoff",
                     reconnect_count=1,
                     last_disconnect_reason="simulated_disconnect",
+                    climb_rate_m_s=0.0,
                 )
                 yield backoff
                 await asyncio.sleep(0.5)
