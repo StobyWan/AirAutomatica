@@ -5,6 +5,8 @@ Field units and sentinels per mavlink.io common dialect:
 - ATTITUDE (id 30): roll/pitch/yaw rad
 - SYS_STATUS (id 1): voltage_battery mV (65535=invalid), current_battery cA (-1=invalid)
 - VFR_HUD (id 74): heading deg, groundspeed/airspeed m/s
+- GPS_RAW_INT (id 24): fix_type, satellites_visible
+- HOME_POSITION (id 242): latitude, longitude degE7
 """
 
 import time
@@ -76,6 +78,11 @@ class MavlinkNormalizer:
             "current_a": _nan(),
             "groundspeed_m_s": _nan(),
             "airspeed_m_s": _nan(),
+            "climb_rate_m_s": _nan(),
+            "gps_fix_type": None,
+            "satellites_visible": None,
+            "home_lat": None,
+            "home_lon": None,
         }
 
     def apply(self, msg: Any) -> None:
@@ -91,6 +98,10 @@ class MavlinkNormalizer:
             self._apply_sys_status(msg)
         elif msg_type == "VFR_HUD":
             self._apply_vfr_hud(msg)
+        elif msg_type == "GPS_RAW_INT":
+            self._apply_gps_raw_int(msg)
+        elif msg_type == "HOME_POSITION":
+            self._apply_home_position(msg)
 
     def _apply_heartbeat(self, msg: Any) -> None:
         """HEARTBEAT: custom_mode = flight mode number, map to name; base_mode = armed bit."""
@@ -119,6 +130,10 @@ class MavlinkNormalizer:
         hdg = getattr(msg, "hdg", UINT16_MAX)
         if hdg != UINT16_MAX:
             self._accum["heading_deg"] = hdg / 100.0
+        # vz: cm/s, positive down; climb = -vz
+        vz = getattr(msg, "vz", None)
+        if vz is not None:
+            self._accum["climb_rate_m_s"] = -vz / 100.0
 
     def _apply_attitude(self, msg: Any) -> None:
         """ATTITUDE (id 30): roll, pitch, yaw in radians. See mavlink.io/common#ATTITUDE."""
@@ -141,6 +156,23 @@ class MavlinkNormalizer:
         self._accum["heading_deg"] = getattr(msg, "heading", _nan())
         self._accum["groundspeed_m_s"] = getattr(msg, "groundspeed", _nan())
         self._accum["airspeed_m_s"] = getattr(msg, "airspeed", _nan())
+
+    def _apply_gps_raw_int(self, msg: Any) -> None:
+        """GPS_RAW_INT (id 24): fix_type, satellites_visible. See mavlink.io/common#GPS_RAW_INT."""
+        fix_type = getattr(msg, "fix_type", None)
+        if fix_type is not None:
+            self._accum["gps_fix_type"] = int(fix_type)
+        sat = getattr(msg, "satellites_visible", None)
+        if sat is not None and sat != 255:  # 255 = unknown
+            self._accum["satellites_visible"] = int(sat)
+
+    def _apply_home_position(self, msg: Any) -> None:
+        """HOME_POSITION (id 242): latitude, longitude degE7. See mavlink.io/common#HOME_POSITION."""
+        lat = getattr(msg, "latitude", None)
+        lon = getattr(msg, "longitude", None)
+        if lat is not None and lon is not None:
+            self._accum["home_lat"] = lat / 1e7
+            self._accum["home_lon"] = lon / 1e7
 
     def _is_stale(self) -> bool:
         """True if no HEARTBEAT received within timeout."""
@@ -185,4 +217,9 @@ class MavlinkNormalizer:
             groundspeed_m_s=self._accum["groundspeed_m_s"],
             airspeed_m_s=self._accum["airspeed_m_s"],
             timestamp=datetime.now(timezone.utc),
+            climb_rate_m_s=self._accum["climb_rate_m_s"],
+            gps_fix_type=self._accum["gps_fix_type"],
+            satellites_visible=self._accum["satellites_visible"],
+            home_lat=self._accum["home_lat"],
+            home_lon=self._accum["home_lon"],
         )

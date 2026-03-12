@@ -44,10 +44,15 @@ class AircraftState:
     reconnect_count: int = 0
     last_disconnect_reason: Optional[str] = None
     armed: bool = False
+    climb_rate_m_s: float = 0.0
+    gps_fix_type: Optional[int] = None
+    satellites_visible: Optional[int] = None
+    home_lat: Optional[float] = None
+    home_lon: Optional[float] = None
 
     def to_dict(self) -> dict:
         """Serialize for API response. NaN values become None for JSON."""
-        return {
+        out = {
             "connected": self.connected,
             "heartbeat": self.heartbeat,
             "telemetry_status": self.telemetry_status,
@@ -71,4 +76,14 @@ class AircraftState:
             "airspeed_m_s": nan_to_none(self.airspeed_m_s),
             "timestamp": self.timestamp.isoformat(),
             "armed": self.armed,
+            "climb_rate_m_s": nan_to_none(self.climb_rate_m_s),
         }
+        if self.gps_fix_type is not None:
+            out["gps_fix_type"] = self.gps_fix_type
+        if self.satellites_visible is not None:
+            out["satellites_visible"] = self.satellites_visible
+        if self.home_lat is not None:
+            out["home_lat"] = self.home_lat
+        if self.home_lon is not None:
+            out["home_lon"] = self.home_lon
+        return out

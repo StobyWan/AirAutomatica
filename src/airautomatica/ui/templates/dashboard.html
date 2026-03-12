@@ -224,6 +224,73 @@
     <div class="grid mt-2" id="session-fields"></div>
   </div>
 
+  <div id="flight-status-strip" class="flex flex-wrap items-center gap-2 py-2 px-3 rounded-lg border border-slate-700 bg-slate-800/50 mb-4">
+    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">Flight</span>
+    <span id="flight-status-armed" class="flight-status-chip px-2 py-0.5 rounded text-xs font-medium">—</span>
+    <span id="flight-status-mode" class="flight-status-chip px-2 py-0.5 rounded text-xs font-medium">—</span>
+    <span id="flight-status-gps" class="flight-status-chip px-2 py-0.5 rounded text-xs font-medium">—</span>
+    <span id="flight-status-link" class="flight-status-chip px-2 py-0.5 rounded text-xs font-medium">—</span>
+  </div>
+
+  <div class="card">
+    <h2>Aviation</h2>
+    <div class="aviation-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="aviation-horizon rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Attitude</h3>
+        <div id="artificial-horizon" class="relative w-32 h-32 mx-auto rounded-full overflow-hidden border border-slate-600 bg-slate-900/80">
+          <div id="horizon-unavailable" class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs">Unavailable</div>
+          <div id="horizon-sky" class="absolute left-0 right-0 top-0 h-1/2 bg-gradient-to-b from-sky-600/90 to-sky-700/80 transition-all duration-100"></div>
+          <div id="horizon-earth" class="absolute left-0 right-0 bottom-0 h-1/2 bg-gradient-to-t from-amber-800/90 to-amber-900/80 transition-all duration-100"></div>
+          <div id="horizon-line" class="absolute left-0 right-0 h-0.5 bg-white/90 transition-all duration-100" style="top: 50%; transform: translateY(-50%);"></div>
+          <div id="horizon-plane" class="absolute left-1/2 top-1/2 w-16 h-4 -ml-8 -mt-2 border-2 border-cyan-400 rounded-sm transition-transform duration-100" style="transform-origin: center center;"></div>
+        </div>
+        <div id="horizon-values" class="mt-1.5 text-center text-xs text-slate-500 font-mono">—</div>
+      </div>
+      <div class="aviation-home rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Home</h3>
+        <div id="home-direction" class="flex flex-col items-center gap-2">
+          <div id="home-arrow-wrap" class="relative w-20 h-20 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center">
+            <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-slate-500">N</span>
+            <div id="home-arrow" class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150" style="transform: rotate(0deg)">
+              <svg class="w-6 h-6" viewBox="0 0 24 24"><polygon points="12,4 20,20 4,20" fill="#22c55e" stroke="#166534" stroke-width="1"/></svg>
+            </div>
+          </div>
+          <div id="home-stats" class="text-center text-sm">
+            <div id="home-distance" class="font-mono text-slate-300">—</div>
+            <div id="home-bearing" class="text-xs text-slate-500">—</div>
+          </div>
+          <div id="home-unavailable" class="hidden text-center text-slate-500 text-xs py-4">Position or home unavailable</div>
+        </div>
+      </div>
+      <div class="aviation-altitude rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Altitude</h3>
+        <div id="altitude-fields" class="space-y-1.5 text-sm">
+          <div class="flex justify-between"><span class="text-slate-500">Above home</span><span id="altitude-rel" class="font-mono text-slate-300">—</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Climb</span><span id="altitude-climb" class="font-mono text-slate-300">—</span></div>
+        </div>
+        <div id="altitude-unavailable" class="hidden text-center text-slate-500 text-xs py-4">Unavailable</div>
+      </div>
+      <div class="aviation-speed rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Speed</h3>
+        <div id="speed-wrap" class="text-center">
+          <div id="speed-value" class="font-mono text-lg text-slate-300">—</div>
+          <div id="speed-label" class="text-xs text-slate-500">—</div>
+        </div>
+        <div id="speed-unavailable" class="hidden text-center text-slate-500 text-xs py-4">Unavailable</div>
+      </div>
+      <div class="aviation-power rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Power</h3>
+        <div id="power-fields" class="space-y-1.5 text-sm">
+          <div class="flex justify-between"><span class="text-slate-500">Voltage</span><span id="power-voltage" class="font-mono text-slate-300">—</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Current</span><span id="power-current" class="font-mono text-slate-300">—</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Remaining</span><span id="power-remaining" class="font-mono text-slate-500 text-xs">—</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Endurance</span><span id="power-endurance" class="font-mono text-slate-500 text-xs">—</span></div>
+        </div>
+        <div id="power-unavailable" class="hidden text-center text-slate-500 text-xs py-4">No power data</div>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <h2>Aircraft State</h2>
     <div class="flex flex-col items-start gap-4">
@@ -722,6 +789,49 @@
   <script>
     const socket = io();
 
+    // --- Telemetry utilities ---
+    const R_EARTH_M = 6_371_000;
+    function haversineM(lat1, lon1, lat2, lon2) {
+      if (lat1 == null || lon1 == null || lat2 == null || lon2 == null ||
+          isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return null;
+      const phi1 = (lat1 * Math.PI) / 180, phi2 = (lat2 * Math.PI) / 180;
+      const dphi = ((lat2 - lat1) * Math.PI) / 180, dlam = ((lon2 - lon1) * Math.PI) / 180;
+      const a = Math.sin(dphi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dlam / 2) ** 2;
+      return R_EARTH_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+    function bearingDeg(lat1, lon1, lat2, lon2) {
+      if (lat1 == null || lon1 == null || lat2 == null || lon2 == null ||
+          isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return null;
+      const phi1 = (lat1 * Math.PI) / 180, phi2 = (lat2 * Math.PI) / 180;
+      const dlam = ((lon2 - lon1) * Math.PI) / 180;
+      const y = Math.sin(dlam) * Math.cos(phi2);
+      const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dlam);
+      let b = (Math.atan2(y, x) * 180) / Math.PI;
+      return (b + 360) % 360;
+    }
+    function relativeBearing(headingDeg, bearingToTargetDeg) {
+      if (headingDeg == null || bearingToTargetDeg == null || isNaN(headingDeg) || isNaN(bearingToTargetDeg)) return null;
+      let rel = headingDeg - bearingToTargetDeg;
+      while (rel > 180) rel -= 360;
+      while (rel < -180) rel += 360;
+      return rel;
+    }
+    function safeNum(v, decimals) {
+      if (v == null || (typeof v === 'number' && isNaN(v)) || !isFinite(v)) return null;
+      const n = Number(v);
+      if (decimals != null) return n.toFixed(decimals);
+      return String(n);
+    }
+    function formatDistance(m) {
+      if (m == null || !isFinite(m) || m < 0) return '—';
+      if (m < 1000) return m.toFixed(0) + ' m';
+      return (m / 1000).toFixed(2) + ' km';
+    }
+    function enduranceMin(remainingMah, currentA) {
+      if (remainingMah == null || currentA == null || !isFinite(remainingMah) || !isFinite(currentA) || currentA <= 0) return null;
+      return (remainingMah / 1000) / currentA * 60;
+    }
+
     const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
     const fmtRate = (v) => v != null && typeof v === 'number' && isFinite(v) ? (v * 100).toFixed(1) + '%' : null;
     const fmtNum = (v) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : String(v);
@@ -740,6 +850,212 @@
     }
 
     let currentTelemetryBackend = 'mock';
+    let cachedHome = null;
+    let lastSessionId = null;
+    let lastHealth = null;
+
+    // --- Aviation: Home position ---
+    // Explicit home from HOME_POSITION (state.home_lat/lon) takes priority.
+    // Fallback: path[0] from telemetry_path_update when HOME_POSITION not in telemetry.
+    function getHomeFromState(state) {
+      if (!state) return null;
+      const lat = state.home_lat;
+      const lon = state.home_lon;
+      if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) return { lat, lon };
+      return null;
+    }
+
+    // --- Aviation: FlightStatusStrip ---
+    function updateFlightStatusStrip(state, healthOverride) {
+      const s = state || {};
+      const tel = healthOverride?.telemetry || {};
+      const armedEl = document.getElementById('flight-status-armed');
+      const modeEl = document.getElementById('flight-status-mode');
+      const gpsEl = document.getElementById('flight-status-gps');
+      const linkEl = document.getElementById('flight-status-link');
+      if (armedEl) {
+        if (s.armed === true) {
+          armedEl.textContent = 'ARMED';
+          armedEl.className = 'flight-status-chip px-2 py-0.5 rounded text-xs font-medium bg-amber-900/60 text-amber-200 border border-amber-700/50';
+        } else if (s.armed === false) {
+          armedEl.textContent = 'Disarmed';
+          armedEl.className = 'flight-status-chip px-2 py-0.5 rounded text-xs font-medium bg-slate-700/60 text-slate-400';
+        } else {
+          armedEl.textContent = '—';
+          armedEl.className = 'flight-status-chip px-2 py-0.5 rounded text-xs font-medium text-slate-500';
+        }
+      }
+      if (modeEl) {
+        modeEl.textContent = (s.mode != null && s.mode !== '') ? s.mode : '—';
+        modeEl.className = 'flight-status-chip px-2 py-0.5 rounded text-xs font-medium bg-slate-700/60 text-slate-300';
+      }
+      if (gpsEl) {
+        const sat = s.satellites_visible;
+        const fix = s.gps_fix_type;
+        if (sat != null && isFinite(sat)) {
+          const fixLabel = fix != null && fix >= 2 ? '3D' : (fix === 1 ? 'no fix' : '');
+          gpsEl.textContent = fixLabel ? sat + ' sat ' + fixLabel : sat + ' sat';
+        } else {
+          gpsEl.textContent = '—';
+        }
+        gpsEl.className = 'flight-status-chip px-2 py-0.5 rounded text-xs font-medium bg-slate-700/60 text-slate-400';
+      }
+      if (linkEl) {
+        const status = s.telemetry_status ?? tel.telemetry_status ?? 'disconnected';
+        linkEl.textContent = status;
+        linkEl.className = 'flight-status-chip px-2 py-0.5 rounded text-xs font-medium ' +
+          (status === 'connected' ? 'bg-green-900/40 text-green-300' : status === 'stale' ? 'bg-amber-900/40 text-amber-300' : 'bg-slate-700/60 text-slate-500');
+      }
+    }
+
+    function updateAviationWidgets(state, home) {
+      const s = state || {};
+      const rollRad = s.roll_rad;
+      const pitchRad = s.pitch_rad;
+      const headingDeg = s.heading_deg;
+      const lat = s.lat;
+      const lon = s.lon;
+      const voltageV = s.voltage_v;
+      const currentA = s.current_a;
+
+      // Artificial Horizon
+      const horizonUnav = document.getElementById('horizon-unavailable');
+      const horizonSky = document.getElementById('horizon-sky');
+      const horizonEarth = document.getElementById('horizon-earth');
+      const horizonLine = document.getElementById('horizon-line');
+      const horizonPlane = document.getElementById('horizon-plane');
+      const horizonValues = document.getElementById('horizon-values');
+      const hasAttitude = rollRad != null && isFinite(rollRad) && pitchRad != null && isFinite(pitchRad);
+      if (!hasAttitude) {
+        horizonUnav.classList.remove('hidden');
+        horizonSky.classList.add('hidden');
+        horizonEarth.classList.add('hidden');
+        horizonLine.classList.add('hidden');
+        horizonPlane.classList.add('hidden');
+        horizonValues.textContent = 'Unavailable';
+      } else {
+        horizonUnav.classList.add('hidden');
+        horizonSky.classList.remove('hidden');
+        horizonEarth.classList.remove('hidden');
+        horizonLine.classList.remove('hidden');
+        horizonPlane.classList.remove('hidden');
+        const pitchDeg = (pitchRad * 180) / Math.PI;
+        const rollDeg = (rollRad * 180) / Math.PI;
+        const maxPitch = 30;
+        const offsetPct = Math.max(-50, Math.min(50, (pitchDeg / maxPitch) * 50));
+        const skyH = 50 + offsetPct;
+        const earthT = 50 + offsetPct;
+        const earthH = 50 - offsetPct;
+        horizonSky.style.height = skyH + '%';
+        horizonEarth.style.top = earthT + '%';
+        horizonEarth.style.height = earthH + '%';
+        horizonEarth.style.bottom = 'auto';
+        horizonLine.style.top = earthT + '%';
+        horizonLine.style.transform = `translateY(-50%) rotate(${rollDeg}deg)`;
+        horizonPlane.style.transform = `translate(-50%, -50%) rotate(${-rollDeg}deg)`;
+        horizonValues.textContent = `${safeNum(pitchDeg, 1) ?? '—'}° pitch · ${safeNum(rollDeg, 1) ?? '—'}° roll`;
+      }
+
+      // Home Direction
+      const homeArrowWrap = document.getElementById('home-arrow-wrap');
+      const homeArrow = document.getElementById('home-arrow');
+      const homeStats = document.getElementById('home-stats');
+      const homeDistance = document.getElementById('home-distance');
+      const homeBearing = document.getElementById('home-bearing');
+      const homeUnav = document.getElementById('home-unavailable');
+      const hasPos = lat != null && lon != null && isFinite(lat) && isFinite(lon);
+      const hasHome = home && home.lat != null && home.lon != null && isFinite(home.lat) && isFinite(home.lon);
+      if (!hasPos || !hasHome) {
+        homeArrowWrap.classList.add('hidden');
+        homeStats.classList.add('hidden');
+        homeUnav.classList.remove('hidden');
+        homeUnav.textContent = home ? 'Position unavailable' : 'Home unavailable';
+      } else {
+        homeArrowWrap.classList.remove('hidden');
+        homeStats.classList.remove('hidden');
+        homeUnav.classList.add('hidden');
+        const distM = haversineM(lat, lon, home.lat, home.lon);
+        const bearingToHome = bearingDeg(lat, lon, home.lat, home.lon);
+        let relBearing = headingDeg != null && isFinite(headingDeg) && bearingToHome != null
+          ? bearingToHome - headingDeg
+          : null;
+        if (relBearing != null) {
+          while (relBearing > 180) relBearing -= 360;
+          while (relBearing < -180) relBearing += 360;
+        }
+        homeDistance.textContent = formatDistance(distM);
+        homeBearing.textContent = bearingToHome != null ? `Bearing ${bearingToHome.toFixed(0)}°` : '—';
+        const arrowAngle = relBearing != null ? relBearing : (bearingToHome != null ? bearingToHome : 0);
+        homeArrow.style.transform = `rotate(${arrowAngle}deg)`;
+      }
+
+      // Power / Endurance
+      const powerFields = document.getElementById('power-fields');
+      const powerUnav = document.getElementById('power-unavailable');
+      const powerVoltage = document.getElementById('power-voltage');
+      const powerCurrent = document.getElementById('power-current');
+      const powerRemaining = document.getElementById('power-remaining');
+      const powerEndurance = document.getElementById('power-endurance');
+      const hasPower = (voltageV != null && isFinite(voltageV)) || (currentA != null && isFinite(currentA));
+      if (!hasPower) {
+        powerFields.classList.add('hidden');
+        powerUnav.classList.remove('hidden');
+      } else {
+        powerFields.classList.remove('hidden');
+        powerUnav.classList.add('hidden');
+        powerVoltage.textContent = safeNum(voltageV, 2) ? safeNum(voltageV, 2) + ' V' : '—';
+        powerCurrent.textContent = safeNum(currentA, 2) ? safeNum(currentA, 2) + ' A' : '—';
+        powerRemaining.textContent = s.battery_remaining_pct != null && isFinite(s.battery_remaining_pct)
+          ? safeNum(s.battery_remaining_pct, 0) + '%'
+          : '—';
+        const remainingMah = s.battery_remaining_mah;
+        const endMin = remainingMah != null && isFinite(remainingMah) ? enduranceMin(remainingMah, currentA) : null;
+        powerEndurance.textContent = endMin != null ? `~${Math.round(endMin)} min (est.)` : '—';
+      }
+
+      // --- Aviation: Altitude / Vertical Speed ---
+      const altitudeFields = document.getElementById('altitude-fields');
+      const altitudeUnav = document.getElementById('altitude-unavailable');
+      const altitudeRel = document.getElementById('altitude-rel');
+      const altitudeClimb = document.getElementById('altitude-climb');
+      const relAlt = s.rel_alt_m;
+      const climbRate = s.climb_rate_m_s;
+      const hasAlt = relAlt != null && isFinite(relAlt);
+      const hasClimb = climbRate != null && isFinite(climbRate);
+      if (!hasAlt && !hasClimb) {
+        if (altitudeFields) altitudeFields.classList.add('hidden');
+        if (altitudeUnav) altitudeUnav.classList.remove('hidden');
+      } else {
+        if (altitudeFields) altitudeFields.classList.remove('hidden');
+        if (altitudeUnav) altitudeUnav.classList.add('hidden');
+        if (altitudeRel) altitudeRel.textContent = hasAlt ? safeNum(relAlt, 1) + ' m' : '—';
+        if (altitudeClimb) altitudeClimb.textContent = hasClimb ? safeNum(climbRate, 2) + ' m/s' : '—';
+      }
+
+      // --- Aviation: Speed ---
+      const speedWrap = document.getElementById('speed-wrap');
+      const speedUnav = document.getElementById('speed-unavailable');
+      const speedValue = document.getElementById('speed-value');
+      const speedLabel = document.getElementById('speed-label');
+      const airspeed = s.airspeed_m_s;
+      const groundspeed = s.groundspeed_m_s;
+      const hasAirspeed = airspeed != null && isFinite(airspeed);
+      const hasGroundspeed = groundspeed != null && isFinite(groundspeed);
+      if (!hasAirspeed && !hasGroundspeed) {
+        if (speedWrap) speedWrap.classList.add('hidden');
+        if (speedUnav) speedUnav.classList.remove('hidden');
+      } else {
+        if (speedWrap) speedWrap.classList.remove('hidden');
+        if (speedUnav) speedUnav.classList.add('hidden');
+        if (hasAirspeed) {
+          if (speedValue) speedValue.textContent = safeNum(airspeed, 1) + ' m/s';
+          if (speedLabel) speedLabel.textContent = 'Airspeed';
+        } else {
+          if (speedValue) speedValue.textContent = safeNum(groundspeed, 1) + ' m/s';
+          if (speedLabel) speedLabel.textContent = 'Ground Speed';
+        }
+      }
+    }
 
     function updateSessionUI(sid, telemetryBackend) {
       const sessionStatusText = document.getElementById('session-status-text');
@@ -929,6 +1245,7 @@
       }
     });
     socket.on('health_update', (d) => {
+      lastHealth = d;
       const tel = d.telemetry || {};
       const status = tel.telemetry_status || 'disconnected';
       document.getElementById('telemetry-status').innerHTML =
@@ -1241,8 +1558,13 @@
         document.getElementById('state-fields').innerHTML = '<span class="na">No state yet</span>';
         document.getElementById('compass-arrow').style.transform = 'rotate(0deg)';
         document.getElementById('compass-heading').textContent = '—';
+        updateAviationWidgets(null, cachedHome);
+        updateFlightStatusStrip(null, lastHealth);
         return;
       }
+      const home = getHomeFromState(s) ?? cachedHome;
+      updateAviationWidgets(s, home);
+      updateFlightStatusStrip(s);
       const stateFields = [
         ['mode', fmt(s.mode)],
         ['lat', fmtNumPrec(s.lat, 6)],
@@ -1320,6 +1642,14 @@
       const path = d.path || [];
       const current = d.current_position;
       const detections = d.detections || [];
+      const sid = d.session_id;
+      if (sid !== lastSessionId) {
+        lastSessionId = sid;
+        cachedHome = null;
+      }
+      if (path.length > 0 && path[0].lat != null && path[0].lon != null) {
+        cachedHome = { lat: path[0].lat, lon: path[0].lon };
+      }
       const svgEl = document.getElementById('path-svg');
       const emptyEl = document.getElementById('path-empty');
       if (path.length === 0 && !current) {
