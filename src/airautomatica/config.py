@@ -231,8 +231,17 @@ def get_recordings_dir() -> str:
 
 def get_camera_recording_mode() -> str:
     """Camera recording mode: off, manual, or auto. Default: manual.
-    Env: CAMERA_RECORDING_MODE (also from settings.json)."""
-    raw = os.environ.get("CAMERA_RECORDING_MODE", "manual").lower().strip()
+    Env: CAMERA_RECORDING_MODE (also from settings.json). Uses persisted settings for live updates.
+    """
+    try:
+        from airautomatica.settings import get_raw_settings
+
+        raw = get_raw_settings().get("CAMERA_RECORDING_MODE") or os.environ.get(
+            "CAMERA_RECORDING_MODE", "manual"
+        )
+    except Exception:
+        raw = os.environ.get("CAMERA_RECORDING_MODE", "manual")
+    raw = str(raw).lower().strip()
     if raw in ("off", "manual", "auto"):
         return raw
     return "manual"
