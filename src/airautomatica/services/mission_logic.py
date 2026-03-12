@@ -241,7 +241,12 @@ class MissionLogic:
             state = self._store.get()
             self._log_status(state)
 
-            if self._ai_service is not None and state is not None:
+            session_id = self._session_ref[0] if self._session_ref else None
+            if (
+                self._ai_service is not None
+                and state is not None
+                and session_id is not None
+            ):
                 now = time.monotonic()
                 if now - self._last_ai_time >= self._ai_interval:
                     self._last_ai_time = now
