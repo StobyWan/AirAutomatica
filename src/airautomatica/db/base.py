@@ -43,7 +43,7 @@ def init_db(db_path: str) -> Engine | None:
         _engine = create_db_engine(db_path)
         enable_wal(_engine)
 
-        from alembic import command
+        from alembic import command  # type: ignore[attr-defined]
         from alembic.config import Config
 
         # Prefer project root (from __file__) over cwd for systemd/arbitrary launch dir
