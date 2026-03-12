@@ -2,6 +2,7 @@
 
 import shutil
 import tempfile
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -19,7 +20,9 @@ from airautomatica.validation.replay_precheck import (
 
 
 @pytest.fixture
-def persistence(monkeypatch: pytest.MonkeyPatch) -> PersistenceService:
+def persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[PersistenceService, None, None]:
     """Create persistence with temp DB. Keep tmp dir alive for test duration."""
     tmp = tempfile.mkdtemp()
     try:
