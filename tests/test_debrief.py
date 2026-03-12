@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from airautomatica.telemetry.preprocessing import debrief_engine
 from airautomatica.telemetry.preprocessing.debrief_engine import (
     CompactDebriefPayload,
     DebriefEngine,
@@ -165,3 +166,61 @@ def test_debrief_power_and_voltage_aggregates() -> None:
     assert summary.peak_power_w is not None
     assert summary.minimum_voltage_v is not None
     assert summary.minimum_voltage_v <= 12.5
+
+
+def test_sample_to_state_uses_stored_fields_when_present() -> None:
+    """_sample_to_state uses armed, climb_rate, home, gps when stored."""
+    sample = {
+        **_make_sample(0),
+        "armed": False,
+        "climb_rate_m_s": 2.5,
+        "home_lat": 37.1,
+        "home_lon": -122.1,
+        "gps_fix_type": 3,
+        "satellites_visible": 10,
+    }
+    state = debrief_engine._sample_to_state(
+        sample, home_lat=37.0, home_lon=-122.0, climb_rate_m_s=0.0
+    )
+    assert state.armed is False
+    assert state.climb_rate_m_s == 2.5
+    assert state.home_lat == 37.1
+    assert state.home_lon == -122.1
+    assert state.gps_fix_type == 3
+    assert state.satellites_visible == 10
+
+
+def test_sample_to_state_legacy_fallbacks_when_null() -> None:
+    """_sample_to_state falls back for NULL new fields (legacy sessions)."""
+    sample = _make_sample(0)
+    # Omit armed, climb_rate_m_s, home_lat, home_lon, gps_fix_type, satellites_visible
+    state = debrief_engine._sample_to_state(
+        sample, home_lat=37.0, home_lon=-122.0, climb_rate_m_s=1.5
+    )
+    assert state.armed is True  # legacy: assume armed
+    assert state.climb_rate_m_s == 1.5  # use derived
+    assert state.home_lat == 37.0  # use session home
+    assert state.home_lon == -122.0
+    assert state.gps_fix_type is None
+    assert state.satellites_visible is None
+
+
+def test_debrief_with_stored_home_uses_correct_distance() -> None:
+    """Debrief with stored home_lat/home_lon uses correct distance_to_home."""
+    persistence = MagicMock()
+    home_lat, home_lon = 37.0, -122.0
+    samples = []
+    for i in range(5):
+        s = _make_sample(i, lat=home_lat + i * 0.001, lon=home_lon)
+        s["home_lat"] = home_lat
+        s["home_lon"] = home_lon
+        s["armed"] = True
+        s["climb_rate_m_s"] = 0.0
+        samples.append(s)
+    persistence.get_session_telemetry_for_debrief.return_value = samples
+
+    engine = DebriefEngine()
+    summary = engine.generate(1, persistence, sample_limit=100)
+    assert summary is not None
+    assert summary.peak_distance_from_home_m is not None
+    assert summary.peak_distance_from_home_m > 0

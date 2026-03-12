@@ -530,6 +530,22 @@ def create_app(
         samples = persistence.get_recent_telemetry_samples(sid, limit=60)
         return {"samples": samples, "session_id": sid}
 
+    @app.get("/sessions/{sid:int}/flight-events")
+    def get_session_flight_events(sid: int) -> dict:
+        """Return flight events for a session (EventEngine output). For replay timeline."""
+        if persistence is None:
+            return {"events": [], "session_id": sid}
+        events = persistence.get_session_flight_events(sid, limit=200)
+        return {"events": events, "session_id": sid}
+
+    @app.get("/sessions/{sid:int}/phase-intervals")
+    def get_session_phase_intervals(sid: int) -> dict:
+        """Return phase intervals for a session (FlightPhaseEngine output). For replay timeline bands."""
+        if persistence is None:
+            return {"intervals": [], "session_id": sid}
+        intervals = persistence.get_session_phase_intervals(sid, limit=500)
+        return {"intervals": intervals, "session_id": sid}
+
     @app.get("/sessions/{sid:int}/debrief")
     async def get_session_debrief_route(
         sid: int,

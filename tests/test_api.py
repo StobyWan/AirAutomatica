@@ -548,6 +548,91 @@ def test_sessions_telemetry_empty_when_no_persistence(client: TestClient) -> Non
     assert r.json() == {"samples": [], "session_id": 1}
 
 
+def test_get_session_flight_events_empty_when_no_persistence(
+    client: TestClient,
+) -> None:
+    """GET /sessions/{id}/flight-events returns empty when persistence not configured."""
+    r = client.get("/sessions/1/flight-events")
+    assert r.status_code == 200
+    assert r.json() == {"events": [], "session_id": 1}
+
+
+def test_get_session_flight_events_returns_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /sessions/{id}/flight-events returns persisted flight events."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        base = datetime.now(timezone.utc)
+        persistence.insert_flight_event(
+            session_id=session_id,
+            event_name="gps_degraded",
+            severity="warn",
+            started_at=base,
+            ended_at=base + timedelta(seconds=10),
+            evidence={"satellites_visible": 4},
+        )
+        client = TestClient(
+            create_app(store, session_ref=[session_id], persistence=persistence)
+        )
+        r = client.get(f"/sessions/{session_id}/flight-events")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["session_id"] == session_id
+        assert len(data["events"]) == 1
+        assert data["events"][0]["event_name"] == "gps_degraded"
+        assert data["events"][0]["severity"] == "warn"
+        assert "started_at" in data["events"][0]
+        assert "ended_at" in data["events"][0]
+
+
+def test_get_session_phase_intervals_empty_when_no_persistence(
+    client: TestClient,
+) -> None:
+    """GET /sessions/{id}/phase-intervals returns empty when persistence not configured."""
+    r = client.get("/sessions/1/phase-intervals")
+    assert r.status_code == 200
+    assert r.json() == {"intervals": [], "session_id": 1}
+
+
+def test_get_session_phase_intervals_returns_intervals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /sessions/{id}/phase-intervals returns persisted phase intervals."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        base = datetime.now(timezone.utc)
+        persistence.insert_phase_interval(
+            session_id=session_id,
+            phase="cruise",
+            started_at=base,
+            ended_at=base + timedelta(seconds=60),
+        )
+        client = TestClient(
+            create_app(store, session_ref=[session_id], persistence=persistence)
+        )
+        r = client.get(f"/sessions/{session_id}/phase-intervals")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["session_id"] == session_id
+        assert len(data["intervals"]) == 1
+        assert data["intervals"][0]["phase"] == "cruise"
+        assert "started_at" in data["intervals"][0]
+        assert "ended_at" in data["intervals"][0]
+
+
 def test_session_debrief_404_when_no_persistence(client: TestClient) -> None:
     """GET /sessions/{id}/debrief returns 404 when persistence not configured."""
     r = client.get("/sessions/1/debrief")

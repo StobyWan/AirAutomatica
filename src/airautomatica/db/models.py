@@ -37,6 +37,8 @@ class FlightSession(Base):
     detections = relationship("Detection", back_populates="session")
     system_events = relationship("SystemEvent", back_populates="session")
     commands_sent = relationship("CommandSent", back_populates="session")
+    flight_events = relationship("FlightEvent", back_populates="session")
+    phase_intervals = relationship("PhaseInterval", back_populates="session")
 
 
 class TelemetrySample(Base):
@@ -68,6 +70,13 @@ class TelemetrySample(Base):
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_disconnect_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     connected: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    armed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    climb_rate_m_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gps_fix_type: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    satellites_visible: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    home_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    home_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    watts: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     session = relationship("FlightSession", back_populates="telemetry_samples")
 
@@ -144,3 +153,38 @@ class CommandSent(Base):
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     session = relationship("FlightSession", back_populates="commands_sent")
+
+
+class FlightEvent(Base):
+    """EventEngine output: rule-based flight events with start/end times."""
+
+    __tablename__ = "flight_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("flight_sessions.id"), nullable=False
+    )
+    event_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    operator_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    session = relationship("FlightSession", back_populates="flight_events")
+
+
+class PhaseInterval(Base):
+    """FlightPhaseEngine output: phase intervals for timeline bands."""
+
+    __tablename__ = "phase_intervals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("flight_sessions.id"), nullable=False
+    )
+    phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    session = relationship("FlightSession", back_populates="phase_intervals")
