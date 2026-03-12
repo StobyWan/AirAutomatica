@@ -8,6 +8,7 @@ Field units and sentinels per mavlink.io common dialect:
 - GPS_RAW_INT (id 24): fix_type, satellites_visible
 - HOME_POSITION (id 242): latitude, longitude degE7 (ArduPilot)
 - GPS_GLOBAL_ORIGIN (id 49): latitude, longitude degE7 (INAV uses for home)
+Home messages are read-only; app does not send SET_HOME or equivalent.
 """
 
 import time

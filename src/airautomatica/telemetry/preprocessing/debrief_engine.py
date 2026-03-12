@@ -27,13 +27,15 @@ def _sample_to_state(
     home_lat: float | None,
     home_lon: float | None,
     climb_rate_m_s: float = 0.0,
+    session_override_active: bool = False,
 ) -> AircraftState:
     """Convert debrief sample dict to AircraftState.
 
     Legacy fallbacks for NULL new fields (older sessions):
     - armed: assume True when missing
     - climb_rate_m_s: use passed derived value when missing
-    - home_lat/home_lon: use session home (first sample) when missing
+    - home_lat/home_lon: when session_override_active, always use session home;
+      else use per-sample home if valid, otherwise session home
     - gps_fix_type/satellites_visible: pass None; EventEngine skips GPS logic
     """
     ts: datetime | None = sample.get("timestamp")
@@ -81,12 +83,16 @@ def _sample_to_state(
     stored_climb = sample.get("climb_rate_m_s")
     climb = float(stored_climb) if _valid(stored_climb) else climb_rate_m_s
 
-    # Legacy fallback: missing home -> use session home (first sample)
+    # Home: when session override active, use session home for all samples.
+    # Otherwise: per-sample home if valid, else session home.
     sample_home_lat = sample.get("home_lat")
     sample_home_lon = sample.get("home_lon")
     use_home_lat: float | None
     use_home_lon: float | None
-    if _valid(sample_home_lat) and _valid(sample_home_lon):
+    if session_override_active:
+        use_home_lat = home_lat
+        use_home_lon = home_lon
+    elif _valid(sample_home_lat) and _valid(sample_home_lon):
         use_home_lat = float(sample_home_lat)
         use_home_lon = float(sample_home_lon)
     else:
@@ -210,11 +216,20 @@ class DebriefEngine:
 
         home_lat: float | None = None
         home_lon: float | None = None
-        first_lat = samples[0].get("lat")
-        first_lon = samples[0].get("lon")
-        if _valid(first_lat) and _valid(first_lon):
-            home_lat = float(first_lat)
-            home_lon = float(first_lon)
+        session_override_active = False
+        sess_home_lat, sess_home_lon, sess_home_source = persistence.get_session_home(
+            session_id
+        )
+        if sess_home_lat is not None and sess_home_lon is not None:
+            home_lat = sess_home_lat
+            home_lon = sess_home_lon
+            session_override_active = sess_home_source == "manual_session"
+        else:
+            first_lat = samples[0].get("lat")
+            first_lon = samples[0].get("lon")
+            if _valid(first_lat) and _valid(first_lon):
+                home_lat = float(first_lat)
+                home_lon = float(first_lon)
 
         phase_duration_sec: dict[str, float] = {}
         event_active_samples: dict[str, float] = {}
@@ -228,7 +243,9 @@ class DebriefEngine:
 
         for sample in samples:
             climb = _derive_climb_rate(prev_sample, sample)
-            state = _sample_to_state(sample, home_lat, home_lon, climb)
+            state = _sample_to_state(
+                sample, home_lat, home_lon, climb, session_override_active
+            )
             for buf in buffers.values():
                 buf.append(state)
 

@@ -21,6 +21,7 @@ from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 
 if TYPE_CHECKING:
+    from airautomatica.services.app_home_store import AppHomeStore
     from airautomatica.services.camera_recording import CameraRecordingService
     from airautomatica.services.persistence import PersistenceService
     from airautomatica.services.state_store import StateStore
@@ -87,9 +88,23 @@ def _build_health_payload(
     return payload
 
 
-def _build_state_payload(state: Optional[AircraftState]) -> dict:
-    """Build state payload. Reuses AircraftState.to_dict()."""
-    return {"state": state.to_dict() if state is not None else None}
+def _build_state_payload(
+    state: Optional[AircraftState],
+    app_home_store: Optional["AppHomeStore"] = None,
+) -> dict:
+    """Build state payload. Reuses AircraftState.to_dict(). Applies app home override when set."""
+    if state is None:
+        return {"state": None, "app_home_source": "fallback"}
+    state_dict = state.to_dict()
+    if app_home_store is not None and app_home_store.has_override():
+        lat, lon = app_home_store.get_override()
+        if lat is not None and lon is not None:
+            state_dict["home_lat"] = lat
+            state_dict["home_lon"] = lon
+            return {"state": state_dict, "app_home_source": "manual_live"}
+    if state.home_lat is not None and state.home_lon is not None:
+        return {"state": state_dict, "app_home_source": "autopilot"}
+    return {"state": state_dict, "app_home_source": "fallback"}
 
 
 def _build_detections_payload(
@@ -121,6 +136,7 @@ class DashboardPublisher:
         sio: socketio.AsyncServer,
         interval_sec: float = 1.0,
         camera_recording_service: Optional["CameraRecordingService"] = None,
+        app_home_store: Optional["AppHomeStore"] = None,
     ) -> None:
         self._store = store
         self._persistence = persistence
@@ -130,6 +146,7 @@ class DashboardPublisher:
         self._sio = sio
         self._interval_sec = interval_sec
         self._camera_recording_service = camera_recording_service
+        self._app_home_store = app_home_store
         self._heartbeat_buffer: deque[dict] = deque(maxlen=_HEARTBEAT_BUFFER_MAX)
         self._loop_count = 0
 
@@ -192,7 +209,7 @@ class DashboardPublisher:
                     )
                 await self._sio.emit("health_update", health)
 
-                state_payload = _build_state_payload(state)
+                state_payload = _build_state_payload(state, self._app_home_store)
                 await self._sio.emit("state_update", state_payload)
 
                 detections: list[dict] = []

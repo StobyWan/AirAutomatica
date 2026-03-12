@@ -46,6 +46,7 @@ def _make_sample(
 def test_debrief_duration_calculation() -> None:
     """Debrief computes session duration from sample timestamps."""
     persistence = MagicMock()
+    persistence.get_session_home.return_value = (None, None, None)
     samples = [_make_sample(i) for i in range(10)]
     persistence.get_session_telemetry_for_debrief.return_value = samples
 
@@ -59,6 +60,7 @@ def test_debrief_duration_calculation() -> None:
 def test_debrief_phase_breakdown() -> None:
     """Debrief aggregates phase durations deterministically."""
     persistence = MagicMock()
+    persistence.get_session_home.return_value = (None, None, None)
     samples = [_make_sample(i, mode="GUIDED") for i in range(5)] + [
         _make_sample(i, mode="RTL") for i in range(5, 10)
     ]
@@ -76,6 +78,7 @@ def test_debrief_phase_breakdown() -> None:
 def test_debrief_top_event_aggregation() -> None:
     """Debrief aggregates events by duration, deterministic order."""
     persistence = MagicMock()
+    persistence.get_session_home.return_value = (None, None, None)
     samples = [_make_sample(i, voltage=10.5) for i in range(15)]
     persistence.get_session_telemetry_for_debrief.return_value = samples
 
@@ -126,6 +129,7 @@ def test_debrief_compact_payload_shape() -> None:
 def test_debrief_deterministic_output_ordering() -> None:
     """Top events are sorted by duration desc, then name asc."""
     persistence = MagicMock()
+    persistence.get_session_home.return_value = (None, None, None)
     samples = [_make_sample(i) for i in range(20)]
     persistence.get_session_telemetry_for_debrief.return_value = samples
 
@@ -153,6 +157,7 @@ def test_debrief_empty_session_returns_none() -> None:
 def test_debrief_power_and_voltage_aggregates() -> None:
     """Debrief computes avg/peak power and min voltage."""
     persistence = MagicMock()
+    persistence.get_session_home.return_value = (None, None, None)
     samples = [
         _make_sample(i, voltage=12.5 - i * 0.05, current=5.0 + i * 0.5)
         for i in range(10)
@@ -208,6 +213,7 @@ def test_sample_to_state_legacy_fallbacks_when_null() -> None:
 def test_debrief_with_stored_home_uses_correct_distance() -> None:
     """Debrief with stored home_lat/home_lon uses correct distance_to_home."""
     persistence = MagicMock()
+    persistence.get_session_home.return_value = (None, None, None)
     home_lat, home_lon = 37.0, -122.0
     samples = []
     for i in range(5):
@@ -224,3 +230,35 @@ def test_debrief_with_stored_home_uses_correct_distance() -> None:
     assert summary is not None
     assert summary.peak_distance_from_home_m is not None
     assert summary.peak_distance_from_home_m > 0
+
+
+def test_debrief_session_override_wins_over_per_sample_home() -> None:
+    """When session has manual override, it overrides per-sample home for all samples."""
+    persistence = MagicMock()
+    override_lat, override_lon = 37.5, -122.5
+    persistence.get_session_home.return_value = (
+        override_lat,
+        override_lon,
+        "manual_session",
+    )
+    samples = []
+    for i in range(3):
+        s = _make_sample(i, lat=37.0 + i * 0.001, lon=-122.0)
+        s["home_lat"] = 37.0
+        s["home_lon"] = -122.0
+        s["armed"] = True
+        s["climb_rate_m_s"] = 0.0
+        samples.append(s)
+    persistence.get_session_telemetry_for_debrief.return_value = samples
+
+    state = debrief_engine._sample_to_state(
+        samples[0], override_lat, override_lon, 0.0, session_override_active=True
+    )
+    assert state.home_lat == override_lat
+    assert state.home_lon == override_lon
+
+    state_no_override = debrief_engine._sample_to_state(
+        samples[0], 37.0, -122.0, 0.0, session_override_active=False
+    )
+    assert state_no_override.home_lat == 37.0
+    assert state_no_override.home_lon == -122.0

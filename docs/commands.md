@@ -8,6 +8,10 @@ Future ArduPilot command-back support. **NOT YET OPERATIONAL**—no outbound MAV
 2. **Advisory**: CommandPolicy evaluates allow/deny. Still no send.
 3. **Guarded command-back** (later): Integrate MAVLink command send when policy allows.
 
+## Phase 3: FC Home Sync (Future)
+
+See [PHASE_3_FC_HOME_SYNC_PLAN.md](PHASE_3_FC_HOME_SYNC_PLAN.md) for a concrete implementation plan for MAV_CMD_DO_SET_HOME (179) to set the flight controller's RTL/navigation home. Distinct from app home override (Phase 2).
+
 ## CommandPolicy
 
 - `command_enabled`: Master kill switch. Default False.
