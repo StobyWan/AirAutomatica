@@ -117,7 +117,7 @@ def test_ai_result_normalized_shape() -> None:
 
 
 def test_default_provider_is_ollama() -> None:
-    """Factory creates OllamaAiService when no provider/mode set (canonical default)."""
+    """Factory creates MockAiService for mission loop when provider=ollama (Ollama is advisory-only)."""
     from airautomatica.main import _create_ai_service
 
     with pytest.MonkeyPatch.context() as m:
@@ -126,7 +126,7 @@ def test_default_provider_is_ollama() -> None:
         m.delenv("AI_BACKEND", raising=False)
         m.delenv("AI_HAT_ENABLED", raising=False)
         service = _create_ai_service()
-    assert isinstance(service, OllamaAiService)
+    assert isinstance(service, MockAiService)
 
 
 def test_mode_selection_mock() -> None:
@@ -143,7 +143,7 @@ def test_mode_selection_mock() -> None:
 
 
 def test_provider_selection_ollama() -> None:
-    """Factory creates OllamaAiService for LOCAL_LLM_PROVIDER=ollama or AI_MODE=ollama (no AI HAT)."""
+    """Factory creates MockAiService for mission loop when provider=ollama (Ollama is advisory-only)."""
     from airautomatica.main import _create_ai_service
 
     with pytest.MonkeyPatch.context() as m:
@@ -152,7 +152,7 @@ def test_provider_selection_ollama() -> None:
         m.setenv("LOCAL_LLM_PROVIDER", "ollama")
         m.delenv("AI_MODE", raising=False)
         service = _create_ai_service()
-    assert isinstance(service, OllamaAiService)
+    assert isinstance(service, MockAiService)
 
     with pytest.MonkeyPatch.context() as m:
         m.delenv("LOCAL_LLM_PROVIDER", raising=False)
@@ -160,7 +160,7 @@ def test_provider_selection_ollama() -> None:
         m.setenv("AI_MODE", "ollama")
         m.delenv("AI_BACKEND", raising=False)
         service = _create_ai_service()
-    assert isinstance(service, OllamaAiService)
+    assert isinstance(service, MockAiService)
 
 
 def test_lmstudio_maps_to_mock(caplog: pytest.LogCaptureFixture) -> None:
@@ -399,7 +399,7 @@ def test_aihat_unavailable_fallback() -> None:
         m.setenv("AI_HAT_ENABLED", "false")
         m.delenv("AI_MODE", raising=False)
         service = _create_ai_service()
-    assert isinstance(service, OllamaAiService)
+    assert isinstance(service, MockAiService)
 
 
 @pytest.mark.asyncio

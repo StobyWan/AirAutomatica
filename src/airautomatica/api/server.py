@@ -24,6 +24,7 @@ from airautomatica.ai.ollama_tasks import (
 )
 from airautomatica.config import (
     get_ai_duplicate_window_sec,
+    get_ai_hat_enabled,
     get_ai_min_confidence,
     get_camera_recording_mode,
     get_effective_ai_backend,
@@ -415,6 +416,10 @@ def create_app(
         ts = _get_task_service()
         if ts is None:
             return {"error": "AI task service not available"}
+        if _preprocessor is None and ts.provider == "ollama":
+            return {
+                "error": "Preprocessing required for Ollama telemetry summary. Enable AIRAUTOMATICA_PREPROCESSING_ENABLED=1.",
+            }
         state = store.get()
         samples: list = []
         sid = _session_ref[0]
@@ -424,6 +429,7 @@ def create_app(
             llm_ctx = _preprocessor.get_llm_context()
             context = cast(dict[str, Any], {"llm_context": llm_ctx.to_dict()})
         else:
+            # Fallback: mock only (ollama rejected above). Minimal state summary.
             context = cast(
                 dict[str, Any], {"state": state, "telemetry_samples": samples}
             )
@@ -641,6 +647,8 @@ def create_app(
             active_ai = f"ollama ({get_local_llm_model('ollama')})"
         else:
             active_ai = provider
+        if get_ai_hat_enabled():
+            active_ai = f"{active_ai} + AI HAT (perception)"
         active_summary = f"Telemetry: {active_telemetry} · AI: {active_ai}"
 
         return {
@@ -787,6 +795,8 @@ def create_app(
             active_ai = f"ollama ({get_local_llm_model('ollama')})"
         else:
             active_ai = provider
+        if get_ai_hat_enabled():
+            active_ai = f"{active_ai} + AI HAT (perception)"
         active_summary = f"Telemetry: {active_telemetry} · AI: {active_ai}"
 
         return {

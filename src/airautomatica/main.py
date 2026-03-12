@@ -141,22 +141,16 @@ def _create_telemetry_source(
     return MockTelemetry()
 
 
-def _create_base_ai_service(
-    ollama_transport: OllamaAiService | None = None,
-    scheduler: AiInferenceScheduler | None = None,
-) -> AiService:
-    """Create base local LLM service (mock or ollama). AI HAT is composed separately."""
+def _create_base_ai_service() -> AiService:
+    """Create base AI service for mission loop (perception). Ollama is used only for
+    advisory tasks (telemetry summary, debrief, event classification); mission loop
+    uses mock or AI HAT. AI HAT is composed separately when enabled."""
     provider = get_local_llm_provider()
     if provider == "mock":
         return MockAiService()
     if provider == "ollama":
-        if ollama_transport is not None and scheduler is not None:
-            return ScheduledOllamaAiService(ollama_transport, scheduler)
-        return OllamaAiService(
-            base_url=get_local_llm_base_url("ollama"),
-            model=get_local_llm_model("ollama"),
-            timeout_sec=get_local_llm_timeout(),
-        )
+        # Mission loop: use mock for perception. Ollama is advisory-only (task_service).
+        return MockAiService()
     logger.warning("Unknown AI provider %r, defaulting to mock", provider)
     return MockAiService()
 
@@ -165,8 +159,8 @@ def _create_ai_service(
     ollama_transport: OllamaAiService | None = None,
     scheduler: AiInferenceScheduler | None = None,
 ) -> AiService:
-    """Create composed AI service: base local LLM + optional AI HAT layer."""
-    base = _create_base_ai_service(ollama_transport, scheduler)
+    """Create composed AI service: base (mock for mission loop) + optional AI HAT layer."""
+    base = _create_base_ai_service()
     aihat: AiService | None = None
     if get_ai_hat_enabled():
         aihat = AiHatAiService(

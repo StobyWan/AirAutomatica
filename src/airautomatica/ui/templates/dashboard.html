@@ -507,19 +507,26 @@
       <div class="settings-section" data-keys="AI_HAT_ENABLED">
         <h3>AI HAT <span class="apply-hint text-xs font-normal text-slate-500"></span></h3>
         <div class="settings-field">
-          <label class="flex items-center gap-2 cursor-pointer">
+          <label class="flex items-center gap-2 cursor-pointer" title="Vision/detection on Pi 5. Not an Ollama substitute.">
             <input type="checkbox" id="AI_HAT_ENABLED" name="AI_HAT_ENABLED" value="1" />
             <span>Enable AI HAT layer</span>
           </label>
-          <span class="text-xs text-slate-500 mt-1 block">Additive: runs alongside the selected AI provider on Pi 5. Not mutually exclusive.</span>
+          <span class="text-xs text-slate-500 mt-1 block">Optional vision/perception layer on Pi 5. Additive: runs alongside mock for mission loop. Not an Ollama substitute.</span>
         </div>
       </div>
 
-      <div class="settings-section" data-keys="AI_MIN_CONFIDENCE,AI_DUPLICATE_WINDOW_SEC,AI_SCHEDULER_COOLDOWN_SEC">
+      <div class="settings-section" data-keys="AIRAUTOMATICA_PREPROCESSING_ENABLED,AI_MIN_CONFIDENCE,AI_DUPLICATE_WINDOW_SEC,AI_SCHEDULER_COOLDOWN_SEC">
         <button type="button" id="advanced-toggle" class="settings-advanced-toggle" aria-expanded="false">
           <span>▼</span> Advanced <span class="apply-hint text-xs font-normal text-slate-500 ml-1"></span>
         </button>
         <div id="advanced-fields" class="hidden mt-2">
+          <div class="settings-field">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="AIRAUTOMATICA_PREPROCESSING_ENABLED" name="AIRAUTOMATICA_PREPROCESSING_ENABLED" value="1" />
+              <span>Enable telemetry preprocessing</span>
+            </label>
+            <span class="text-xs text-slate-500 mt-1 block">Required for Ollama telemetry summary. Reduces raw telemetry to compact context before LLM. Default: on.</span>
+          </div>
           <div class="settings-field">
             <label for="AI_MIN_CONFIDENCE">AI min confidence (0–1)</label>
             <input type="number" id="AI_MIN_CONFIDENCE" name="AI_MIN_CONFIDENCE" placeholder="0.5" min="0" max="1" step="0.1" />
@@ -546,7 +553,7 @@
   </div>
 
   <script>
-    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','CAMERA_RECORDING_MODE','SESSION_AUTO_START_ON_ARM','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','AIRAUTOMATICA_PREPROCESSING_ENABLED','CAMERA_RECORDING_MODE','SESSION_AUTO_START_ON_ARM','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
 
     function showView(viewId) {
       document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
