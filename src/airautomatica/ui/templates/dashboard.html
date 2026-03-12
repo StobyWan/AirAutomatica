@@ -425,10 +425,11 @@
   <div id="tab-settings" class="tab-panel">
   <div class="card">
     <h2>Settings</h2>
-    <p class="text-sm text-slate-400 mb-4">Changes are saved to <code class="text-slate-500">~/.airautomatica/settings.json</code>. Restart the app to apply.</p>
+    <p class="text-sm text-slate-400 mb-4">Changes are saved to <code class="text-slate-500">~/.airautomatica/settings.json</code>. Some apply immediately; others require reconnect or app restart.</p>
+    <p id="active-backend-summary" class="text-xs text-slate-500 mb-3 hidden"></p>
     <form id="settings-form" class="max-w-xl">
-      <div class="settings-section">
-        <h3>Telemetry</h3>
+      <div class="settings-section" data-keys="TELEMETRY_BACKEND,SERIAL_PORT,SERIAL_BAUD">
+        <h3>Telemetry <span class="apply-hint text-xs font-normal text-slate-500"></span></h3>
         <div class="settings-field">
           <label for="TELEMETRY_BACKEND">Telemetry backend</label>
           <select id="TELEMETRY_BACKEND" name="TELEMETRY_BACKEND">
@@ -447,8 +448,9 @@
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3>AI Provider</h3>
+      <div class="settings-section" data-keys="LOCAL_LLM_PROVIDER,LOCAL_LLM_BASE_URL,LOCAL_LLM_MODEL,LOCAL_LLM_TIMEOUT,OLLAMA_NUM_THREAD">
+        <h3>AI Provider <span class="apply-hint text-xs font-normal text-slate-500"></span></h3>
+        <p id="ai-provider-status" class="text-xs text-slate-500 mb-2"></p>
         <div class="settings-field">
           <label for="LOCAL_LLM_PROVIDER">AI provider</label>
           <select id="LOCAL_LLM_PROVIDER" name="LOCAL_LLM_PROVIDER">
@@ -478,8 +480,8 @@
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3>Camera Recording</h3>
+      <div class="settings-section" data-keys="CAMERA_RECORDING_MODE">
+        <h3>Camera Recording <span class="apply-hint text-xs font-normal text-slate-500"></span></h3>
         <div class="settings-field">
           <label for="CAMERA_RECORDING_MODE">Recording mode</label>
           <select id="CAMERA_RECORDING_MODE" name="CAMERA_RECORDING_MODE">
@@ -491,8 +493,8 @@
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3>Session</h3>
+      <div class="settings-section" data-keys="SESSION_AUTO_START_ON_ARM">
+        <h3>Session <span class="apply-hint text-xs font-normal text-slate-500"></span></h3>
         <div class="settings-field">
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" id="SESSION_AUTO_START_ON_ARM" name="SESSION_AUTO_START_ON_ARM" value="1" />
@@ -502,8 +504,8 @@
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3>AI HAT</h3>
+      <div class="settings-section" data-keys="AI_HAT_ENABLED">
+        <h3>AI HAT <span class="apply-hint text-xs font-normal text-slate-500"></span></h3>
         <div class="settings-field">
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" id="AI_HAT_ENABLED" name="AI_HAT_ENABLED" value="1" />
@@ -513,9 +515,9 @@
         </div>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-section" data-keys="AI_MIN_CONFIDENCE,AI_DUPLICATE_WINDOW_SEC,AI_SCHEDULER_COOLDOWN_SEC">
         <button type="button" id="advanced-toggle" class="settings-advanced-toggle" aria-expanded="false">
-          <span>▼</span> Advanced
+          <span>▼</span> Advanced <span class="apply-hint text-xs font-normal text-slate-500 ml-1"></span>
         </button>
         <div id="advanced-fields" class="hidden mt-2">
           <div class="settings-field">
@@ -750,39 +752,120 @@
       btn.querySelector('span').textContent = open ? '▼' : '▲';
     });
 
+    const APPLY_HINT_TEXT = {
+      live: '(applies immediately)',
+      reconnect: '(takes effect after reconnect support is added)',
+      restart: '(requires app restart)'
+    };
+
+    function getWorstApplyMode(keys, applyModes) {
+      if (!applyModes) return 'live';
+      let worst = 'live';
+      for (const k of keys) {
+        const m = applyModes[k];
+        if (m === 'restart') return 'restart';
+        if (m === 'reconnect') worst = 'reconnect';
+      }
+      return worst;
+    }
+
     function loadSettingsForm() {
       fetch('/settings').then(r => r.json()).then(d => {
-        const s = d.settings || {};
+        const raw = d.settings || {};
+        const effective = d.effective_settings || raw;
+        const applyModes = d.apply_modes || {};
+
         SETTINGS_KEYS.forEach(k => {
           const el = document.getElementById(k);
           if (!el) return;
+          const val = (effective[k] !== undefined && effective[k] !== '') ? effective[k] : raw[k];
           if (el.type === 'checkbox') {
-            el.checked = s[k] === '1' || s[k] === 'true' || s[k] === true;
-          } else if (s[k] !== undefined && s[k] !== null) {
-            el.value = s[k];
+            el.checked = val === '1' || val === 'true' || val === true;
+            el.dataset.initialValue = el.checked ? '1' : '0';
+          } else if (val !== undefined && val !== null) {
+            el.value = String(val);
+            el.dataset.initialValue = String(val);
           }
         });
+
+        document.querySelectorAll('.settings-section[data-keys]').forEach(section => {
+          const keys = (section.dataset.keys || '').split(',').filter(Boolean);
+          const mode = getWorstApplyMode(keys, applyModes);
+          const hint = section.querySelector('.apply-hint');
+          if (hint) hint.textContent = APPLY_HINT_TEXT[mode] || '';
+        });
+
+        const statusEl = document.getElementById('ai-provider-status');
+        if (statusEl) {
+          const reason = d.provider_reason || '';
+          const ollamaReady = d.ollama_ready;
+          const ollamaAvailable = d.ollama_available;
+          let msg = '';
+          if (reason === 'explicit_mock') {
+            msg = 'Using mock (explicit).';
+          } else if (reason === 'explicit_ollama') {
+            msg = ollamaReady ? 'Ollama ready.' : (ollamaAvailable ? 'Ollama reachable but model may be missing.' : 'Ollama not reachable.');
+          } else if (reason === 'discovered_ollama_ready') {
+            msg = 'Ollama discovered and ready; using ollama.';
+          } else if (reason === 'discovered_mock_ollama_unavailable') {
+            msg = 'Ollama not available; using mock. Save "ollama" to use Ollama when ready.';
+          }
+          statusEl.textContent = msg;
+          statusEl.classList.toggle('hidden', !msg);
+        }
+
+        const activeSummaryEl = document.getElementById('active-backend-summary');
+        if (activeSummaryEl && d.active_summary) {
+          activeSummaryEl.textContent = 'Active: ' + d.active_summary;
+          activeSummaryEl.classList.remove('hidden');
+        }
+
         updateProviderVisibility();
       }).catch(() => {});
     }
 
+    const TELEMETRY_KEYS = ['TELEMETRY_BACKEND', 'SERIAL_PORT', 'SERIAL_BAUD'];
+    const AI_KEYS = ['LOCAL_LLM_PROVIDER', 'LOCAL_LLM_BASE_URL', 'LOCAL_LLM_MODEL', 'LOCAL_LLM_TIMEOUT', 'OLLAMA_NUM_THREAD'];
     document.getElementById('settings-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const updates = {};
+      const initial = {};
       SETTINGS_KEYS.forEach(k => {
         const el = document.getElementById(k);
         if (!el) return;
         if (el.type === 'checkbox') {
           updates[k] = el.checked ? '1' : '0';
+          initial[k] = el.dataset.initialValue === '1';
         } else if (el.value) {
           updates[k] = el.value;
+          initial[k] = el.dataset.initialValue;
         }
       });
+      const telemetryChanged = TELEMETRY_KEYS.some(k => updates[k] !== initial[k]);
+      const aiChanged = AI_KEYS.some(k => updates[k] !== initial[k]);
       const statusEl = document.getElementById('settings-status');
-      statusEl.textContent = 'Saving…';
+      if (telemetryChanged && aiChanged) {
+        statusEl.textContent = 'Saving… (reconnecting telemetry, reloading AI)';
+      } else if (telemetryChanged) {
+        statusEl.textContent = 'Saving… (reconnecting telemetry)';
+      } else if (aiChanged) {
+        statusEl.textContent = 'Saving… (reloading AI)';
+      } else {
+        statusEl.textContent = 'Saving…';
+      }
       fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
         .then(r => r.json())
-        .then(() => { statusEl.textContent = 'Saved. Restart the app to apply.'; })
+        .then(res => {
+          let msg = res.message || 'Settings saved.';
+          if (res.active_summary) {
+            msg += ' Active: ' + res.active_summary;
+          }
+          statusEl.textContent = msg;
+          if (res.active_summary && document.getElementById('active-backend-summary')) {
+            document.getElementById('active-backend-summary').textContent = res.active_summary;
+            document.getElementById('active-backend-summary').classList.remove('hidden');
+          }
+        })
         .catch(() => { statusEl.textContent = 'Save failed.'; });
     });
   </script>

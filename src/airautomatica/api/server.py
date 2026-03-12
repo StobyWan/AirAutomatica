@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
+    from airautomatica.services.mission_logic import MissionLogic
     from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
 
 from fastapi import Body, FastAPI, HTTPException, Query
@@ -22,6 +23,8 @@ from airautomatica.ai.ollama_tasks import (
     get_telemetry_summary_counts,
 )
 from airautomatica.config import (
+    get_ai_duplicate_window_sec,
+    get_ai_min_confidence,
     get_camera_recording_mode,
     get_effective_ai_backend,
     get_local_llm_base_url,
@@ -31,6 +34,7 @@ from airautomatica.config import (
     get_serial_port,
     get_sqlite_db_path,
     get_telemetry_backend,
+    validate_serial_config,
 )
 from airautomatica.db.base import get_engine, get_last_init_error
 from airautomatica.logging_config import setup_logging
@@ -40,6 +44,8 @@ from airautomatica.models.connection_state import (
     SessionState,
 )
 from airautomatica.models.state import AircraftState, nan_to_none
+from airautomatica.runtime.ai_subsystem import AiSubsystemHolder, ReloadResult
+from airautomatica.runtime.telemetry_subsystem import TelemetryReconnectResult
 from airautomatica.services.camera_ready_state import get as get_camera_ready
 from airautomatica.services.camera_ready_state import set_ready as set_camera_ready
 from airautomatica.services.camera_recording import CameraRecordingService
@@ -60,7 +66,14 @@ from airautomatica.services.persistence import (
 )
 from airautomatica.services.recordings_service import RecordingsService
 from airautomatica.services.state_store import StateStore
-from airautomatica.settings import get_settings, save_settings
+from airautomatica.settings import (
+    SETTING_APPLY_MODES,
+    get_apply_modes,
+    get_effective_settings,
+    get_provider_reason,
+    get_raw_settings,
+    save_settings,
+)
 from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
 from airautomatica.telemetry.detector import scan_and_detect
@@ -82,14 +95,32 @@ def create_app(
     session_ref: Optional[list[int | None]] = None,
     persistence: Optional[PersistenceService] = None,
     task_service: Optional[OllamaTaskService] = None,
+    ai_holder: Optional[AiSubsystemHolder] = None,
     camera_recording_service: Optional[CameraRecordingService] = None,
     preprocessor: Optional["TelemetryPreprocessor"] = None,
+    mission_logic: Optional["MissionLogic"] = None,
+    reload_ai_fn: Optional[object] = None,
+    reload_telemetry_fn: Optional[object] = None,
 ) -> FastAPI:
-    """Create FastAPI app with state store dependency."""
+    """Create FastAPI app with state store dependency.
+    When ai_holder is provided, task_service is read from it (supports hot-reload).
+    reload_ai_fn(provider_before) -> ReloadResult when AI hot-reload is available.
+    reload_telemetry_fn() -> TelemetryReconnectResult when telemetry reconnect is available.
+    """
     app = FastAPI(title="AIRAUTOMATICA", version="0.1.0", lifespan=_lifespan)
     _session_ref = session_ref or [None]
     _connection_store = connection_store
     _preprocessor = preprocessor
+    _mission_logic = mission_logic
+    _ai_holder = ai_holder
+    _task_service_fallback = task_service
+    _reload_ai_fn = reload_ai_fn
+    _reload_telemetry_fn = reload_telemetry_fn
+
+    def _get_task_service() -> Optional[OllamaTaskService]:
+        if _ai_holder is not None:
+            return _ai_holder.get_task_service()
+        return _task_service_fallback
 
     @app.get("/")
     def root() -> RedirectResponse:
@@ -379,7 +410,8 @@ def create_app(
     @app.post("/ai/telemetry-summary")
     async def post_telemetry_summary() -> dict:
         """Request AI interpretation of current telemetry. Returns TelemetrySummaryResult."""
-        if task_service is None:
+        ts = _get_task_service()
+        if ts is None:
             return {"error": "AI task service not available"}
         state = store.get()
         samples: list = []
@@ -393,7 +425,7 @@ def create_app(
             context = cast(
                 dict[str, Any], {"state": state, "telemetry_samples": samples}
             )
-        result = await task_service.infer_task(
+        result = await ts.infer_task(
             OllamaTaskType.TELEMETRY_SUMMARY,
             context,
         )
@@ -410,18 +442,19 @@ def create_app(
                 if _preprocessor is not None
                 else len(samples)
             ),
-            "provider": task_service.provider,
+            "provider": ts.provider,
         }
 
     @app.post("/ai/event-classification")
     async def post_event_classification() -> dict:
         """Request AI classification of recent system events. Returns EventClassificationResult."""
-        if task_service is None:
+        ts = _get_task_service()
+        if ts is None:
             return {"error": "AI task service not available"}
         events: list = []
         if persistence is not None:
             events = persistence.get_recent_system_events(limit=30)
-        result = await task_service.infer_task(
+        result = await ts.infer_task(
             OllamaTaskType.EVENT_CLASSIFICATION,
             {"events": events},
         )
@@ -435,7 +468,7 @@ def create_app(
             "recommended_checks": list(result.recommended_checks),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "event_count": len(events),
-            "provider": task_service.provider,
+            "provider": ts.provider,
         }
 
     @app.get("/recent-detections")
@@ -528,10 +561,9 @@ def create_app(
             },
             "compact": compact.to_dict(),  # compact is not None after check above
         }
-        if generate_summary and task_service is not None:
-            _, _, generated = await get_session_debrief_with_llm(
-                sid, persistence, task_service
-            )
+        ts = _get_task_service()
+        if generate_summary and ts is not None:
+            _, _, generated = await get_session_debrief_with_llm(sid, persistence, ts)
             if generated and not str(generated).startswith(
                 "Debrief summary unavailable:"
             ):
@@ -568,14 +600,206 @@ def create_app(
 
     @app.get("/settings")
     def get_settings_endpoint() -> dict:
-        """Return current settings (telemetry, AI, serial, etc.)."""
-        return {"settings": get_settings(), "restart_required": True}
+        """Return raw saved settings, effective runtime settings, apply modes, and Ollama status."""
+        raw = get_raw_settings()
+        effective = get_effective_settings()
+        apply_modes = dict(get_apply_modes())
+        if _mission_logic is not None:
+            apply_modes["AI_MIN_CONFIDENCE"] = "live"
+            apply_modes["AI_DUPLICATE_WINDOW_SEC"] = "live"
+        if _reload_ai_fn is not None:
+            for k in (
+                "LOCAL_LLM_PROVIDER",
+                "LOCAL_LLM_BASE_URL",
+                "LOCAL_LLM_MODEL",
+                "LOCAL_LLM_TIMEOUT",
+                "OLLAMA_NUM_THREAD",
+            ):
+                apply_modes[k] = "live"
+        if _reload_telemetry_fn is not None:
+            for k in ("TELEMETRY_BACKEND", "SERIAL_PORT", "SERIAL_BAUD"):
+                apply_modes[k] = "live"
+        provider_reason = get_provider_reason()
+
+        ollama_result = check_ollama_ready(
+            get_local_llm_base_url("ollama"),
+            model=get_local_llm_model("ollama"),
+            timeout_sec=2.0,
+        )
+        ollama_ready = ollama_result.ready
+        ollama_available = ollama_result.reason != "unreachable"
+
+        backend = get_telemetry_backend()
+        provider = get_local_llm_provider()
+        if backend == "serial":
+            active_telemetry = f"serial @ {get_serial_port()}"
+        else:
+            active_telemetry = backend
+        if provider == "ollama":
+            active_ai = f"ollama ({get_local_llm_model('ollama')})"
+        else:
+            active_ai = provider
+        active_summary = f"Telemetry: {active_telemetry} · AI: {active_ai}"
+
+        return {
+            "settings": raw,
+            "effective_settings": effective,
+            "apply_modes": apply_modes,
+            "ollama_available": ollama_available,
+            "ollama_ready": ollama_ready,
+            "provider_reason": provider_reason,
+            "active_summary": active_summary,
+        }
+
+    AI_SUBSYSTEM_KEYS = frozenset(
+        {
+            "LOCAL_LLM_PROVIDER",
+            "LOCAL_LLM_BASE_URL",
+            "LOCAL_LLM_MODEL",
+            "LOCAL_LLM_TIMEOUT",
+            "OLLAMA_NUM_THREAD",
+        }
+    )
+    TELEMETRY_SUBSYSTEM_KEYS = frozenset(
+        {"TELEMETRY_BACKEND", "SERIAL_PORT", "SERIAL_BAUD"}
+    )
 
     @app.post("/settings")
-    def post_settings(updates: dict = Body(...)) -> dict:
-        """Save settings to file. Restart the app to apply changes."""
+    async def post_settings(updates: dict = Body(...)) -> dict:
+        """Save settings to file. Returns structured result with apply-mode info."""
+        from airautomatica.settings import CANONICAL_SETTINGS_KEYS
+
+        changed_keys = [k for k in updates if k in CANONICAL_SETTINGS_KEYS]
+        provider_before = get_local_llm_provider()
         save_settings(updates)
-        return {"ok": True, "message": "Settings saved. Restart the app to apply."}
+
+        reconfigured_keys: list[str] = []
+        if _mission_logic is not None:
+            mission_keys = {"AI_MIN_CONFIDENCE", "AI_DUPLICATE_WINDOW_SEC"}
+            if mission_keys & set(changed_keys):
+                min_conf = (
+                    get_ai_min_confidence() if "AI_MIN_CONFIDENCE" in updates else None
+                )
+                dup_win = (
+                    get_ai_duplicate_window_sec()
+                    if "AI_DUPLICATE_WINDOW_SEC" in updates
+                    else None
+                )
+                _mission_logic.reconfigure(
+                    min_confidence=min_conf,
+                    duplicate_window_sec=dup_win,
+                )
+                reconfigured_keys = [k for k in changed_keys if k in mission_keys]
+
+        ai_reloaded_keys: list[str] = []
+        ai_reload_error: Optional[str] = None
+        ai_subsystem_changed = AI_SUBSYSTEM_KEYS & set(changed_keys)
+        if _reload_ai_fn is not None and ai_subsystem_changed:
+            result = _reload_ai_fn(provider_before)
+            if isinstance(result, ReloadResult):
+                if result.success:
+                    ai_reloaded_keys = [
+                        k for k in changed_keys if k in AI_SUBSYSTEM_KEYS
+                    ]
+                else:
+                    ai_reload_error = result.error
+
+        telemetry_reloaded_keys: list[str] = []
+        telemetry_reload_error: Optional[str] = None
+        telemetry_subsystem_changed = TELEMETRY_SUBSYSTEM_KEYS & set(changed_keys)
+        if _reload_telemetry_fn is not None and telemetry_subsystem_changed:
+            backend = get_telemetry_backend()
+            port = get_serial_port()
+            valid, validation_err = validate_serial_config(backend, port)
+            if not valid:
+                telemetry_reload_error = validation_err
+            else:
+                tel_result = await _reload_telemetry_fn()
+                if isinstance(tel_result, TelemetryReconnectResult):
+                    if tel_result.success:
+                        telemetry_reloaded_keys = [
+                            k for k in changed_keys if k in TELEMETRY_SUBSYSTEM_KEYS
+                        ]
+                    else:
+                        telemetry_reload_error = tel_result.error
+
+        live_keys = [k for k in changed_keys if SETTING_APPLY_MODES.get(k) == "live"]
+        live_keys.extend(reconfigured_keys)
+        live_keys.extend(ai_reloaded_keys)
+        live_keys.extend(telemetry_reloaded_keys)
+        reconnect_keys = [
+            k
+            for k in changed_keys
+            if SETTING_APPLY_MODES.get(k) == "reconnect"
+            and k not in reconfigured_keys
+            and k not in ai_reloaded_keys
+            and k not in telemetry_reloaded_keys
+        ]
+        restart_keys = [
+            k
+            for k in changed_keys
+            if SETTING_APPLY_MODES.get(k) == "restart"
+            and k not in telemetry_reloaded_keys
+        ]
+
+        restart_required = len(restart_keys) > 0
+        reconnect_required = len(reconnect_keys) > 0
+
+        if live_keys and not reconnect_required and not restart_required:
+            message = "Settings saved. Changes apply immediately."
+        elif ai_reload_error or telemetry_reload_error:
+            errors = []
+            if ai_reload_error:
+                errors.append(f"AI reload failed: {ai_reload_error}")
+            if telemetry_reload_error:
+                errors.append(f"Telemetry reconnect failed: {telemetry_reload_error}")
+            message = "Settings saved. " + "; ".join(errors)
+            if live_keys:
+                message += f" {len(live_keys)} other changes apply immediately."
+        elif reconnect_required and not restart_required:
+            message = "Settings saved. Some changes take effect after reconnect support is added."
+        elif restart_required:
+            parts = ["Settings saved."]
+            if live_keys:
+                parts.append(f"{len(live_keys)} apply immediately.")
+            if ai_reload_error:
+                parts.append(f"AI reload failed: {ai_reload_error}.")
+            if telemetry_reload_error:
+                parts.append(f"Telemetry reconnect failed: {telemetry_reload_error}.")
+            if reconnect_required:
+                parts.append(
+                    f"{len(reconnect_keys)} take effect after reconnect support is added."
+                )
+            parts.append(f"{len(restart_keys)} require app restart.")
+            message = " ".join(parts)
+        else:
+            message = "Settings saved."
+
+        backend = get_telemetry_backend()
+        provider = get_local_llm_provider()
+        if backend == "serial":
+            active_telemetry = f"serial @ {get_serial_port()}"
+        else:
+            active_telemetry = backend
+        if provider == "ollama":
+            active_ai = f"ollama ({get_local_llm_model('ollama')})"
+        else:
+            active_ai = provider
+        active_summary = f"Telemetry: {active_telemetry} · AI: {active_ai}"
+
+        return {
+            "ok": True,
+            "message": message,
+            "changed_keys": changed_keys,
+            "live": live_keys,
+            "reconnect": reconnect_keys,
+            "restart": restart_keys,
+            "restart_required": restart_required,
+            "reconnect_required": reconnect_required,
+            "active_telemetry_backend": backend,
+            "active_ai_provider": provider,
+            "active_summary": active_summary,
+        }
 
     @app.post("/camera/ready")
     def post_camera_ready(body: dict = Body(...)) -> dict:

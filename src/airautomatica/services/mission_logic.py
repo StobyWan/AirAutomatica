@@ -131,6 +131,23 @@ class MissionLogic:
         self._last_ai_time: float = 0.0
         self._last_accepted: dict[str, float] = {}
 
+    def set_ai_service(self, ai_service: Optional["AiService"]) -> None:
+        """Replace the AI service at runtime. Used by AI subsystem hot-reload."""
+        self._ai_service = ai_service
+
+    def reconfigure(
+        self,
+        min_confidence: Optional[float] = None,
+        duplicate_window_sec: Optional[float] = None,
+    ) -> None:
+        """Update min_confidence and/or duplicate_window_sec at runtime.
+        Safe to call from settings handler; values take effect on next process_result.
+        """
+        if min_confidence is not None:
+            self._min_confidence = max(0.0, min(1.0, min_confidence))
+        if duplicate_window_sec is not None:
+            self._duplicate_window_sec = max(0.0, duplicate_window_sec)
+
     def _get_ignore_reason(self, result: AiResult) -> str:
         """Reason why a result was ignored. Empty string means accept."""
         norm = _normalize_label(result.label or "")

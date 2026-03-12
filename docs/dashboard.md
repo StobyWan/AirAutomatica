@@ -51,7 +51,25 @@ Configure telemetry, AI provider, AI HAT, and mission logic. Grouped into:
 - **AI HAT**: Additive checkbox; runs alongside the selected provider on Pi 5, not instead of it.
 - **Advanced** (collapsible): Min confidence, duplicate window.
 
-Settings are saved to `~/.airautomatica/settings.json`; restart required to apply. The UI uses canonical keys only (`LOCAL_LLM_PROVIDER`, `AI_HAT_ENABLED`, etc.).
+Settings are saved to `~/.airautomatica/settings.json`. Some apply immediately (live); others require reconnect or app restart. The UI shows apply hints per section and uses canonical keys only (`LOCAL_LLM_PROVIDER`, `AI_HAT_ENABLED`, etc.).
+
+### Settings that apply live (no restart)
+
+- **CAMERA_RECORDING_MODE** — RecordingAutoController reads on each call
+- **SESSION_AUTO_START_ON_ARM** — SessionAutoController reads on each call
+- **AI_SCHEDULER_COOLDOWN_SEC** — AiInferenceScheduler reads on each cooldown
+- **AI_MIN_CONFIDENCE** — MissionLogic.reconfigure() when MissionLogic is available
+- **AI_DUPLICATE_WINDOW_SEC** — MissionLogic.reconfigure() when MissionLogic is available
+- **AI subsystem (when hot-reload is available)** — `LOCAL_LLM_PROVIDER`, `LOCAL_LLM_BASE_URL`, `LOCAL_LLM_MODEL`, `LOCAL_LLM_TIMEOUT`, `OLLAMA_NUM_THREAD` apply immediately via AI subsystem hot-reload, without restart
+- **Telemetry (when reconnect is available)** — `TELEMETRY_BACKEND`, `SERIAL_PORT`, `SERIAL_BAUD` apply immediately via telemetry reconnect, without restart
+
+**AI subsystem hot-reload:** When the runtime holder is available (normal app startup), changing AI provider/model/URL/timeout/threads triggers a reload of the active AI and task services. The new services are swapped in atomically; MissionLogic and API handlers use the updated services on the next request. If reload fails (e.g. provider change mock↔ollama, or Ollama unreachable), the old services remain active and the save response reports the failure truthfully. Provider changes require a full app restart.
+
+**Telemetry reconnect:** When the telemetry controller is available (normal app startup), changing backend/port/baud stops the current telemetry source, creates a new one from the updated config, and restarts the loop. Serial port is validated before reconnect (must exist on Unix); invalid config fails fast with a clear error. If reconnect fails, the old source is restarted and the save response reports the failure truthfully.
+
+**Phase 5 UX:** The settings UI shows progress during save (e.g. "Saving… (reconnecting telemetry)") when telemetry or AI subsystem changes are being applied. After save, the active backend and provider are displayed (e.g. "Telemetry: mock · AI: mock").
+
+When MissionLogic is unavailable (e.g. in some test setups), AI_MIN_CONFIDENCE and AI_DUPLICATE_WINDOW_SEC take effect after reconnect support or restart.
 
 ## Data Sources
 

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -183,6 +184,19 @@ def get_serial_baud() -> int:
         return int(os.environ.get("SERIAL_BAUD", "921600"))
     except ValueError:
         return 921600
+
+
+def validate_serial_config(backend: str, port: str) -> tuple[bool, str | None]:
+    """Validate serial config before reconnect. Returns (ok, error_message).
+    For mock backend, always ok. For serial, checks port exists on Unix."""
+    if backend != "serial":
+        return True, None
+    if not port or not port.strip():
+        return False, "Serial port is required when using serial backend"
+    port_path = Path(port.strip())
+    if sys.platform in ("linux", "darwin") and not port_path.exists():
+        return False, f"Serial port {port!r} not found"
+    return True, None
 
 
 def get_api_host() -> str:
