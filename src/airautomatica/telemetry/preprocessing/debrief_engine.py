@@ -28,7 +28,14 @@ def _sample_to_state(
     home_lon: float | None,
     climb_rate_m_s: float = 0.0,
 ) -> AircraftState:
-    """Convert debrief sample dict to AircraftState."""
+    """Convert debrief sample dict to AircraftState.
+
+    Legacy fallbacks for NULL new fields (older sessions):
+    - armed: assume True when missing
+    - climb_rate_m_s: use passed derived value when missing
+    - home_lat/home_lon: use session home (first sample) when missing
+    - gps_fix_type/satellites_visible: pass None; EventEngine skips GPS logic
+    """
     ts: datetime | None = sample.get("timestamp")
     if isinstance(ts, str):
         ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -66,6 +73,30 @@ def _sample_to_state(
     if connected is None:
         connected = True
 
+    # Legacy fallback: missing armed -> assume True
+    armed_val = sample.get("armed")
+    armed = bool(armed_val) if armed_val is not None else True
+
+    # Legacy fallback: missing climb_rate_m_s -> use derived from alt delta
+    stored_climb = sample.get("climb_rate_m_s")
+    climb = float(stored_climb) if _valid(stored_climb) else climb_rate_m_s
+
+    # Legacy fallback: missing home -> use session home (first sample)
+    sample_home_lat = sample.get("home_lat")
+    sample_home_lon = sample.get("home_lon")
+    if _valid(sample_home_lat) and _valid(sample_home_lon):
+        use_home_lat = float(sample_home_lat)
+        use_home_lon = float(sample_home_lon)
+    else:
+        use_home_lat = home_lat
+        use_home_lon = home_lon
+
+    # GPS fields: pass through; EventEngine skips gps_degraded when both None
+    gps_fix = sample.get("gps_fix_type")
+    sats = sample.get("satellites_visible")
+    gps_fix_type = int(gps_fix) if gps_fix is not None else None
+    satellites_visible = int(sats) if sats is not None else None
+
     return AircraftState(
         connected=bool(connected),
         heartbeat=0,
@@ -82,10 +113,12 @@ def _sample_to_state(
         groundspeed_m_s=gs,
         airspeed_m_s=air,
         timestamp=ts,
-        armed=True,
-        climb_rate_m_s=climb_rate_m_s,
-        home_lat=home_lat,
-        home_lon=home_lon,
+        armed=armed,
+        climb_rate_m_s=climb,
+        home_lat=use_home_lat,
+        home_lon=use_home_lon,
+        gps_fix_type=gps_fix_type,
+        satellites_visible=satellites_visible,
     )
 
 

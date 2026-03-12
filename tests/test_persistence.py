@@ -10,7 +10,13 @@ import pytest
 from sqlalchemy import select
 
 from airautomatica.db.base import create_db_engine, enable_wal, get_engine, init_db
-from airautomatica.db.models import PathPoint, SystemEvent, TelemetrySample
+from airautomatica.db.models import (
+    FlightEvent,
+    PathPoint,
+    PhaseInterval,
+    SystemEvent,
+    TelemetrySample,
+)
 from airautomatica.db.session import get_session
 from airautomatica.models.state import AircraftState, TelemetryStatus
 from airautomatica.services.persistence import (
@@ -133,6 +139,69 @@ def test_insert_telemetry_sample_nan_to_none() -> None:
             assert rows[0].lat is None
             assert rows[0].lon is None
             assert rows[0].rel_alt_m is None
+
+
+def test_insert_telemetry_sample_watts_stored_only_when_both_valid() -> None:
+    """Watts stored only when voltage_v and current_a both valid; else NULL."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        now = datetime.now(timezone.utc)
+
+        state_valid = AircraftState(
+            connected=True,
+            heartbeat=1,
+            mode="GUIDED",
+            lat=37.5,
+            lon=-122.2,
+            rel_alt_m=100.0,
+            heading_deg=90.0,
+            roll_rad=0.0,
+            pitch_rad=0.0,
+            yaw_rad=0.0,
+            voltage_v=12.5,
+            current_a=5.0,
+            groundspeed_m_s=10.0,
+            airspeed_m_s=12.0,
+            timestamp=now,
+            telemetry_status="connected",
+        )
+        persistence.insert_telemetry_sample(session_id, state_valid)
+
+        state_nan_v = AircraftState(
+            connected=True,
+            heartbeat=1,
+            mode="GUIDED",
+            lat=37.5,
+            lon=-122.2,
+            rel_alt_m=100.0,
+            heading_deg=90.0,
+            roll_rad=0.0,
+            pitch_rad=0.0,
+            yaw_rad=0.0,
+            voltage_v=float("nan"),
+            current_a=5.0,
+            groundspeed_m_s=10.0,
+            airspeed_m_s=12.0,
+            timestamp=now + timedelta(seconds=1),
+            telemetry_status="connected",
+        )
+        persistence.insert_telemetry_sample(session_id, state_nan_v)
+
+        with get_session() as session:
+            assert session is not None
+            result = session.execute(
+                select(TelemetrySample)
+                .where(TelemetrySample.session_id == session_id)
+                .order_by(TelemetrySample.timestamp.asc())
+            )
+            rows = result.scalars().all()
+            assert len(rows) == 2
+            assert rows[0].watts == 62.5  # 12.5 * 5.0
+            assert rows[1].watts is None
 
 
 def test_get_recent_detections_empty_when_no_engine() -> None:
@@ -316,6 +385,74 @@ def test_get_generated_debrief_at() -> None:
         persistence.save_generated_debrief(session_id, "Flight completed.")
         at = persistence.get_generated_debrief_at(session_id)
         assert at is not None
+
+
+def test_insert_flight_event_and_get_session_flight_events() -> None:
+    """insert_flight_event persists; get_session_flight_events returns oldest first."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        base = datetime.now(timezone.utc)
+        persistence.insert_flight_event(
+            session_id=session_id,
+            event_name="gps_degraded",
+            severity="warn",
+            started_at=base,
+            ended_at=base + timedelta(seconds=10),
+            evidence={"satellites_visible": 4, "gps_fix_type": 2},
+            operator_hint="Check antenna",
+        )
+        persistence.insert_flight_event(
+            session_id=session_id,
+            event_name="battery_sag",
+            severity="warn",
+            started_at=base + timedelta(seconds=5),
+            ended_at=base + timedelta(seconds=15),
+            evidence={"voltage_v": 10.5},
+        )
+
+        events = persistence.get_session_flight_events(session_id)
+        assert len(events) == 2
+        assert events[0]["event_name"] == "gps_degraded"
+        assert events[0]["severity"] == "warn"
+        assert events[0]["evidence"] == {"satellites_visible": 4, "gps_fix_type": 2}
+        assert events[0]["operator_hint"] == "Check antenna"
+        assert events[1]["event_name"] == "battery_sag"
+
+
+def test_insert_phase_interval_and_get_session_phase_intervals() -> None:
+    """insert_phase_interval persists; get_session_phase_intervals returns oldest first."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        base = datetime.now(timezone.utc)
+        persistence.insert_phase_interval(
+            session_id=session_id,
+            phase="cruise",
+            started_at=base,
+            ended_at=base + timedelta(seconds=60),
+        )
+        persistence.insert_phase_interval(
+            session_id=session_id,
+            phase="rtl",
+            started_at=base + timedelta(seconds=60),
+            ended_at=base + timedelta(seconds=120),
+        )
+
+        intervals = persistence.get_session_phase_intervals(session_id)
+        assert len(intervals) == 2
+        assert intervals[0]["phase"] == "cruise"
+        assert intervals[1]["phase"] == "rtl"
+        assert "started_at" in intervals[0]
+        assert "ended_at" in intervals[0]
 
 
 def test_get_recent_sessions_includes_detection_count() -> None:

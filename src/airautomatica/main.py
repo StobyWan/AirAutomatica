@@ -67,8 +67,10 @@ from airautomatica.services.camera_recording import (
 from airautomatica.services.connection_state_store import ConnectionStateStore
 from airautomatica.services.mission_logic import MissionLogic
 from airautomatica.services.persistence import (
+    EventPersistenceRecorder,
     PathRecorder,
     PersistenceService,
+    PhasePersistenceRecorder,
     TelemetryLifecycleLogger,
     TelemetrySampler,
 )
@@ -208,6 +210,8 @@ async def _telemetry_loop(
     recording_auto_controller: RecordingAutoController | None = None,
     session_auto_controller: SessionAutoController | None = None,
     preprocessor: TelemetryPreprocessor | None = None,
+    event_recorder: EventPersistenceRecorder | None = None,
+    phase_recorder: PhasePersistenceRecorder | None = None,
 ) -> None:
     """Consume telemetry stream and update store."""
     async for state in source.stream():
@@ -220,6 +224,10 @@ async def _telemetry_loop(
             path_recorder.maybe_record(state)
         if lifecycle_logger is not None:
             lifecycle_logger.maybe_log_transition(state)
+        if event_recorder is not None:
+            event_recorder.maybe_persist_events(state.timestamp)
+        if phase_recorder is not None:
+            phase_recorder.maybe_persist_phase(state.timestamp)
         if recording_auto_controller is not None:
             recording_auto_controller.maybe_auto_record(state)
         if session_auto_controller is not None:
@@ -366,8 +374,20 @@ def main() -> None:
     )
 
     preprocessor: TelemetryPreprocessor | None = None
+    event_recorder: EventPersistenceRecorder | None = None
+    phase_recorder: PhasePersistenceRecorder | None = None
     if get_preprocessing_enabled():
         preprocessor = TelemetryPreprocessor()
+        event_recorder = EventPersistenceRecorder(
+            persistence,
+            session_ref,
+            preprocessor.get_recent_events,
+        )
+        phase_recorder = PhasePersistenceRecorder(
+            persistence,
+            session_ref,
+            lambda: preprocessor.get_summary().phase,
+        )
         logger.debug("Telemetry preprocessing enabled")
 
     def _end_session() -> None:
@@ -409,6 +429,8 @@ def main() -> None:
                 recording_auto_controller,
                 session_auto_controller,
                 preprocessor,
+                event_recorder,
+                phase_recorder,
                 name="telemetry",
             )
         )

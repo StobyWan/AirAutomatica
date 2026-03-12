@@ -5,6 +5,7 @@ import logging
 import math
 import threading
 import time
+import typing
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -19,8 +20,10 @@ from airautomatica.db.base import get_engine
 from airautomatica.db.models import (
     CommandSent,
     Detection,
+    FlightEvent,
     FlightSession,
     PathPoint,
+    PhaseInterval,
     SystemEvent,
     TelemetrySample,
 )
@@ -155,9 +158,18 @@ class PersistenceService:
             return (None, None)
 
     def insert_telemetry_sample(self, session_id: int, state: "AircraftState") -> None:
-        """Insert telemetry_samples row. Converts NaN to None."""
+        """Insert telemetry_samples row. Converts NaN to None.
+
+        Watts is stored only when both voltage_v and current_a are valid;
+        otherwise NULL (never 0) to keep replay and charting honest.
+        """
         if get_engine() is None:
             return
+        v = nan_to_none(state.voltage_v)
+        i = nan_to_none(state.current_a)
+        watts_val: float | None = None
+        if v is not None and i is not None:
+            watts_val = v * i
         try:
             with get_session() as session:
                 if session is None:
@@ -173,8 +185,8 @@ class PersistenceService:
                     roll_rad=nan_to_none(state.roll_rad),
                     pitch_rad=nan_to_none(state.pitch_rad),
                     yaw_rad=nan_to_none(state.yaw_rad),
-                    voltage_v=nan_to_none(state.voltage_v),
-                    current_a=nan_to_none(state.current_a),
+                    voltage_v=v,
+                    current_a=i,
                     groundspeed_m_s=nan_to_none(state.groundspeed_m_s),
                     airspeed_m_s=nan_to_none(state.airspeed_m_s),
                     mode=state.mode or None,
@@ -184,6 +196,13 @@ class PersistenceService:
                     last_heartbeat_at=state.last_heartbeat_at,
                     last_disconnect_reason=state.last_disconnect_reason,
                     connected=state.connected,
+                    armed=state.armed,
+                    climb_rate_m_s=nan_to_none(state.climb_rate_m_s),
+                    gps_fix_type=state.gps_fix_type,
+                    satellites_visible=state.satellites_visible,
+                    home_lat=nan_to_none(state.home_lat),
+                    home_lon=nan_to_none(state.home_lon),
+                    watts=watts_val,
                 )
                 session.add(row)
         except Exception as e:
@@ -587,6 +606,7 @@ class PersistenceService:
                         "airspeed_m_s": r.airspeed_m_s,
                         "connected": r.connected,
                         "reconnect_count": r.reconnect_count,
+                        "watts": r.watts,
                     }
                     for r in rows
                 ]
@@ -630,6 +650,13 @@ class PersistenceService:
                         "yaw_rad": r.yaw_rad,
                         "airspeed_m_s": r.airspeed_m_s,
                         "connected": r.connected,
+                        "armed": r.armed,
+                        "climb_rate_m_s": r.climb_rate_m_s,
+                        "gps_fix_type": r.gps_fix_type,
+                        "satellites_visible": r.satellites_visible,
+                        "home_lat": r.home_lat,
+                        "home_lon": r.home_lon,
+                        "watts": r.watts,
                     }
                     for r in rows
                 ]
@@ -722,6 +749,273 @@ class PersistenceService:
         except Exception as e:
             self._record_error(str(e))
             logger.exception("insert_command_sent failed: %s", e)
+
+    def insert_flight_event(
+        self,
+        session_id: int,
+        event_name: str,
+        severity: str,
+        started_at: datetime,
+        ended_at: datetime | None = None,
+        evidence: dict | None = None,
+        operator_hint: str | None = None,
+    ) -> None:
+        """Insert flight_events row. EventEngine output."""
+        if get_engine() is None:
+            return
+        try:
+            evidence_json = json.dumps(evidence) if evidence else None
+            with get_session() as session:
+                if session is None:
+                    return
+                row = FlightEvent(
+                    session_id=session_id,
+                    event_name=event_name,
+                    severity=severity,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    evidence_json=evidence_json,
+                    operator_hint=operator_hint,
+                )
+                session.add(row)
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("insert_flight_event failed: %s", e)
+
+    def get_session_flight_events(
+        self,
+        session_id: int,
+        limit: int = 200,
+    ) -> list[dict]:
+        """Fetch flight events for session, oldest first. For replay timeline."""
+        if get_engine() is None or session_id is None:
+            return []
+        try:
+            with get_session() as session:
+                if session is None:
+                    return []
+                result = session.execute(
+                    select(FlightEvent)
+                    .where(FlightEvent.session_id == session_id)
+                    .order_by(FlightEvent.started_at.asc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                out: list[dict] = []
+                for row in rows:
+                    try:
+                        evidence = (
+                            json.loads(row.evidence_json) if row.evidence_json else {}
+                        )
+                    except json.JSONDecodeError:
+                        evidence = {}
+                    out.append(
+                        {
+                            "id": row.id,
+                            "session_id": row.session_id,
+                            "event_name": row.event_name,
+                            "severity": row.severity,
+                            "started_at": row.started_at.isoformat(),
+                            "ended_at": (
+                                row.ended_at.isoformat() if row.ended_at else None
+                            ),
+                            "evidence": evidence,
+                            "operator_hint": row.operator_hint,
+                        }
+                    )
+                return out
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_session_flight_events failed: %s", e)
+            return []
+
+    def insert_phase_interval(
+        self,
+        session_id: int,
+        phase: str,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> None:
+        """Insert phase_intervals row. FlightPhaseEngine output."""
+        if get_engine() is None:
+            return
+        try:
+            with get_session() as session:
+                if session is None:
+                    return
+                row = PhaseInterval(
+                    session_id=session_id,
+                    phase=phase,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                )
+                session.add(row)
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("insert_phase_interval failed: %s", e)
+
+    def get_session_phase_intervals(
+        self,
+        session_id: int,
+        limit: int = 500,
+    ) -> list[dict]:
+        """Fetch phase intervals for session, oldest first. For replay timeline bands."""
+        if get_engine() is None or session_id is None:
+            return []
+        try:
+            with get_session() as session:
+                if session is None:
+                    return []
+                result = session.execute(
+                    select(PhaseInterval)
+                    .where(PhaseInterval.session_id == session_id)
+                    .order_by(PhaseInterval.started_at.asc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                return [
+                    {
+                        "id": r.id,
+                        "session_id": r.session_id,
+                        "phase": r.phase,
+                        "started_at": r.started_at.isoformat(),
+                        "ended_at": r.ended_at.isoformat(),
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_session_phase_intervals failed: %s", e)
+            return []
+
+
+class EventPersistenceRecorder:
+    """Persists EventEngine output when events close. Tracks open events, persists on close."""
+
+    def __init__(
+        self,
+        persistence: PersistenceService,
+        session_ref: list[int | None],
+        get_events_fn: typing.Callable[[], list],
+    ) -> None:
+        self._persistence = persistence
+        self._session_ref = session_ref
+        self._get_events_fn = get_events_fn
+        self._open_events: dict[str, dict] = {}
+        self._last_session_id: int | None = None
+
+    def maybe_persist_events(self, now: datetime) -> None:
+        """Detect closed events and persist them. Update open-event tracking."""
+        session_id = self._session_ref[0] if self._session_ref else None
+        if session_id is None:
+            if self._last_session_id is not None and self._open_events:
+                self._flush_open_events(self._last_session_id, now)
+                self._open_events.clear()
+            self._last_session_id = None
+            return
+        self._last_session_id = session_id
+        if get_engine() is None:
+            return
+        current = self._get_events_fn()
+        current_names = {e.name for e in current}
+        for name in list(self._open_events.keys()):
+            if name not in current_names:
+                info = self._open_events.pop(name)
+                self._persistence.insert_flight_event(
+                    session_id=session_id,
+                    event_name=name,
+                    severity=info["severity"],
+                    started_at=info["started_at"],
+                    ended_at=now,
+                    evidence=info["evidence"],
+                    operator_hint=info.get("operator_hint"),
+                )
+        for e in current:
+            if e.name not in self._open_events:
+                self._open_events[e.name] = {
+                    "started_at": e.started_at,
+                    "severity": e.severity,
+                    "evidence": dict(e.evidence),
+                    "operator_hint": e.operator_hint,
+                }
+
+    def _flush_open_events(self, session_id: int, ended_at: datetime) -> None:
+        """Persist all open events (e.g. on session end)."""
+        if get_engine() is None:
+            return
+        for name, info in self._open_events.items():
+            self._persistence.insert_flight_event(
+                session_id=session_id,
+                event_name=name,
+                severity=info["severity"],
+                started_at=info["started_at"],
+                ended_at=ended_at,
+                evidence=info["evidence"],
+                operator_hint=info.get("operator_hint"),
+            )
+
+
+class PhasePersistenceRecorder:
+    """Persists FlightPhaseEngine output when phase transitions. Tracks current phase."""
+
+    def __init__(
+        self,
+        persistence: PersistenceService,
+        session_ref: list[int | None],
+        get_phase_fn: typing.Callable[[], str],
+    ) -> None:
+        self._persistence = persistence
+        self._session_ref = session_ref
+        self._get_phase_fn = get_phase_fn
+        self._last_phase: str | None = None
+        self._interval_started_at: datetime | None = None
+        self._last_session_id: int | None = None
+
+    def maybe_persist_phase(self, now: datetime) -> None:
+        """Detect phase transitions and persist closed intervals."""
+        session_id = self._session_ref[0] if self._session_ref else None
+        if session_id is None:
+            if self._last_session_id is not None and self._last_phase is not None:
+                self._flush_open_interval(self._last_session_id, now)
+            self._last_phase = None
+            self._interval_started_at = None
+            self._last_session_id = None
+            return
+        self._last_session_id = session_id
+        if get_engine() is None:
+            return
+        current_phase = self._get_phase_fn()
+        if self._last_phase is None:
+            self._last_phase = current_phase
+            self._interval_started_at = now
+            return
+        if current_phase != self._last_phase:
+            if self._interval_started_at is not None:
+                self._persistence.insert_phase_interval(
+                    session_id=session_id,
+                    phase=self._last_phase,
+                    started_at=self._interval_started_at,
+                    ended_at=now,
+                )
+            self._last_phase = current_phase
+            self._interval_started_at = now
+
+    def _flush_open_interval(self, session_id: int, ended_at: datetime) -> None:
+        """Persist current open interval (e.g. on session end)."""
+        if (
+            get_engine() is None
+            or self._last_phase is None
+            or self._interval_started_at is None
+        ):
+            return
+        self._persistence.insert_phase_interval(
+            session_id=session_id,
+            phase=self._last_phase,
+            started_at=self._interval_started_at,
+            ended_at=ended_at,
+        )
+        self._last_phase = None
+        self._interval_started_at = None
 
 
 class TelemetryLifecycleLogger:
