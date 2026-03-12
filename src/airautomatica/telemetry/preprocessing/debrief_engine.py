@@ -84,6 +84,8 @@ def _sample_to_state(
     # Legacy fallback: missing home -> use session home (first sample)
     sample_home_lat = sample.get("home_lat")
     sample_home_lon = sample.get("home_lon")
+    use_home_lat: float | None
+    use_home_lon: float | None
     if _valid(sample_home_lat) and _valid(sample_home_lon):
         use_home_lat = float(sample_home_lat)
         use_home_lon = float(sample_home_lon)
