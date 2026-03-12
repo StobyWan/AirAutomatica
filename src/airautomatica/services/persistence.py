@@ -573,20 +573,32 @@ class PersistenceService:
         self,
         session_id: int | None,
         limit: int = 60,
+        order: str = "desc",
     ) -> list[dict]:
-        """Fetch recent telemetry samples for session, newest first. Returns [] when DB disabled or on error."""
+        """Fetch telemetry samples for session. Returns [] when DB disabled or on error.
+
+        order: "desc" (newest first, default) or "asc" (oldest first, for replay).
+        limit: max 10000.
+        """
         if get_engine() is None or session_id is None:
             return []
+        limit = min(max(1, limit), 10000)
+        asc = order.lower() == "asc"
         try:
             with get_session() as session:
                 if session is None:
                     return []
-                result = session.execute(
+                stmt = (
                     select(TelemetrySample)
                     .where(TelemetrySample.session_id == session_id)
-                    .order_by(TelemetrySample.timestamp.desc())
+                    .order_by(
+                        TelemetrySample.timestamp.asc()
+                        if asc
+                        else TelemetrySample.timestamp.desc()
+                    )
                     .limit(limit)
                 )
+                result = session.execute(stmt)
                 rows = result.scalars().all()
                 return [
                     {

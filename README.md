@@ -257,6 +257,8 @@ pytest
 
 **Docker**: `docker build -t airautomatica . && docker run -p 8000:8000 airautomatica` — validate at http://localhost:8000/health
 
+**Replay validation** (pre-check): `python scripts/validate_replay.py <session_id>` or `--all` to validate replay sample order (oldest-first, monotonic timestamps). Use `--checklist` to print the full validation checklist.
+
 CI runs format, lint, typecheck, and tests on push/PR.
 
 ## Linux Packaging
