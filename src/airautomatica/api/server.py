@@ -5,7 +5,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
+
+if TYPE_CHECKING:
+    from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
 
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -385,9 +388,11 @@ def create_app(
             samples = persistence.get_recent_telemetry_samples(sid, limit=30)
         if _preprocessor is not None:
             llm_ctx = _preprocessor.get_llm_context()
-            context = {"llm_context": llm_ctx.to_dict()}
+            context = cast(dict[str, Any], {"llm_context": llm_ctx.to_dict()})
         else:
-            context = {"state": state, "telemetry_samples": samples}
+            context = cast(
+                dict[str, Any], {"state": state, "telemetry_samples": samples}
+            )
         result = await task_service.infer_task(
             OllamaTaskType.TELEMETRY_SUMMARY,
             context,
@@ -494,7 +499,7 @@ def create_app(
         if persistence is None:
             raise HTTPException(status_code=404, detail="Persistence not available")
         summary, compact = get_session_debrief(sid, persistence)
-        if summary is None:
+        if summary is None or compact is None:
             raise HTTPException(
                 status_code=404,
                 detail="No telemetry samples for session",
@@ -521,7 +526,7 @@ def create_app(
                 "unstable_attitude_occurred": summary.unstable_attitude_occurred,
                 "assessment_tags": summary.assessment_tags,
             },
-            "compact": compact.to_dict(),
+            "compact": compact.to_dict(),  # compact is not None after check above
         }
         if generate_summary and task_service is not None:
             _, _, generated = await get_session_debrief_with_llm(

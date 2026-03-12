@@ -1,6 +1,7 @@
 """LLM context builder: deterministic, capped payload."""
 
 import math
+from typing import TypeGuard
 
 from airautomatica.models.state import AircraftState
 from airautomatica.telemetry.preprocessing.feature_engine import FeatureSet
@@ -31,7 +32,7 @@ _EVENT_PRIORITY = (
 )
 
 
-def _valid_float(x: float | None) -> bool:
+def _valid_float(x: float | None) -> TypeGuard[float]:
     return x is not None and isinstance(x, (int, float)) and not math.isnan(x)
 
 

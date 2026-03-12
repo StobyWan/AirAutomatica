@@ -2,8 +2,8 @@
 
 import math
 from dataclasses import dataclass
-from datetime import datetime
-from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, TypeGuard
 
 from airautomatica.models.state import AircraftState
 from airautomatica.telemetry.preprocessing.event_engine import EventEngine
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from airautomatica.services.persistence import PersistenceService
 
 
-def _valid(x: float | None) -> bool:
+def _valid(x: Any) -> TypeGuard[float]:
     return x is not None and isinstance(x, (int, float)) and not math.isnan(x)
 
 
@@ -29,9 +29,11 @@ def _sample_to_state(
     climb_rate_m_s: float = 0.0,
 ) -> AircraftState:
     """Convert debrief sample dict to AircraftState."""
-    ts = sample.get("timestamp")
+    ts: datetime | None = sample.get("timestamp")
     if isinstance(ts, str):
         ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    if ts is None:
+        ts = datetime.now(timezone.utc)
     lat = sample.get("lat")
     lon = sample.get("lon")
     if lat is None:
@@ -180,7 +182,7 @@ class DebriefEngine:
             home_lon = float(first_lon)
 
         phase_duration_sec: dict[str, float] = {}
-        event_active_samples: dict[str, int] = {}
+        event_active_samples: dict[str, float] = {}
         event_occurred: dict[str, bool] = {}
         powers: list[float] = []
         voltages: list[float] = []

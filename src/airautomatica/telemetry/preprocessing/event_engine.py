@@ -3,14 +3,14 @@
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal, TypeGuard
 
 from airautomatica.models.state import AircraftState
 from airautomatica.telemetry.preprocessing.feature_engine import FeatureSet
 from airautomatica.telemetry.preprocessing.models import TelemetryEvent
 
 
-def _valid(x: float | None) -> bool:
+def _valid(x: Any) -> TypeGuard[float]:
     return x is not None and isinstance(x, (int, float)) and not math.isnan(x)
 
 
