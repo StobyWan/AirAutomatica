@@ -40,7 +40,7 @@ Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `htt
 |------|----------|
 | **Mock** | None — runs on any OS |
 | **Serial MAVLink** | Raspberry Pi 5 (or compatible Debian/ARM), ArduPilot flight controller (e.g. Matek F405-WING), USB-to-TTL adapter (CP2102/FTDI), power (5V 5A buck, fuse, USB-C pigtail) |
-| **Ollama AI** | Same as above; Ollama runs on the Pi or a separate machine |
+| **Ollama AI** | Same as above; Ollama runs on the Pi or a separate machine. See [docs/pi_setup.md](docs/pi_setup.md) for prerequisites (install Ollama, `ollama pull gemma3:1b`, enable Ollama service). |
 | **Future: AI HAT** | Raspberry Pi AI HAT+ (scaffolded only) |
 
 **Serial wiring:** FC UART TX → CP2102 RX; FC UART RX → CP2102 TX; FC GND → CP2102 GND. See [docs/example_hardware.md](docs/example_hardware.md) for full reference.
@@ -101,6 +101,7 @@ All settings come from environment variables. Copy `.env.example` to `.env` and 
 | `LOCAL_LLM_MODEL` | `gemma3:1b` | Ollama model name |
 | `LOCAL_LLM_TIMEOUT` | `30` | Local LLM request timeout (seconds) |
 | `OLLAMA_NUM_THREAD` | `4` | Ollama inference threads (1-8); lower reduces Pi 5 CPU/heat |
+| `OLLAMA_REQUIRED` | `0` | If `1`, startup fails when Ollama not ready (default: degraded mode). `AIRAUTOMATICA_OLLAMA_REQUIRED` overrides. |
 | `AI_HAT_ENABLED` | `0` | Enable AI HAT layer alongside local LLM (additive; Pi 5) |
 | `AI_MIN_CONFIDENCE` | `0.5` | Min confidence to persist detection (0–1) |
 | `AI_DUPLICATE_WINDOW_SEC` | `30` | Seconds to suppress same-label duplicate |

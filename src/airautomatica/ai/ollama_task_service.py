@@ -8,11 +8,13 @@ from airautomatica.ai.json_utils import extract_json
 from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.ollama_tasks import (
+    DebriefSummaryResult,
     EventClassificationResult,
     OllamaTaskType,
     TelemetrySummaryResult,
     build_prompt,
     get_format_for_task,
+    parse_debrief_summary_response,
     parse_event_classification_response,
     parse_perception_response,
     parse_telemetry_summary_response,
@@ -20,7 +22,12 @@ from airautomatica.ai.ollama_tasks import (
 
 logger = logging.getLogger(__name__)
 
-OllamaTaskResult = Union[AiResult, TelemetrySummaryResult, EventClassificationResult]
+OllamaTaskResult = Union[
+    AiResult,
+    TelemetrySummaryResult,
+    EventClassificationResult,
+    DebriefSummaryResult,
+]
 
 
 class _GenerateRawProtocol(Protocol):
@@ -111,6 +118,10 @@ def _mock_result(task_type: OllamaTaskType) -> OllamaTaskResult:
             likely_causes=(),
             recommended_checks=(),
         )
+    if task_type == OllamaTaskType.DEBRIEF_SUMMARY:
+        return DebriefSummaryResult(
+            summary="Mock post-flight summary. Session completed normally.",
+        )
     return TelemetrySummaryResult(
         status="unknown", summary="", concerns=(), recommendations=()
     )
@@ -141,6 +152,10 @@ def _fallback_result(task_type: OllamaTaskType, reason: str) -> OllamaTaskResult
             likely_causes=(),
             recommended_checks=(),
         )
+    if task_type == OllamaTaskType.DEBRIEF_SUMMARY:
+        return DebriefSummaryResult(
+            summary=f"Debrief summary unavailable: {reason[:150]}",
+        )
     return TelemetrySummaryResult(
         status="error", summary=reason[:200], concerns=(), recommendations=()
     )
@@ -156,4 +171,6 @@ def _parse_task_result(
         return parse_telemetry_summary_response(raw)
     if task_type == OllamaTaskType.EVENT_CLASSIFICATION:
         return parse_event_classification_response(raw)
+    if task_type == OllamaTaskType.DEBRIEF_SUMMARY:
+        return parse_debrief_summary_response(raw)
     return parse_telemetry_summary_response(raw)

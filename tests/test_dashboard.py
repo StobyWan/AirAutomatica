@@ -35,6 +35,24 @@ def test_session_detail_route_exists(client: TestClient) -> None:
     assert "path-list" in r.text
 
 
+def test_session_detail_includes_debrief_section(client: TestClient) -> None:
+    """Session detail HTML includes debrief section IDs and generate/regenerate buttons."""
+    r = client.get("/dashboard/sessions/1")
+    assert r.status_code == 200
+    html = r.text
+    assert 'id="debrief-section"' in html
+    assert 'id="debrief-loading"' in html
+    assert 'id="debrief-empty"' in html
+    assert 'id="debrief-structured"' in html
+    assert 'id="debrief-summary-card"' in html
+    assert 'id="debrief-summary-generate-btn"' in html
+    assert 'id="debrief-summary-regenerate-btn"' in html
+    assert 'id="debrief-summary-placeholder"' in html
+    assert 'id="debrief-summary-timestamp"' in html
+    assert "Generate AI Summary" in html
+    assert "Regenerate AI Summary" in html
+
+
 def test_dashboard_includes_ai_observability_rate_labels(client: TestClient) -> None:
     """Dashboard HTML includes perception_acceptance_rate and telemetry_meaningful_rate in health fields."""
     r = client.get("/dashboard")

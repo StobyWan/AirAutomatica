@@ -10,14 +10,17 @@ from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
+    SCHEMA_DEBRIEF_OBJ,
     SCHEMA_EVENT_OBJ,
     SCHEMA_TELEMETRY_OBJ,
+    DebriefSummaryResult,
     EventClassificationResult,
     OllamaTaskType,
     TelemetrySummaryResult,
     build_prompt,
     get_format_for_task,
     get_telemetry_summary_counts,
+    parse_debrief_summary_response,
     parse_event_classification_response,
     parse_perception_response,
     parse_telemetry_summary_response,
@@ -77,12 +80,66 @@ def test_build_prompt_telemetry_summary() -> None:
     assert "Telemetry nominal" in prompt
 
 
+def test_build_prompt_telemetry_summary_with_llm_context() -> None:
+    """Telemetry summary uses llm_context when provided."""
+    llm_ctx = {
+        "phase": "cruise",
+        "mode": "GUIDED",
+        "trend_summary": "phase=cruise, mode=GUIDED. 2.1km from home.",
+        "top_events": [{"name": "gps_degraded", "severity": "warn", "evidence": {}}],
+        "top_metrics": {"voltage_v": 12.2, "rel_alt_m": 100, "groundspeed_m_s": 8},
+    }
+    prompt = build_prompt(OllamaTaskType.TELEMETRY_SUMMARY, {"llm_context": llm_ctx})
+    assert "cruise" in prompt
+    assert "GUIDED" in prompt
+    assert "gps_degraded" in prompt
+    assert "2.1km" in prompt or "2.1" in prompt
+
+
 def test_build_prompt_event_classification() -> None:
     """Event classification prompt is short and factual; schema comes from API format."""
     prompt = build_prompt(OllamaTaskType.EVENT_CLASSIFICATION, {})
     assert len(prompt) > 0
     assert "JSON" in prompt
     assert "Context" in prompt
+
+
+def test_build_prompt_debrief_summary_uses_compact_only() -> None:
+    """Debrief prompt uses compact_debrief only; no raw telemetry."""
+    compact = {
+        "total_duration_sec": 300.0,
+        "dominant_phase": "cruise",
+        "top_3_event_summaries": [
+            "weak_return_margin: 30s",
+            "high_power_draw: 10s",
+            "",
+        ],
+        "top_5_metrics": {
+            "duration_sec": 300.0,
+            "peak_distance_m": 1500.0,
+            "avg_power_w": 80.0,
+            "peak_power_w": 120.0,
+            "min_voltage_v": 11.8,
+        },
+        "assessment_sentence": "5 min flight. Assessment: return_risk.",
+    }
+    prompt = build_prompt(OllamaTaskType.DEBRIEF_SUMMARY, {"compact_debrief": compact})
+    assert "Post-flight" in prompt
+    assert "2-4" in prompt
+    assert "duration=5min" in prompt or "300" in prompt
+    assert "cruise" in prompt
+    assert "weak_return_margin" in prompt
+    assert "return_risk" in prompt
+    assert "JSON" in prompt
+    assert "telemetry" not in prompt.lower() or "telemetry" in prompt  # no raw samples
+    assert "samples" not in prompt.lower()
+
+
+def test_build_prompt_debrief_summary_empty_compact() -> None:
+    """Debrief prompt with empty compact still builds valid prompt."""
+    prompt = build_prompt(OllamaTaskType.DEBRIEF_SUMMARY, {"compact_debrief": {}})
+    assert "Post-flight" in prompt
+    assert "no data" in prompt
 
 
 # --- get_format_for_task ---
@@ -121,6 +178,16 @@ def test_get_format_for_task_returns_json_for_perception() -> None:
     """get_format_for_task returns 'json' for perception_detection."""
     result = get_format_for_task(OllamaTaskType.PERCEPTION_DETECTION)
     assert result == "json"
+
+
+def test_get_format_for_task_returns_schema_for_debrief_summary() -> None:
+    """get_format_for_task returns schema dict for debrief_summary."""
+    result = get_format_for_task(OllamaTaskType.DEBRIEF_SUMMARY)
+    assert isinstance(result, dict)
+    assert result == SCHEMA_DEBRIEF_OBJ
+    assert result["type"] == "object"
+    assert "summary" in result["properties"]
+    assert "summary" in result["required"]
 
 
 # --- Perception parser ---
@@ -508,6 +575,40 @@ def test_parse_event_classification_str_schema_leakage() -> None:
     assert result.recommended_checks == ()
 
 
+# --- Debrief summary parser ---
+
+
+def test_parse_debrief_summary_valid() -> None:
+    """Valid debrief summary parses correctly."""
+    raw = {
+        "summary": "5 min cruise. Weak return margin observed. Monitor battery next flight."
+    }
+    result = parse_debrief_summary_response(raw)
+    assert isinstance(result, DebriefSummaryResult)
+    assert "5 min" in result.summary
+    assert "Weak return" in result.summary
+
+
+def test_parse_debrief_summary_none() -> None:
+    """None input returns empty summary."""
+    result = parse_debrief_summary_response(None)
+    assert result.summary == ""
+
+
+def test_parse_debrief_summary_empty_dict() -> None:
+    """Empty dict returns empty summary."""
+    result = parse_debrief_summary_response({})
+    assert result.summary == ""
+
+
+def test_parse_debrief_summary_truncates_long() -> None:
+    """Very long summary is truncated to 800 chars."""
+    raw = {"summary": "x" * 1000}
+    result = parse_debrief_summary_response(raw)
+    assert len(result.summary) <= 800
+    assert result.summary.endswith("...")
+
+
 # --- Mock-path: OllamaTaskService with provider=mock ---
 
 
@@ -544,6 +645,18 @@ async def test_task_service_mock_perception() -> None:
     assert isinstance(result, AiResult)
     assert result.label == "mock_ok"
     assert result.source_backend == "mock"
+
+
+@pytest.mark.asyncio
+async def test_task_service_mock_debrief_summary() -> None:
+    """Mock provider returns DebriefSummaryResult without Ollama."""
+    svc = OllamaTaskService(provider="mock")
+    result = await svc.infer_task(
+        OllamaTaskType.DEBRIEF_SUMMARY,
+        {"compact_debrief": {"total_duration_sec": 300, "dominant_phase": "cruise"}},
+    )
+    assert isinstance(result, DebriefSummaryResult)
+    assert "Mock" in result.summary or "post-flight" in result.summary.lower()
 
 
 # --- Ollama-path: task service with mocked generate_raw ---

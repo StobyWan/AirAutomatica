@@ -20,6 +20,7 @@ class OllamaTaskType(str, Enum):
     PERCEPTION_DETECTION = "perception_detection"
     TELEMETRY_SUMMARY = "telemetry_summary"
     EVENT_CLASSIFICATION = "event_classification"
+    DEBRIEF_SUMMARY = "debrief_summary"
 
 
 # --- Result dataclasses ---
@@ -46,6 +47,13 @@ class EventClassificationResult:
     recommended_checks: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class DebriefSummaryResult:
+    """Post-flight debrief summary from Llama. 2-4 sentences max."""
+
+    summary: str
+
+
 # --- Context types ---
 
 
@@ -60,12 +68,19 @@ class TelemetrySummaryContext(TypedDict, total=False):
 
     state: AircraftState | None
     telemetry_samples: list[dict[str, Any]]
+    llm_context: dict[str, Any] | None  # Preprocessed LlmContextPayload as dict
 
 
 class EventClassificationContext(TypedDict, total=False):
     """Context for event_classification."""
 
     events: list[dict[str, Any]]
+
+
+class DebriefSummaryContext(TypedDict, total=False):
+    """Context for debrief_summary. Uses CompactDebriefPayload.to_dict() only."""
+
+    compact_debrief: dict[str, Any]
 
 
 # --- JSON Schema objects for Ollama format (schema-based structured outputs) ---
@@ -101,6 +116,15 @@ SCHEMA_EVENT_OBJ: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+SCHEMA_DEBRIEF_OBJ: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+    },
+    "required": ["summary"],
+    "additionalProperties": False,
+}
+
 
 def get_format_for_task(task_type: OllamaTaskType) -> str | dict[str, Any]:
     """Return format for Ollama: schema dict for schema-based tasks, 'json' otherwise."""
@@ -108,6 +132,8 @@ def get_format_for_task(task_type: OllamaTaskType) -> str | dict[str, Any]:
         return SCHEMA_TELEMETRY_OBJ
     if task_type == OllamaTaskType.EVENT_CLASSIFICATION:
         return SCHEMA_EVENT_OBJ
+    if task_type == OllamaTaskType.DEBRIEF_SUMMARY:
+        return SCHEMA_DEBRIEF_OBJ
     return "json"  # perception_detection and unknown
 
 
@@ -124,6 +150,37 @@ _SCHEMA_EVENT = (
 _SCHEMA_PERCEPTION = (
     '{"label":"str","confidence":0-1,"summary":"str","bbox":[x,y,w,h],"action":"str"}'
 )
+_SCHEMA_DEBRIEF = '{"summary":"2-4 sentence post-flight summary."}'
+
+
+def _build_debrief_summary_prompt(compact: dict[str, Any]) -> str:
+    """Build debrief prompt from compact payload only. No raw telemetry."""
+    parts = []
+    if compact.get("total_duration_sec") is not None:
+        mins = int(compact["total_duration_sec"] / 60)
+        parts.append(f"duration={mins}min")
+    if compact.get("dominant_phase"):
+        parts.append(f"dominant_phase={compact['dominant_phase']}")
+    events = compact.get("top_3_event_summaries") or []
+    for e in events[:3]:
+        if e:
+            parts.append(f"event={e}")
+    metrics = compact.get("top_5_metrics") or {}
+    for k, v in metrics.items():
+        if k and v is not None:
+            parts.append(f"{k}={v}")
+    if compact.get("assessment_sentence"):
+        parts.append(f"assessment={compact['assessment_sentence']}")
+    ctx = "\n".join(parts) if parts else "no data"
+    return (
+        "Post-flight summary. Write 2-4 short sentences for the operator. "
+        "1) Summarize the session briefly. 2) Highlight the most important issue or condition if any. "
+        "3) Mention one practical thing to monitor or improve next time. "
+        "Stay grounded in the evidence. No exaggerated certainty. No fabricated causes. "
+        "Return ONLY valid JSON. No markdown.\n"
+        '{"summary":"<2-4 sentences>"}\n'
+        f"Data:\n{ctx}"
+    )
 
 
 def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
@@ -138,17 +195,35 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
         )
 
     if task_type == OllamaTaskType.TELEMETRY_SUMMARY:
-        state = context.get("state")
-        samples = context.get("telemetry_samples") or []
-        ctx_parts = []
-        if state is not None:
-            ctx_parts.append(
-                f"current: mode={state.mode} alt={state.rel_alt_m}m "
-                f"bat={state.voltage_v}V connected={state.connected}"
+        llm_ctx = context.get("llm_context")
+        if llm_ctx is not None:
+            phase = llm_ctx.get("phase", "")
+            mode = llm_ctx.get("mode", "")
+            trend = llm_ctx.get("trend_summary", "")
+            events = llm_ctx.get("top_events") or []
+            metrics = llm_ctx.get("top_metrics") or {}
+            ev_str = (
+                ", ".join(
+                    f"{e.get('name', '')}({e.get('severity', '')})"
+                    for e in events[:3]
+                    if e.get("name")
+                )
+                or "none"
             )
-        if samples:
-            ctx_parts.append(f"recent_samples={min(len(samples), 10)}")
-        ctx = "; ".join(ctx_parts) if ctx_parts else "no data"
+            m_str = ", ".join(f"{k}={v}" for k, v in list(metrics.items())[:5])
+            ctx = f"phase={phase} mode={mode} trend={trend} events=[{ev_str}] metrics=[{m_str}]"
+        else:
+            state = context.get("state")
+            samples = context.get("telemetry_samples") or []
+            ctx_parts = []
+            if state is not None:
+                ctx_parts.append(
+                    f"current: mode={state.mode} alt={state.rel_alt_m}m "
+                    f"bat={state.voltage_v}V connected={state.connected}"
+                )
+            if samples:
+                ctx_parts.append(f"recent_samples={min(len(samples), 10)}")
+            ctx = "; ".join(ctx_parts) if ctx_parts else "no data"
         return (
             "Telemetry analyst. Summarize the most important operational state in one short sentence. "
             "Plain English only. Summary must be meaningful, not a number/mode/heading/battery/altitude value alone. "
@@ -169,6 +244,10 @@ def build_prompt(task_type: OllamaTaskType, context: dict[str, Any]) -> str:
                 parts.append(f"{et}: {msg}")
             ctx = "; ".join(parts)
         return f"Return only valid JSON. No markdown. No explanation.\nContext: {ctx}"
+
+    if task_type == OllamaTaskType.DEBRIEF_SUMMARY:
+        compact = context.get("compact_debrief") or {}
+        return _build_debrief_summary_prompt(compact)
 
     return "Return only valid JSON: {}"
 
@@ -312,6 +391,18 @@ def parse_telemetry_summary_response(
         concerns=_safe_str_list(raw.get("concerns"), "concerns"),
         recommendations=_safe_str_list(raw.get("recommendations"), "recommendations"),
     )
+
+
+def parse_debrief_summary_response(
+    raw: dict[str, Any] | None,
+) -> DebriefSummaryResult:
+    """Parse debrief summary. Never trust raw; coerce to 2-4 sentences."""
+    if raw is None or not isinstance(raw, dict):
+        raw = {}
+    summary = _safe_str(raw.get("summary")) or ""
+    if len(summary) > 800:
+        summary = summary[:797] + "..."
+    return DebriefSummaryResult(summary=summary)
 
 
 def parse_event_classification_response(

@@ -1,0 +1,167 @@
+"""Tests for debrief engine and compact payload."""
+
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
+
+import pytest
+
+from airautomatica.telemetry.preprocessing.debrief_engine import (
+    CompactDebriefPayload,
+    DebriefEngine,
+    DebriefEventStat,
+    DebriefSummary,
+    build_compact_debrief_context,
+)
+
+
+def _make_sample(
+    i: int,
+    lat: float = 37.0,
+    lon: float = -122.0,
+    voltage: float = 12.5,
+    current: float = 5.0,
+    mode: str = "GUIDED",
+    rel_alt: float = 100.0,
+) -> dict:
+    base = datetime(2025, 3, 12, 10, 0, 0, tzinfo=timezone.utc)
+    return {
+        "timestamp": base + timedelta(seconds=i),
+        "lat": lat,
+        "lon": lon,
+        "rel_alt_m": rel_alt,
+        "voltage_v": voltage,
+        "current_a": current,
+        "groundspeed_m_s": 5.0,
+        "mode": mode,
+        "heading_deg": 45.0,
+        "roll_rad": 0.0,
+        "pitch_rad": 0.0,
+        "yaw_rad": 0.0,
+        "airspeed_m_s": 6.0,
+        "connected": True,
+    }
+
+
+def test_debrief_duration_calculation() -> None:
+    """Debrief computes session duration from sample timestamps."""
+    persistence = MagicMock()
+    samples = [_make_sample(i) for i in range(10)]
+    persistence.get_session_telemetry_for_debrief.return_value = samples
+
+    engine = DebriefEngine()
+    summary = engine.generate(1, persistence, sample_limit=100)
+    assert summary is not None
+    assert summary.session_duration_sec > 0
+    assert summary.session_duration_sec <= 15
+
+
+def test_debrief_phase_breakdown() -> None:
+    """Debrief aggregates phase durations deterministically."""
+    persistence = MagicMock()
+    samples = [_make_sample(i, mode="GUIDED") for i in range(5)] + [
+        _make_sample(i, mode="RTL") for i in range(5, 10)
+    ]
+    persistence.get_session_telemetry_for_debrief.return_value = samples
+
+    engine = DebriefEngine()
+    summary = engine.generate(1, persistence, sample_limit=100)
+    assert summary is not None
+    assert "phase_duration_sec" in summary.__dict__
+    phases = summary.phase_duration_sec
+    assert isinstance(phases, dict)
+    assert sum(phases.values()) > 0
+
+
+def test_debrief_top_event_aggregation() -> None:
+    """Debrief aggregates events by duration, deterministic order."""
+    persistence = MagicMock()
+    samples = [_make_sample(i, voltage=10.5) for i in range(15)]
+    persistence.get_session_telemetry_for_debrief.return_value = samples
+
+    engine = DebriefEngine()
+    summary = engine.generate(1, persistence, sample_limit=100)
+    assert summary is not None
+    assert isinstance(summary.top_events, list)
+    for e in summary.top_events:
+        assert hasattr(e, "name")
+        assert hasattr(e, "count")
+        assert hasattr(e, "duration_sec")
+
+
+def test_debrief_compact_payload_shape() -> None:
+    """Compact debrief payload has fixed shape: duration, phase, 3 events, 5 metrics, 1 sentence."""
+    summary = DebriefSummary(
+        session_id=1,
+        session_duration_sec=300.0,
+        phase_duration_sec={"cruise": 200.0, "rtl": 100.0},
+        peak_distance_from_home_m=1500.0,
+        average_power_w=80.0,
+        peak_power_w=120.0,
+        minimum_voltage_v=11.8,
+        top_events=[
+            DebriefEventStat("weak_return_margin", 1, 30.0),
+            DebriefEventStat("high_power_draw", 1, 10.0),
+        ],
+        weak_return_margin_occurred=True,
+        gps_degraded_occurred=False,
+        unstable_attitude_occurred=False,
+        assessment_tags=["return_risk"],
+    )
+    compact = build_compact_debrief_context(summary)
+    assert isinstance(compact, CompactDebriefPayload)
+    assert compact.total_duration_sec == 300.0
+    assert compact.dominant_phase == "cruise"
+    assert len(compact.top_3_event_summaries) == 3
+    assert len(compact.top_5_metrics) == 5
+    assert compact.assessment_sentence
+    d = compact.to_dict()
+    assert "total_duration_sec" in d
+    assert "dominant_phase" in d
+    assert "top_3_event_summaries" in d
+    assert "top_5_metrics" in d
+    assert "assessment_sentence" in d
+
+
+def test_debrief_deterministic_output_ordering() -> None:
+    """Top events are sorted by duration desc, then name asc."""
+    persistence = MagicMock()
+    samples = [_make_sample(i) for i in range(20)]
+    persistence.get_session_telemetry_for_debrief.return_value = samples
+
+    engine = DebriefEngine()
+    s1 = engine.generate(1, persistence, sample_limit=100)
+    s2 = engine.generate(1, persistence, sample_limit=100)
+    assert s1 is not None and s2 is not None
+    assert s1.session_duration_sec == s2.session_duration_sec
+    assert s1.phase_duration_sec == s2.phase_duration_sec
+    names1 = [e.name for e in s1.top_events]
+    names2 = [e.name for e in s2.top_events]
+    assert names1 == names2
+
+
+def test_debrief_empty_session_returns_none() -> None:
+    """Debrief returns None when no samples."""
+    persistence = MagicMock()
+    persistence.get_session_telemetry_for_debrief.return_value = []
+
+    engine = DebriefEngine()
+    summary = engine.generate(1, persistence)
+    assert summary is None
+
+
+def test_debrief_power_and_voltage_aggregates() -> None:
+    """Debrief computes avg/peak power and min voltage."""
+    persistence = MagicMock()
+    samples = [
+        _make_sample(i, voltage=12.5 - i * 0.05, current=5.0 + i * 0.5)
+        for i in range(10)
+    ]
+    persistence.get_session_telemetry_for_debrief.return_value = samples
+
+    engine = DebriefEngine()
+    summary = engine.generate(1, persistence, sample_limit=100)
+    assert summary is not None
+    assert summary.average_power_w is not None
+    assert summary.peak_power_w is not None
+    assert summary.minimum_voltage_v is not None
+    assert summary.minimum_voltage_v <= 12.5

@@ -58,6 +58,32 @@
     <div id="content" class="hidden">
       <div id="stats" class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4"></div>
 
+      <div id="debrief-section" class="card">
+        <h2 class="text-slate-200 font-semibold tracking-tight">Debrief</h2>
+        <p class="text-xs text-slate-500 mb-3">Post-flight summary from telemetry</p>
+        <div id="debrief-loading" class="py-4 text-center">
+          <svg class="animate-spin h-5 w-5 mx-auto text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        </div>
+        <div id="debrief-empty" class="hidden py-4 text-center text-slate-500 text-sm">No debrief data for this session.</div>
+        <div id="debrief-structured" class="hidden">
+          <div id="debrief-metrics" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+          <div id="debrief-events" class="mb-3"></div>
+          <div id="debrief-tags" class="flex flex-wrap gap-1.5 mb-4"></div>
+          <div id="debrief-summary-area">
+            <div id="debrief-summary-card" class="hidden rounded-lg bg-slate-800/50 border border-slate-700/50 p-3 text-sm text-slate-200">
+              <div id="debrief-summary-text"></div>
+              <div id="debrief-summary-timestamp" class="hidden text-xs text-slate-500 mt-2"></div>
+              <div id="debrief-summary-error" class="hidden text-xs text-amber-400 mt-2">Regeneration failed.</div>
+              <button type="button" id="debrief-summary-regenerate-btn" class="mt-2 px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-white text-sm font-medium">Regenerate AI Summary</button>
+            </div>
+            <div id="debrief-summary-placeholder" class="hidden text-slate-500 text-sm py-2">
+              <span>AI summary not generated yet.</span>
+              <button type="button" id="debrief-summary-generate-btn" class="ml-2 px-3 py-1 rounded-lg bg-cyan-600/80 hover:bg-cyan-600 text-white text-sm font-medium">Generate AI Summary</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <h2>Flight Path</h2>
         <div id="path-container">
@@ -126,6 +152,198 @@
 
     const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
     const fmtNumPrec = (v, d) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(d);
+
+    // --- Debrief helpers ---
+    function formatDuration(sec) {
+      if (sec == null || (typeof sec === 'number' && isNaN(sec))) return '—';
+      const s = Math.round(Number(sec));
+      if (s < 60) return s + ' s';
+      if (s < 3600) return Math.floor(s / 60) + ' m';
+      return Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' m';
+    }
+    function formatMetersOrKm(m) {
+      if (m == null || (typeof m === 'number' && isNaN(m))) return '—';
+      const n = Number(m);
+      if (n >= 1000) return (n / 1000).toFixed(1) + ' km';
+      return n.toFixed(0) + ' m';
+    }
+    function formatWatts(w) {
+      if (w == null || (typeof w === 'number' && isNaN(w))) return '—';
+      return Number(w).toFixed(1) + ' W';
+    }
+    function formatVolts(v) {
+      if (v == null || (typeof v === 'number' && isNaN(v))) return '—';
+      return Number(v).toFixed(2) + ' V';
+    }
+    function renderTopEvents(events, max) {
+      const list = (events || []).slice(0, max || 5);
+      if (list.length === 0) return '';
+      return list.map(e => {
+        const name = (e.name || '').replace(/_/g, ' ');
+        const dur = e.duration_sec != null ? formatDuration(e.duration_sec) : '';
+        const count = e.count != null ? ` (${e.count})` : '';
+        return `<span class="text-slate-300 text-sm">${name}${count}${dur !== '—' ? ' · ' + dur : ''}</span>`;
+      }).join('<span class="text-slate-600 mx-1">·</span>');
+    }
+    function renderAssessmentTags(tags) {
+      const list = (tags || []).filter(Boolean);
+      if (list.length === 0) return '';
+      return list.map(t => {
+        const label = (t || '').replace(/_/g, ' ');
+        return `<span class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-slate-700/60 text-slate-300">${label}</span>`;
+      }).join('');
+    }
+    function renderDebriefStructured(data) {
+      const summary = data.summary || {};
+      const compact = data.compact || {};
+      const dur = summary.session_duration_sec;
+      const phase = compact.dominant_phase || '';
+      const dist = summary.peak_distance_from_home_m;
+      const avgP = summary.average_power_w;
+      const peakP = summary.peak_power_w;
+      const minV = summary.minimum_voltage_v;
+      document.getElementById('debrief-metrics').innerHTML = `
+        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Duration</span><p class="text-sm font-mono text-slate-200">${formatDuration(dur)}</p></div>
+        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Dominant phase</span><p class="text-sm font-mono text-slate-200">${phase || '—'}</p></div>
+        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Peak distance</span><p class="text-sm font-mono text-slate-200">${formatMetersOrKm(dist)}</p></div>
+        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Avg power</span><p class="text-sm font-mono text-slate-200">${formatWatts(avgP)}</p></div>
+        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Peak power</span><p class="text-sm font-mono text-slate-200">${formatWatts(peakP)}</p></div>
+        <div class="rounded bg-slate-800/40 px-3 py-2"><span class="text-slate-500 text-xs">Min voltage</span><p class="text-sm font-mono text-slate-200">${formatVolts(minV)}</p></div>
+      `;
+      const eventsEl = document.getElementById('debrief-events');
+      const eventsHtml = renderTopEvents(summary.top_events, 5);
+      if (eventsHtml) {
+        eventsEl.innerHTML = `<div class="text-xs text-slate-500 mb-1">Top events</div><div class="flex flex-wrap gap-x-1 gap-y-0.5">${eventsHtml}</div>`;
+        eventsEl.classList.remove('hidden');
+      } else {
+        eventsEl.classList.add('hidden');
+      }
+      const tagsEl = document.getElementById('debrief-tags');
+      const tagsHtml = renderAssessmentTags(summary.assessment_tags);
+      if (tagsHtml) {
+        tagsEl.innerHTML = `<span class="text-xs text-slate-500 mr-1">Assessment</span>${tagsHtml}`;
+        tagsEl.classList.remove('hidden');
+      } else {
+        tagsEl.classList.add('hidden');
+      }
+    }
+    function renderDebriefGeneratedSummary(text, generatedAt) {
+      const card = document.getElementById('debrief-summary-card');
+      const textEl = document.getElementById('debrief-summary-text');
+      const tsEl = document.getElementById('debrief-summary-timestamp');
+      const errEl = document.getElementById('debrief-summary-error');
+      const placeholder = document.getElementById('debrief-summary-placeholder');
+      if (errEl) errEl.classList.add('hidden');
+      if (text && !String(text).startsWith('Debrief summary unavailable:')) {
+        textEl.textContent = text;
+        if (generatedAt) {
+          try {
+            tsEl.textContent = 'Generated on ' + new Date(generatedAt).toLocaleString();
+            tsEl.classList.remove('hidden');
+          } catch (_) {
+            tsEl.classList.add('hidden');
+          }
+        } else {
+          tsEl.classList.add('hidden');
+        }
+        card.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+      } else {
+        card.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+      }
+    }
+    function renderDebriefEmpty(message) {
+      document.getElementById('debrief-loading').classList.add('hidden');
+      document.getElementById('debrief-structured').classList.add('hidden');
+      const empty = document.getElementById('debrief-empty');
+      empty.textContent = message || 'No debrief data for this session.';
+      empty.classList.remove('hidden');
+    }
+    function setDebriefGenerating(loading) {
+      const genBtn = document.getElementById('debrief-summary-generate-btn');
+      const regenBtn = document.getElementById('debrief-summary-regenerate-btn');
+      [genBtn, regenBtn].filter(Boolean).forEach(btn => {
+        btn.disabled = loading;
+        btn.textContent = loading ? 'Generating…' : btn === genBtn ? 'Generate AI Summary' : 'Regenerate AI Summary';
+      });
+    }
+
+    let debriefGenerateInProgress = false;
+    function loadDebrief() {
+      fetch(`/sessions/${sessionId}/debrief`)
+        .then(r => {
+          if (r.status === 404) {
+            renderDebriefEmpty('No debrief data for this session.');
+            return;
+          }
+          if (!r.ok) {
+            renderDebriefEmpty('Debrief could not be loaded.');
+            return;
+          }
+          return r.json();
+        })
+        .then(data => {
+          if (!data) return;
+          document.getElementById('debrief-loading').classList.add('hidden');
+          document.getElementById('debrief-empty').classList.add('hidden');
+          document.getElementById('debrief-structured').classList.remove('hidden');
+          renderDebriefStructured(data);
+          if (data.generated_summary && !String(data.generated_summary).startsWith('Debrief summary unavailable:')) {
+            renderDebriefGeneratedSummary(data.generated_summary, data.generated_debrief_at);
+          } else {
+            document.getElementById('debrief-summary-card').classList.add('hidden');
+            document.getElementById('debrief-summary-placeholder').classList.remove('hidden');
+          }
+        })
+        .catch(() => {
+          renderDebriefEmpty('Debrief could not be loaded.');
+        });
+    }
+    loadDebrief();
+
+    function handleGenerateOrRegenerate() {
+      if (debriefGenerateInProgress) return;
+      const card = document.getElementById('debrief-summary-card');
+      const placeholder = document.getElementById('debrief-summary-placeholder');
+      const hadSummaryBefore = !card.classList.contains('hidden');
+      debriefGenerateInProgress = true;
+      setDebriefGenerating(true);
+      fetch(`/sessions/${sessionId}/debrief?generate_summary=true`)
+        .then(r => {
+          if (!r.ok) throw new Error('fetch failed');
+          return r.json();
+        })
+        .then(data => {
+          const text = data.generated_summary;
+          if (text && !String(text).startsWith('Debrief summary unavailable:')) {
+            renderDebriefGeneratedSummary(text, data.generated_debrief_at);
+          } else {
+            if (hadSummaryBefore) {
+              document.getElementById('debrief-summary-error')?.classList.remove('hidden');
+            } else {
+              placeholder.querySelector('span').textContent = 'AI summary could not be generated.';
+              card.classList.add('hidden');
+              placeholder.classList.remove('hidden');
+            }
+          }
+        })
+        .catch(() => {
+          if (hadSummaryBefore) {
+            document.getElementById('debrief-summary-error')?.classList.remove('hidden');
+          } else {
+            placeholder.querySelector('span').textContent = 'AI summary could not be generated.';
+            card.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+          }
+        })
+        .finally(() => {
+          debriefGenerateInProgress = false;
+          setDebriefGenerating(false);
+        });
+    }
+    document.getElementById('debrief-summary-generate-btn')?.addEventListener('click', handleGenerateOrRegenerate);
+    document.getElementById('debrief-summary-regenerate-btn')?.addEventListener('click', handleGenerateOrRegenerate);
 
     function renderPathPlot(path, detections) {
       const svgEl = document.getElementById('path-svg');

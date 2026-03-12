@@ -23,6 +23,7 @@ from airautomatica.ai import (
     OllamaAiService,
     OllamaTaskService,
 )
+from airautomatica.ai.ollama_readiness import wait_for_ollama_ready
 from airautomatica.ai.scheduler import (
     AiInferenceScheduler,
     ScheduledOllamaAiService,
@@ -43,6 +44,8 @@ from airautomatica.config import (
     get_local_llm_model,
     get_local_llm_provider,
     get_local_llm_timeout,
+    get_ollama_required,
+    get_preprocessing_enabled,
     get_serial_baud,
     get_serial_port,
     get_session_auto_start_on_arm,
@@ -72,6 +75,7 @@ from airautomatica.telemetry import (
     TelemetrySource,
 )
 from airautomatica.telemetry.capabilities import CapabilityInfo
+from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -204,10 +208,13 @@ async def _telemetry_loop(
     lifecycle_logger: TelemetryLifecycleLogger | None = None,
     recording_auto_controller: RecordingAutoController | None = None,
     session_auto_controller: SessionAutoController | None = None,
+    preprocessor: TelemetryPreprocessor | None = None,
 ) -> None:
     """Consume telemetry stream and update store."""
     async for state in source.stream():
         store.update(state)
+        if preprocessor is not None:
+            preprocessor.on_state(state)
         if sampler is not None:
             sampler.maybe_sample(state)
         if path_recorder is not None:
@@ -300,6 +307,11 @@ def main() -> None:
         get_enabled_fn=get_session_auto_start_on_arm,
     )
 
+    preprocessor: TelemetryPreprocessor | None = None
+    if get_preprocessing_enabled():
+        preprocessor = TelemetryPreprocessor()
+        logger.debug("Telemetry preprocessing enabled")
+
     def _end_session() -> None:
         try:
             _shutdown_cleanup(persistence, session_ref, log_shutdown=False)
@@ -315,6 +327,7 @@ def main() -> None:
         persistence=persistence,
         task_service=task_service,
         camera_recording_service=camera_recording_service,
+        preprocessor=preprocessor,
     )
     asgi_app = wrap_app(app)
     host = get_api_host()
@@ -346,6 +359,43 @@ def main() -> None:
     async def run_all() -> None:
         shutdown_event = asyncio.Event()
 
+        if provider == "ollama":
+            model = get_local_llm_model("ollama")
+            result = await wait_for_ollama_ready(
+                get_local_llm_base_url("ollama"),
+                model=model,
+                max_attempts=5,
+                interval_sec=2.0,
+                timeout_sec=3.0,
+            )
+            if result.ready:
+                logger.info("Ollama ready with model %r", model)
+            else:
+                if result.reason == "unreachable":
+                    logger.warning(
+                        "Ollama not reachable at startup; proceeding without Ollama"
+                    )
+                elif result.reason == "model_missing":
+                    logger.warning(
+                        "Ollama is running but model %r is not installed; proceeding without Ollama",
+                        model,
+                    )
+                elif result.reason == "http_error":
+                    logger.warning(
+                        "Ollama returned HTTP error at startup; proceeding without Ollama"
+                    )
+                else:
+                    logger.warning(
+                        "Ollama readiness failed after retries; AI features will run in degraded mode"
+                    )
+                if get_ollama_required():
+                    logger.error(
+                        "Ollama required but not ready: %s (%s)",
+                        result.reason,
+                        result.detail or "no detail",
+                    )
+                    sys.exit(1)
+
         def _on_signal(signum: int, frame) -> None:
             shutdown_event.set()
 
@@ -369,6 +419,7 @@ def main() -> None:
                 lifecycle_logger,
                 recording_auto_controller,
                 session_auto_controller,
+                preprocessor,
                 name="telemetry",
             )
         )

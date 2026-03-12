@@ -27,6 +27,6 @@ jobs:
       - name: Run container and verify health
         run: |
           docker run -d --name app -p 8000:8000 -e SQLITE_DB_PATH=/tmp/airautomatica.db airautomatica:test
-          sleep 3
+          sleep 8
           curl -f http://localhost:8000/health
           docker stop app

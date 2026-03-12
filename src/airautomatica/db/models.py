@@ -27,6 +27,10 @@ class FlightSession(Base):
     autopilot: Mapped[str | None] = mapped_column(String(64), nullable=True)
     connection_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     baud: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    generated_debrief_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generated_debrief_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
     telemetry_samples = relationship("TelemetrySample", back_populates="session")
     path_points = relationship("PathPoint", back_populates="session")

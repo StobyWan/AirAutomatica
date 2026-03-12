@@ -5,11 +5,15 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
+
+if TYPE_CHECKING:
+    from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
 
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
+from airautomatica.ai.ollama_readiness import check_ollama_ready
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
     EventClassificationResult,
@@ -20,6 +24,9 @@ from airautomatica.ai.ollama_tasks import (
 from airautomatica.config import (
     get_camera_recording_mode,
     get_effective_ai_backend,
+    get_local_llm_base_url,
+    get_local_llm_model,
+    get_local_llm_provider,
     get_serial_baud,
     get_serial_port,
     get_sqlite_db_path,
@@ -41,6 +48,10 @@ from airautomatica.services.connection_state_store import (
 )
 from airautomatica.services.connection_state_store import (
     DetectionResult as StoreDetectionResult,
+)
+from airautomatica.services.debrief_service import (
+    get_session_debrief,
+    get_session_debrief_with_llm,
 )
 from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.services.persistence import (
@@ -72,11 +83,13 @@ def create_app(
     persistence: Optional[PersistenceService] = None,
     task_service: Optional[OllamaTaskService] = None,
     camera_recording_service: Optional[CameraRecordingService] = None,
+    preprocessor: Optional["TelemetryPreprocessor"] = None,
 ) -> FastAPI:
     """Create FastAPI app with state store dependency."""
     app = FastAPI(title="AIRAUTOMATICA", version="0.1.0", lifespan=_lifespan)
     _session_ref = session_ref or [None]
     _connection_store = connection_store
+    _preprocessor = preprocessor
 
     @app.get("/")
     def root() -> RedirectResponse:
@@ -309,6 +322,12 @@ def create_app(
         health_data["perception_acceptance_rate"] = rates["perception_acceptance_rate"]
         health_data["telemetry_meaningful_rate"] = rates["telemetry_meaningful_rate"]
         health_data["camera_ready"] = get_camera_ready()
+        if get_local_llm_provider() == "ollama":
+            health_data["ollama_ready"] = check_ollama_ready(
+                get_local_llm_base_url("ollama"),
+                model=get_local_llm_model("ollama"),
+                timeout_sec=3.0,
+            ).ready
         if camera_recording_service is not None:
             rec_state = camera_recording_service.get_recording_state()
             health_data["camera_recording_available"] = (
@@ -367,9 +386,16 @@ def create_app(
         sid = _session_ref[0]
         if persistence is not None and sid is not None:
             samples = persistence.get_recent_telemetry_samples(sid, limit=30)
+        if _preprocessor is not None:
+            llm_ctx = _preprocessor.get_llm_context()
+            context = cast(dict[str, Any], {"llm_context": llm_ctx.to_dict()})
+        else:
+            context = cast(
+                dict[str, Any], {"state": state, "telemetry_samples": samples}
+            )
         result = await task_service.infer_task(
             OllamaTaskType.TELEMETRY_SUMMARY,
-            {"state": state, "telemetry_samples": samples},
+            context,
         )
         if not isinstance(result, TelemetrySummaryResult):
             return {"error": "Unexpected result type"}
@@ -379,7 +405,11 @@ def create_app(
             "concerns": list(result.concerns),
             "recommendations": list(result.recommendations),
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "telemetry_sample_count": len(samples),
+            "telemetry_sample_count": (
+                _preprocessor.get_summary().buffer_sample_count
+                if _preprocessor is not None
+                else len(samples)
+            ),
             "provider": task_service.provider,
         }
 
@@ -458,6 +488,66 @@ def create_app(
             return {"samples": [], "session_id": sid}
         samples = persistence.get_recent_telemetry_samples(sid, limit=60)
         return {"samples": samples, "session_id": sid}
+
+    @app.get("/sessions/{sid:int}/debrief")
+    async def get_session_debrief_route(
+        sid: int,
+        generate_summary: bool = Query(False, alias="generate_summary"),
+    ) -> dict:
+        """Return post-flight debrief for a session. 404 if no telemetry.
+        Set generate_summary=true to request LLM summary (requires task_service)."""
+        if persistence is None:
+            raise HTTPException(status_code=404, detail="Persistence not available")
+        summary, compact = get_session_debrief(sid, persistence)
+        if summary is None or compact is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No telemetry samples for session",
+            )
+        out: dict = {
+            "session_id": sid,
+            "summary": {
+                "session_duration_sec": summary.session_duration_sec,
+                "phase_duration_sec": summary.phase_duration_sec,
+                "peak_distance_from_home_m": summary.peak_distance_from_home_m,
+                "average_power_w": summary.average_power_w,
+                "peak_power_w": summary.peak_power_w,
+                "minimum_voltage_v": summary.minimum_voltage_v,
+                "top_events": [
+                    {
+                        "name": e.name,
+                        "count": e.count,
+                        "duration_sec": e.duration_sec,
+                    }
+                    for e in summary.top_events
+                ],
+                "weak_return_margin_occurred": summary.weak_return_margin_occurred,
+                "gps_degraded_occurred": summary.gps_degraded_occurred,
+                "unstable_attitude_occurred": summary.unstable_attitude_occurred,
+                "assessment_tags": summary.assessment_tags,
+            },
+            "compact": compact.to_dict(),  # compact is not None after check above
+        }
+        if generate_summary and task_service is not None:
+            _, _, generated = await get_session_debrief_with_llm(
+                sid, persistence, task_service
+            )
+            if generated and not str(generated).startswith(
+                "Debrief summary unavailable:"
+            ):
+                persistence.save_generated_debrief(sid, generated)
+            out["generated_summary"] = generated
+        else:
+            persisted = persistence.get_generated_debrief(sid)
+            if persisted is not None:
+                out["generated_summary"] = persisted
+
+        if out.get("generated_summary"):
+            at = persistence.get_generated_debrief_at(sid)
+            if at is not None:
+                out["generated_debrief_at"] = at.isoformat()
+
+        return out
 
     @app.get("/sessions")
     def get_sessions(
