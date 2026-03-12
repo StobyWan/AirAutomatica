@@ -6,7 +6,8 @@ Field units and sentinels per mavlink.io common dialect:
 - SYS_STATUS (id 1): voltage_battery mV (65535=invalid), current_battery cA (-1=invalid)
 - VFR_HUD (id 74): heading deg, groundspeed/airspeed m/s
 - GPS_RAW_INT (id 24): fix_type, satellites_visible
-- HOME_POSITION (id 242): latitude, longitude degE7
+- HOME_POSITION (id 242): latitude, longitude degE7 (ArduPilot)
+- GPS_GLOBAL_ORIGIN (id 49): latitude, longitude degE7 (INAV uses for home)
 """
 
 import time
@@ -102,6 +103,8 @@ class MavlinkNormalizer:
             self._apply_gps_raw_int(msg)
         elif msg_type == "HOME_POSITION":
             self._apply_home_position(msg)
+        elif msg_type == "GPS_GLOBAL_ORIGIN":
+            self._apply_gps_global_origin(msg)
 
     def _apply_heartbeat(self, msg: Any) -> None:
         """HEARTBEAT: custom_mode = flight mode number, map to name; base_mode = armed bit."""
@@ -168,6 +171,16 @@ class MavlinkNormalizer:
 
     def _apply_home_position(self, msg: Any) -> None:
         """HOME_POSITION (id 242): latitude, longitude degE7. See mavlink.io/common#HOME_POSITION."""
+        lat = getattr(msg, "latitude", None)
+        lon = getattr(msg, "longitude", None)
+        if lat is not None and lon is not None:
+            self._accum["home_lat"] = lat / 1e7
+            self._accum["home_lon"] = lon / 1e7
+
+    def _apply_gps_global_origin(self, msg: Any) -> None:
+        """GPS_GLOBAL_ORIGIN (id 49): latitude, longitude degE7 (INAV uses for home).
+        Same semantics as HOME_POSITION; both populate home_lat/home_lon. See mavlink.io/common#GPS_GLOBAL_ORIGIN.
+        """
         lat = getattr(msg, "latitude", None)
         lon = getattr(msg, "longitude", None)
         if lat is not None and lon is not None:

@@ -101,14 +101,14 @@ def test_ardupilot_handle_message_uses_apm_mapping() -> None:
     assert state.mode == "GUIDED"
 
 
-def test_inav_handle_message_uses_inav_mapping() -> None:
-    """INAVAdapter handle_message uses INAV mode mapping."""
+def test_inav_handle_message_uses_apm_mapping() -> None:
+    """INAVAdapter uses APM mapping; INAV sends ArduPilot custom_mode in HEARTBEAT."""
     adapter = INAVAdapter()
     normalizer = MavlinkNormalizer(heartbeat_timeout_sec=10.0)
-    hb = make_heartbeat(autopilot=13, custom_mode=4)
+    hb = make_heartbeat(autopilot=13, custom_mode=11)  # RTL in ArduPilot
     adapter.handle_message(hb, normalizer)
     state = normalizer.build_state()
-    assert state.mode == "NAV_POSHOLD"
+    assert state.mode == "RTL"
 
 
 def test_generic_handle_message_uses_custom_mode_as_string() -> None:

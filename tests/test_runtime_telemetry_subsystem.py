@@ -63,10 +63,11 @@ async def test_controller_reconnect_success() -> None:
     result = await controller.reconnect()
     assert result.success is True
     assert result.backend_after == "mock"
-    assert controller.get_task() is not None
-    controller.get_task().cancel()
+    task = controller.get_task()
+    assert task is not None
+    task.cancel()
     try:
-        await controller.get_task()
+        await task
     except asyncio.CancelledError:
         pass
 

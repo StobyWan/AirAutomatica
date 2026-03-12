@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, cast
 
 if TYPE_CHECKING:
     from airautomatica.services.mission_logic import MissionLogic
@@ -99,8 +99,10 @@ def create_app(
     camera_recording_service: Optional[CameraRecordingService] = None,
     preprocessor: Optional["TelemetryPreprocessor"] = None,
     mission_logic: Optional["MissionLogic"] = None,
-    reload_ai_fn: Optional[object] = None,
-    reload_telemetry_fn: Optional[object] = None,
+    reload_ai_fn: Optional[Callable[[str], ReloadResult]] = None,
+    reload_telemetry_fn: Optional[
+        Callable[[], Awaitable[TelemetryReconnectResult]]
+    ] = None,
 ) -> FastAPI:
     """Create FastAPI app with state store dependency.
     When ai_holder is provided, task_service is read from it (supports hot-reload).

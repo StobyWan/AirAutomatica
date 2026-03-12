@@ -200,3 +200,23 @@ def test_to_dict_serializes_nan_as_none() -> None:
     assert d["voltage_v"] is None
     assert d["connected"] is True
     assert d["mode"] == "MANUAL"
+
+
+def test_home_position() -> None:
+    """HOME_POSITION: latitude, longitude -> home_lat, home_lon (ArduPilot)."""
+    n = MavlinkNormalizer(heartbeat_timeout_sec=10.0)
+    n.apply(make_msg("HEARTBEAT", custom_mode=0))
+    n.apply(make_msg("HOME_POSITION", latitude=376213000, longitude=-1223790000))
+    s = n.build_state()
+    assert s.home_lat == pytest.approx(37.6213, abs=1e-4)
+    assert s.home_lon == pytest.approx(-122.379, abs=1e-4)
+
+
+def test_gps_global_origin() -> None:
+    """GPS_GLOBAL_ORIGIN: latitude, longitude -> home_lat, home_lon (INAV)."""
+    n = MavlinkNormalizer(heartbeat_timeout_sec=10.0)
+    n.apply(make_msg("HEARTBEAT", custom_mode=0))
+    n.apply(make_msg("GPS_GLOBAL_ORIGIN", latitude=376213000, longitude=-1223790000))
+    s = n.build_state()
+    assert s.home_lat == pytest.approx(37.6213, abs=1e-4)
+    assert s.home_lon == pytest.approx(-122.379, abs=1e-4)
