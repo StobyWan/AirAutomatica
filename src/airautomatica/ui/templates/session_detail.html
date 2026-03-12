@@ -62,6 +62,14 @@
     <div id="content" class="hidden">
       <div id="stats" class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4"></div>
 
+      <div class="card">
+        <h2>Flight Path</h2>
+        <div id="path-container">
+          <svg id="path-svg" class="path-svg" viewBox="0 0 200 220" preserveAspectRatio="xMidYMid meet"></svg>
+          <div id="path-empty" class="hidden text-center py-8 text-slate-500 text-sm">No path data</div>
+        </div>
+      </div>
+
       <div id="replay-section" class="card hidden">
         <h2>Replay</h2>
         <p class="text-xs text-slate-500 mb-3">Flight phases and events timeline</p>
@@ -128,14 +136,6 @@
               <button type="button" id="debrief-view-replay-placeholder" class="ml-2 px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-cyan-300 text-sm font-medium">View in replay</button>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Flight Path</h2>
-        <div id="path-container">
-          <svg id="path-svg" class="path-svg" viewBox="0 0 200 220" preserveAspectRatio="xMidYMid meet"></svg>
-          <div id="path-empty" class="hidden text-center py-8 text-slate-500 text-sm">No path data</div>
         </div>
       </div>
 
@@ -727,7 +727,7 @@
         function updateFromIndex(idx) {
           currentIndex = Math.max(0, Math.min(idx, replaySamples.length - 1));
           const s = replaySamples[currentIndex];
-          playbackOffsetMs = new Date(s.timestamp).getTime() - tStart;
+          if (!isPlaying) playbackOffsetMs = new Date(s.timestamp).getTime() - tStart;
           const pct = replaySamples.length > 1 ? (currentIndex / (replaySamples.length - 1)) * 100 : 0;
           scrubberEl.style.left = pct + '%';
           const currentPhase = phaseIntervals.find(iv => {
