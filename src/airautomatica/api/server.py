@@ -43,7 +43,10 @@ from airautomatica.services.connection_state_store import (
     DetectionResult as StoreDetectionResult,
 )
 from airautomatica.services.mission_logic import get_perception_counts
-from airautomatica.services.persistence import PersistenceService
+from airautomatica.services.persistence import (
+    PersistenceService,
+    build_session_start_params,
+)
 from airautomatica.services.recordings_service import RecordingsService
 from airautomatica.services.state_store import StateStore
 from airautomatica.settings import get_settings, save_settings
@@ -240,15 +243,10 @@ def create_app(
                 "already_active": True,
                 "session_id": _session_ref[0],
             }
-        mode = _connection_store.get_mode() if _connection_store else None
-        mode_str = mode.value if mode and hasattr(mode, "value") else "mock"
-        telemetry_backend = "mock" if mode_str == "mock" else "serial"
         if persistence is None:
             return {"ok": False, "error": "Persistence not available"}
-        sid = persistence.start_session(
-            telemetry_backend=telemetry_backend,
-            ai_backend=get_effective_ai_backend(),
-        )
+        params = build_session_start_params(_connection_store)
+        sid = persistence.start_session(**params)
         if sid is None:
             return {"ok": False, "error": "Failed to start session"}
         _session_ref[0] = sid
@@ -415,6 +413,16 @@ def create_app(
         detections = persistence.get_recent_detections(sid, limit=20)
         return {"detections": detections, "session_id": sid}
 
+    @app.get("/sessions/{sid:int}")
+    def get_session(sid: int) -> dict:
+        """Return session metadata for a single session. 404 if not found."""
+        if persistence is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session_data = persistence.get_session(sid)
+        if session_data is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return session_data
+
     @app.get("/sessions/{sid:int}/path")
     def get_session_path(sid: int) -> dict:
         """Return flight path for a session (lat/lon points, oldest first). For map display or export."""
@@ -448,13 +456,19 @@ def create_app(
         return {"samples": samples, "session_id": sid}
 
     @app.get("/sessions")
-    def get_sessions() -> dict:
+    def get_sessions(
+        autopilot: str | None = Query(None, alias="autopilot"),
+        connection_mode: str | None = Query(None, alias="connection_mode"),
+    ) -> dict:
         """Return recent flight sessions with detection counts. For dashboard initial load."""
         sid = _session_ref[0]
         if persistence is None:
             return {"sessions": [], "current_session_id": sid}
         sessions = persistence.get_recent_sessions(
-            limit=10, include_detection_count=True
+            limit=10,
+            include_detection_count=True,
+            autopilot_filter=autopilot,
+            connection_mode_filter=connection_mode,
         )
         return {"sessions": sessions, "current_session_id": sid}
 

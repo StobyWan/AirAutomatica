@@ -10,6 +10,11 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
+from airautomatica.config import (
+    get_effective_ai_backend,
+    get_serial_baud,
+    get_serial_port,
+)
 from airautomatica.db.base import get_engine
 from airautomatica.db.models import (
     CommandSent,
@@ -25,8 +30,42 @@ from airautomatica.models.state import nan_to_none
 if TYPE_CHECKING:
     from airautomatica.ai.models import AiResult
     from airautomatica.models.state import AircraftState
+    from airautomatica.services.connection_state_store import ConnectionStateStore
 
 logger = logging.getLogger(__name__)
+
+
+def build_session_start_params(
+    connection_store: "ConnectionStateStore | None",
+) -> dict:
+    """Build kwargs for PersistenceService.start_session from connection_store.
+
+    Used by both manual (POST /session/start) and auto (SessionAutoController) session creation.
+    """
+    mode = connection_store.get_mode() if connection_store else None
+    mode_str = mode.value if mode and hasattr(mode, "value") else "mock"
+    telemetry_backend = "mock" if mode_str == "mock" else "serial"
+    connection_mode = mode_str
+    source_port = None
+    autopilot = None
+    baud = None
+    if connection_store:
+        det = connection_store.get_detection_result()
+        if det:
+            source_port = det.port
+            autopilot = det.autopilot
+            baud = det.baud
+        if not source_port and connection_mode != "mock":
+            source_port = get_serial_port()
+            baud = get_serial_baud()
+    return {
+        "telemetry_backend": telemetry_backend,
+        "ai_backend": get_effective_ai_backend(),
+        "source_port": source_port,
+        "autopilot": autopilot,
+        "connection_mode": connection_mode,
+        "baud": baud,
+    }
 
 
 class PersistenceService:
@@ -50,6 +89,10 @@ class PersistenceService:
         telemetry_backend: str,
         ai_backend: str,
         notes: str | None = None,
+        source_port: str | None = None,
+        autopilot: str | None = None,
+        connection_mode: str | None = None,
+        baud: int | None = None,
     ) -> int | None:
         """Insert flight_sessions row. Return session_id or None on failure."""
         if get_engine() is None:
@@ -64,6 +107,10 @@ class PersistenceService:
                     telemetry_backend=telemetry_backend,
                     ai_backend=ai_backend,
                     notes=notes,
+                    source_port=source_port,
+                    autopilot=autopilot,
+                    connection_mode=connection_mode,
+                    baud=baud,
                 )
                 session.add(row)
                 session.flush()
@@ -314,14 +361,45 @@ class PersistenceService:
             logger.exception("get_session_path failed: %s", e)
             return []
 
+    def get_session(self, session_id: int) -> dict | None:
+        """Fetch a single session by id. Returns None if not found or DB disabled."""
+        if get_engine() is None:
+            return None
+        try:
+            with get_session() as session:
+                if session is None:
+                    return None
+                row = session.get(FlightSession, session_id)
+                if row is None:
+                    return None
+                return {
+                    "id": row.id,
+                    "started_at": row.started_at.isoformat(),
+                    "ended_at": (row.ended_at.isoformat() if row.ended_at else None),
+                    "telemetry_backend": row.telemetry_backend,
+                    "ai_backend": row.ai_backend,
+                    "notes": row.notes,
+                    "source_port": row.source_port,
+                    "autopilot": row.autopilot,
+                    "connection_mode": row.connection_mode,
+                    "baud": row.baud,
+                }
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_session failed: %s", e)
+            return None
+
     def get_recent_sessions(
         self,
         limit: int = 10,
         include_detection_count: bool = True,
+        autopilot_filter: str | None = None,
+        connection_mode_filter: str | None = None,
     ) -> list[dict]:
         """Fetch recent flight sessions, newest first. Returns [] when DB disabled or on error.
 
         When include_detection_count is True, each session dict includes detection_count.
+        Optional autopilot_filter and connection_mode_filter filter by metadata.
         """
         if get_engine() is None:
             return []
@@ -338,8 +416,14 @@ class PersistenceService:
                         .outerjoin(Detection, Detection.session_id == FlightSession.id)
                         .group_by(FlightSession.id)
                         .order_by(FlightSession.started_at.desc())
-                        .limit(limit)
                     )
+                    if autopilot_filter:
+                        stmt = stmt.where(FlightSession.autopilot == autopilot_filter)
+                    if connection_mode_filter:
+                        stmt = stmt.where(
+                            FlightSession.connection_mode == connection_mode_filter
+                        )
+                    stmt = stmt.limit(limit)
                     result = session.execute(stmt)
                     rows = result.all()
                     out: list[dict] = []
@@ -355,14 +439,27 @@ class PersistenceService:
                                 "telemetry_backend": fs.telemetry_backend,
                                 "ai_backend": fs.ai_backend,
                                 "detection_count": det_count or 0,
+                                "source_port": fs.source_port,
+                                "autopilot": fs.autopilot,
+                                "connection_mode": fs.connection_mode,
+                                "baud": fs.baud,
                             }
                         )
                     return out
-                result = session.execute(
+                stmt_simple = (
                     select(FlightSession)
                     .order_by(FlightSession.started_at.desc())
                     .limit(limit)
                 )
+                if autopilot_filter:
+                    stmt_simple = stmt_simple.where(
+                        FlightSession.autopilot == autopilot_filter
+                    )
+                if connection_mode_filter:
+                    stmt_simple = stmt_simple.where(
+                        FlightSession.connection_mode == connection_mode_filter
+                    )
+                result = session.execute(stmt_simple)
                 rows = result.scalars().all()
                 return [
                     {
@@ -373,6 +470,10 @@ class PersistenceService:
                         ),
                         "telemetry_backend": row.telemetry_backend,
                         "ai_backend": row.ai_backend,
+                        "source_port": row.source_port,
+                        "autopilot": row.autopilot,
+                        "connection_mode": row.connection_mode,
+                        "baud": row.baud,
                     }
                     for row in rows
                 ]

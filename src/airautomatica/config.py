@@ -223,3 +223,22 @@ def get_camera_recording_disarm_debounce_sec() -> float:
         )
     except ValueError:
         return 2.5
+
+
+def get_session_auto_start_on_arm() -> bool:
+    """True if session should auto-start when armed and auto-stop when disarmed.
+    Default: False. Env: SESSION_AUTO_START_ON_ARM (1/true/yes)."""
+    raw = os.environ.get("SESSION_AUTO_START_ON_ARM", "0").lower().strip()
+    return raw in ("1", "true", "yes")
+
+
+def get_session_auto_stop_disarm_debounce_sec() -> float:
+    """Seconds armed=False must persist before auto-stop. Default: 2.5.
+    Env: SESSION_AUTO_STOP_DISARM_DEBOUNCE_SEC."""
+    try:
+        return max(
+            0.0,
+            float(os.environ.get("SESSION_AUTO_STOP_DISARM_DEBOUNCE_SEC", "2.5")),
+        )
+    except ValueError:
+        return 2.5
