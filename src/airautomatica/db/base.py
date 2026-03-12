@@ -11,6 +11,7 @@ from airautomatica.db.models import Base
 logger = logging.getLogger(__name__)
 
 _engine: Engine | None = None
+_last_init_error: str | None = None
 
 
 def _sqlite_url(path: str) -> str:
@@ -37,7 +38,7 @@ def enable_wal(engine: Engine) -> None:
 
 def init_db(db_path: str) -> Engine | None:
     """Create engine, enable WAL, run alembic upgrade head. Return engine or None on failure."""
-    global _engine
+    global _engine, _last_init_error
     try:
         _engine = create_db_engine(db_path)
         enable_wal(_engine)
@@ -50,16 +51,29 @@ def init_db(db_path: str) -> Engine | None:
         alembic_ini = _project_root / "alembic.ini"
         if not alembic_ini.exists():
             alembic_ini = Path.cwd() / "alembic.ini"
+        if not alembic_ini.exists():
+            alembic_ini = Path("/opt/airautomatica/alembic.ini")
         alembic_cfg = Config(str(alembic_ini))
         alembic_cfg.set_main_option("sqlalchemy.url", _sqlite_url(db_path))
         command.upgrade(alembic_cfg, "head")
 
         logger.info("Database initialized at %s", db_path)
+        _last_init_error = None
         return _engine
     except Exception as e:
-        logger.exception("Database init failed: %s", e)
+        _last_init_error = str(e)
+        logger.error(
+            "Database init failed; persistence disabled. %s. Check that alembic.ini and alembic/versions exist.",
+            e,
+            exc_info=True,
+        )
         _engine = None
         return None
+
+
+def get_last_init_error() -> str | None:
+    """Return last database init error message, if any. Used when persistence_enabled is False."""
+    return _last_init_error
 
 
 def get_engine() -> Engine | None:

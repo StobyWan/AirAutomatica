@@ -25,7 +25,7 @@ from airautomatica.config import (
     get_sqlite_db_path,
     get_telemetry_backend,
 )
-from airautomatica.db.base import get_engine
+from airautomatica.db.base import get_engine, get_last_init_error
 from airautomatica.logging_config import setup_logging
 from airautomatica.models.connection_state import (
     ConnectionMode,
@@ -290,9 +290,13 @@ def create_app(
                 "sqlite_db_path": get_sqlite_db_path() if persistence_enabled else None,
                 "session_id": session_id,
                 "last_persistence_error": (
-                    persistence.get_last_persistence_error()
-                    if persistence is not None
-                    else None
+                    get_last_init_error()
+                    if not persistence_enabled
+                    else (
+                        persistence.get_last_persistence_error()
+                        if persistence is not None
+                        else None
+                    )
                 ),
             },
         }

@@ -42,6 +42,16 @@ cp "$BUILD_DIR/wheels"/airautomatica-*.whl "$OPT_DIR/wheels/"
 cp "$LINUX_DIR/airautomatica.service" "$ETC_SYSTEMD/"
 cp "$LINUX_DIR/airautomatica.env.example" "$OPT_DIR/"
 
+# Copy alembic for migrations (run at app startup)
+cp "$REPO_ROOT/alembic.ini" "$OPT_DIR/"
+[[ -d "$REPO_ROOT/alembic" ]] && cp -r "$REPO_ROOT/alembic" "$OPT_DIR/"
+
+# Verify staging contains Alembic assets (catches packaging issues before dpkg)
+if [[ ! -f "$OPT_DIR/alembic.ini" ]] || [[ ! -d "$OPT_DIR/alembic/versions" ]]; then
+  echo "ERROR: Staging missing alembic.ini or alembic/versions/. Build failed."
+  exit 1
+fi
+
 # DEBIAN directory
 mkdir -p "$STAGING/DEBIAN"
 sed "s/^Version: .*/Version: $VERSION/" "$SCRIPT_DIR/control" > "$STAGING/DEBIAN/control"
@@ -52,6 +62,14 @@ chmod 755 "$STAGING/DEBIAN/postinst" "$STAGING/DEBIAN/prerm" "$STAGING/DEBIAN/po
 
 # Build .deb
 echo "==> Building .deb"
-dpkg-deb --root-owner-group --build "$STAGING" "$REPO_ROOT/airautomatica_${VERSION}_all.deb"
+DEB_PATH="$REPO_ROOT/airautomatica_${VERSION}_all.deb"
+dpkg-deb --root-owner-group --build "$STAGING" "$DEB_PATH"
 
-echo "==> Done: $REPO_ROOT/airautomatica_${VERSION}_all.deb"
+# Verify .deb contains Alembic assets
+echo "==> Verifying .deb contains Alembic assets"
+if ! dpkg -c "$DEB_PATH" | grep -qE "alembic\.ini|alembic/"; then
+  echo "ERROR: .deb is missing alembic.ini or alembic/. Build failed."
+  exit 1
+fi
+
+echo "==> Done: $DEB_PATH"
