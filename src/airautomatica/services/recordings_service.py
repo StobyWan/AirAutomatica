@@ -1,5 +1,6 @@
 """Recordings service: scan, list, filter by session, delete. Time-based session association."""
 
+import json
 import logging
 import re
 import shutil
@@ -20,14 +21,42 @@ _FILENAME_PATTERN = re.compile(
 _FALLBACK_LIMIT = 5
 
 
+def _meta_path_for_recording(path: Path) -> Path:
+    """Return path to sidecar .meta file for a recording. Shared by read, write, delete."""
+    return path.with_suffix(path.suffix + ".meta")
+
+
+def _read_recording_meta(path: Path) -> tuple[Optional[str], Optional[int]]:
+    """Read sidecar .meta if present. Returns (trigger, session_id). On error or missing: (None, None)."""
+    meta_path = _meta_path_for_recording(path)
+    if not meta_path.is_file():
+        return (None, None)
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+        trigger = data.get("trigger") if isinstance(data.get("trigger"), str) else None
+        sid = data.get("session_id")
+        session_id = (
+            int(sid) if sid is not None and isinstance(sid, (int, float)) else None
+        )
+        return (trigger, session_id)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.debug("Failed to read recording meta %s: %s", meta_path, e)
+        return (None, None)
+
+
 @dataclass
 class RecordingInfo:
-    """Recording metadata. Same shape for file-based or future DB-backed metadata."""
+    """Recording metadata. Same shape for file-based or future DB-backed metadata.
+
+    trigger/session_id from .meta when present. Format can grow (e.g. trigger: manual).
+    """
 
     filename: str
     timestamp_iso: str
     size_bytes: Optional[int]
     duration_sec: Optional[float]
+    trigger: Optional[str] = None
+    session_id: Optional[int] = None
 
 
 @dataclass
@@ -155,6 +184,7 @@ class RecordingsService:
             except OSError:
                 size = None
             duration = _get_duration_sec(p)
+            trigger, meta_session_id = _read_recording_meta(p)
 
             all_candidates.append(
                 RecordingInfo(
@@ -162,6 +192,8 @@ class RecordingsService:
                     timestamp_iso=ts.isoformat(),
                     size_bytes=size,
                     duration_sec=duration,
+                    trigger=trigger,
+                    session_id=meta_session_id,
                 )
             )
 
@@ -249,6 +281,14 @@ class RecordingsService:
             return False
         try:
             path.unlink()
+            meta_path = _meta_path_for_recording(path)
+            if meta_path.is_file():
+                try:
+                    meta_path.unlink()
+                except OSError as e:
+                    logger.debug(
+                        "delete_recording: failed to remove meta %s: %s", meta_path, e
+                    )
             return True
         except OSError as e:
             logger.warning("delete_recording failed for %s: %s", filename, e)

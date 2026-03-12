@@ -428,6 +428,87 @@ def test_auto_mode_starts_on_armed(
     assert svc.get_recording_state().recording is True
 
 
+def test_auto_mode_stops_on_disarmed_calls_mark_as_auto_when_session_ref(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """In auto mode with session_ref, auto-stop calls mark_as_auto with basename and session_id."""
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "auto")
+    from airautomatica.settings import load_settings
+
+    load_settings()
+    from airautomatica.config import get_camera_recording_mode
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    session_ref: list[int | None] = [123]
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                ctrl = RecordingAutoController(
+                    svc,
+                    get_camera_recording_mode,
+                    debounce_sec=0,
+                    session_ref=session_ref,
+                )
+                with patch.object(svc, "mark_as_auto") as mock_mark:
+                    from datetime import datetime, timezone
+
+                    state_armed = AircraftState(
+                        connected=True,
+                        heartbeat=1,
+                        mode="GUIDED",
+                        armed=True,
+                        lat=37.0,
+                        lon=-122.0,
+                        rel_alt_m=100.0,
+                        heading_deg=90.0,
+                        roll_rad=0.0,
+                        pitch_rad=0.0,
+                        yaw_rad=0.0,
+                        voltage_v=12.5,
+                        current_a=2.0,
+                        groundspeed_m_s=10.0,
+                        airspeed_m_s=12.0,
+                        timestamp=datetime.now(timezone.utc),
+                    )
+                    state_disarmed = AircraftState(
+                        connected=True,
+                        heartbeat=2,
+                        mode="GUIDED",
+                        armed=False,
+                        lat=37.0,
+                        lon=-122.0,
+                        rel_alt_m=100.0,
+                        heading_deg=90.0,
+                        roll_rad=0.0,
+                        pitch_rad=0.0,
+                        yaw_rad=0.0,
+                        voltage_v=12.5,
+                        current_a=2.0,
+                        groundspeed_m_s=10.0,
+                        airspeed_m_s=12.0,
+                        timestamp=datetime.now(timezone.utc),
+                    )
+                    ctrl.maybe_auto_record(state_armed)
+                    output_file = svc.get_recording_state().output_file
+                    assert output_file is not None
+                    Path(recordings_dir).mkdir(parents=True, exist_ok=True)
+                    (Path(recordings_dir) / output_file).write_bytes(b"fake")
+                    ctrl.maybe_auto_record(state_disarmed)
+                    assert svc.get_recording_state().recording is False
+                    mock_mark.assert_called_once()
+                    call_args = mock_mark.call_args
+                    assert call_args[0][0] == output_file
+                    assert call_args[0][1] == 123
+
+
 def test_auto_mode_stops_on_disarmed(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:

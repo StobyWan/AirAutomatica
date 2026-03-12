@@ -43,6 +43,8 @@ Settings apply in different ways:
 
 **Telemetry reconnect:** When running the normal app, telemetry backend/port/baud settings are reapplied on save without restart. Serial port is validated before reconnect (must exist on Unix). The current telemetry source is stopped, a new one is created from the updated config, and the loop restarts. If reconnect fails (e.g. invalid port), the old source is restarted and the save response reports the failure.
 
+See also [dashboard.md](dashboard.md) for settings UI and apply hints.
+
 ## Install Layout
 
 | Path | Purpose |

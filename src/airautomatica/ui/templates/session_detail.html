@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Session — AIRAUTOMATICA</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="/static/js/formatters.js"></script>
+  <script src="/static/js/path-plot.js"></script>
+  <script src="/static/js/sparklines.js"></script>
   <style>
     :root {
       --bg: #1a1a2e;
@@ -215,35 +219,13 @@
   </div>
 
   <script>
+    const { fmt, fmtNumPrec, formatDuration, formatMetersOrKm, formatWatts, formatVolts, fmtDate, fmtDuration, labelAutopilot, labelMode, labelSource, fmtTs } = AiraFormatters;
+
     const sessionId = parseInt(window.location.pathname.split('/').pop(), 10);
     document.getElementById('session-id').textContent = sessionId;
     document.title = 'Session ' + sessionId + ' — AIRAUTOMATICA';
 
-    const fmt = (v) => v == null || v === '' ? '<span class="na">—</span>' : String(v);
-    const fmtNumPrec = (v, d) => v == null || (typeof v === 'number' && isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(d);
-
     // --- Debrief helpers ---
-    function formatDuration(sec) {
-      if (sec == null || (typeof sec === 'number' && isNaN(sec))) return '—';
-      const s = Math.round(Number(sec));
-      if (s < 60) return s + ' s';
-      if (s < 3600) return Math.floor(s / 60) + ' m';
-      return Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' m';
-    }
-    function formatMetersOrKm(m) {
-      if (m == null || (typeof m === 'number' && isNaN(m))) return '—';
-      const n = Number(m);
-      if (n >= 1000) return (n / 1000).toFixed(1) + ' km';
-      return n.toFixed(0) + ' m';
-    }
-    function formatWatts(w) {
-      if (w == null || (typeof w === 'number' && isNaN(w))) return '—';
-      return Number(w).toFixed(1) + ' W';
-    }
-    function formatVolts(v) {
-      if (v == null || (typeof v === 'number' && isNaN(v))) return '—';
-      return Number(v).toFixed(2) + ' V';
-    }
     function renderTopEvents(events, max) {
       const list = (events || []).slice(0, max || 5);
       if (list.length === 0) return '';
@@ -439,59 +421,14 @@
       const home = (opts && opts.home) || null;
       const svgEl = document.getElementById('path-svg');
       const emptyEl = document.getElementById('path-empty');
-      const points = (path || []).filter(p => p.lat != null && p.lon != null);
-      if (points.length === 0) {
-        if (currentSample && currentSample.lat != null && currentSample.lon != null) {
-          const pad = 0.0001;
-          const minLat = currentSample.lat - pad;
-          const maxLat = currentSample.lat + pad;
-          const minLon = currentSample.lon - pad;
-          const maxLon = currentSample.lon + pad;
-          const w = 200, h = 220, margin = 8, plotW = w - 2 * margin, plotH = h - 2 * margin;
-          const toX = (lon) => margin + ((lon - minLon) / (maxLon - minLon)) * plotW;
-          const toY = (lat) => h - margin - ((lat - minLat) / (maxLat - minLat)) * plotH;
-          let svg = `<circle cx="${toX(currentSample.lon)}" cy="${toY(currentSample.lat)}" r="4" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>`;
-          if (home && home.lat != null && home.lon != null) {
-            svg += `<circle cx="${toX(home.lon)}" cy="${toY(home.lat)}" r="5" fill="#f59e0b" stroke="#0f172a" stroke-width="1"/>`;
-          }
-          svgEl.innerHTML = svg;
-          svgEl.classList.remove('hidden');
-          emptyEl.classList.add('hidden');
-        } else {
-          svgEl.classList.add('hidden');
-          emptyEl.classList.remove('hidden');
-        }
+      const svg = AiraPathPlot.renderPathPlot(path, currentSample, detections, home, { width: 200, height: 220 });
+      if (!svg) {
+        svgEl.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
         return;
       }
       svgEl.classList.remove('hidden');
       emptyEl.classList.add('hidden');
-      const lats = [...points.map(p => p.lat)];
-      const lons = [...points.map(p => p.lon)];
-      if (home && home.lat != null && home.lon != null) {
-        lats.push(home.lat);
-        lons.push(home.lon);
-      }
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLon = Math.min(...lons);
-      const maxLon = Math.max(...lons);
-      const padLat = (maxLat - minLat) * 0.1 || 0.0001;
-      const padLon = (maxLon - minLon) * 0.1 || 0.0001;
-      const w = 200, h = 220, margin = 8, plotW = w - 2 * margin, plotH = h - 2 * margin;
-      const toX = (lon) => margin + ((lon - (minLon - padLon)) / ((maxLon + padLon) - (minLon - padLon))) * plotW;
-      const toY = (lat) => h - margin - ((lat - (minLat - padLat)) / ((maxLat + padLat) - (minLat - padLat))) * plotH;
-      const pathD = points.map((p, i) => (i === 0 ? 'M' : 'L') + toX(p.lon) + ' ' + toY(p.lat)).join(' ');
-      let svg = `<path d="${pathD}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
-      points.forEach(p => svg += `<circle cx="${toX(p.lon)}" cy="${toY(p.lat)}" r="2" fill="#3b82f6"/>`);
-      if (home && home.lat != null && home.lon != null) {
-        svg += `<circle cx="${toX(home.lon)}" cy="${toY(home.lat)}" r="5" fill="#f59e0b" stroke="#0f172a" stroke-width="1"/>`;
-      }
-      (detections || []).filter(d => d.lat != null && d.lon != null).forEach(d => {
-        svg += `<circle cx="${toX(d.lon)}" cy="${toY(d.lat)}" r="3" fill="#ef4444" opacity="0.8"/>`;
-      });
-      if (currentSample && currentSample.lat != null && currentSample.lon != null) {
-        svg += `<circle cx="${toX(currentSample.lon)}" cy="${toY(currentSample.lat)}" r="4" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>`;
-      }
       svgEl.innerHTML = svg;
     }
 
@@ -511,23 +448,7 @@
       }
       container.classList.remove('hidden');
       emptyEl.classList.add('hidden');
-      function sparkPoints(arr, minV, maxV) {
-        if (arr.length === 0) return '';
-        const m = minV ?? Math.min(...arr);
-        const M = maxV ?? Math.max(...arr);
-        const range = M - m || 1;
-        const w = 140, h = 32;
-        return arr.map((v, i) => (i / (arr.length - 1 || 1)) * w + ',' + (h - ((v - m) / range) * h)).join(' ');
-      }
-      container.innerHTML = [
-        ['Voltage (V)', voltage, 0, 20],
-        ['Alt (m)', relAlt, 0],
-        ['Groundspeed (m/s)', groundspeed, 0],
-        ['Heartbeat age (s)', heartbeat, 0],
-      ].map(([label, arr, minV, maxV]) => {
-        const pts = sparkPoints(arr, minV, maxV);
-        return pts ? `<div class="flex flex-col gap-0.5"><span class="text-xs text-slate-500">${label}</span><svg class="sparkline" viewBox="0 0 140 32" preserveAspectRatio="none"><polyline fill="none" stroke="#3b82f6" stroke-width="1" points="${pts}"/></svg></div>` : `<div><span class="text-xs text-slate-500">${label}</span><div class="text-slate-600 text-xs">—</div></div>`;
-      }).join('');
+      container.innerHTML = AiraSparklines.renderTrends(voltage, relAlt, groundspeed, heartbeat);
     }
 
     const sessionMetaPromise = fetch(`/sessions/${sessionId}`).then(r => {
@@ -652,39 +573,35 @@
       if (!sessionEnd && flightEvents.length) sessionEnd = flightEvents[flightEvents.length - 1].ended_at || flightEvents[flightEvents.length - 1].started_at;
       if (!sessionStart && replaySamples.length) sessionStart = replaySamples[0].timestamp;
       if (!sessionEnd && replaySamples.length) sessionEnd = replaySamples[replaySamples.length - 1].timestamp;
+
+      let primaryRecording = null;
+      if (recordings.length > 0) {
+        const autoMatch = recordings.find(r => r.trigger === 'auto' && r.session_id === sessionId);
+        if (autoMatch) {
+          primaryRecording = autoMatch;
+        } else {
+          const sessionStartMs = sessionStart ? new Date(sessionStart).getTime() : null;
+          if (sessionStartMs != null) {
+            let best = null;
+            let bestDist = Infinity;
+            recordings.forEach(r => {
+              const t = new Date(r.timestamp).getTime();
+              const dist = Math.abs(t - sessionStartMs);
+              if (dist < bestDist) { bestDist = dist; best = r; }
+            });
+            primaryRecording = best;
+          } else {
+            primaryRecording = recordings[0];
+          }
+        }
+      }
+
       const contentEl = document.getElementById('content');
       contentEl.classList.remove('hidden');
 
-      const labelMode = (s) => {
-        const m = s.connection_mode || (s.telemetry_backend === 'mock' ? 'mock' : null);
-        if (m === 'mock') return 'Mock';
-        if (m === 'ardupilot') return 'ArduPilot';
-        if (m === 'inav') return 'iNav';
-        return m || '—';
-      };
-      const labelAutopilot = (s) => {
-        const a = s.autopilot;
-        if (a === 'mock' || (s.connection_mode === 'mock' && !a)) return 'Mock session';
-        if (a === 'ardupilot') return 'ArduPilot';
-        if (a === 'inav') return 'iNav';
-        if (a === 'generic') return 'iNav/Generic';
-        return 'Unknown autopilot';
-      };
-      const labelSource = (s) => {
-        if (s.connection_mode === 'mock' || s.telemetry_backend === 'mock') return 'Mock session';
-        if (s.source_port) return s.source_port + (s.baud ? ' @ ' + s.baud : '');
-        return 'No port';
-      };
-      const fmtDuration = (started, ended) => {
-        if (!started || !ended) return '—';
-        try {
-          const sec = Math.round((new Date(ended) - new Date(started)) / 1000);
-          if (sec < 60) return sec + ' s';
-          if (sec < 3600) return Math.floor(sec / 60) + ' m';
-          return Math.floor(sec / 3600) + ' h ' + Math.floor((sec % 3600) / 60) + ' m';
-        } catch { return '—'; }
-      };
-      const fmtDate = (s) => s ? new Date(s).toLocaleString() : '—';
+      const recPlayerEl = document.getElementById('session-video-player');
+      const recPlayerContainer = document.getElementById('session-player-container');
+
       const metaEl = document.getElementById('session-metadata');
       const duration = fmtDuration(sessionMeta.started_at, sessionMeta.ended_at);
       metaEl.innerHTML = [
@@ -697,30 +614,34 @@
       ].filter(Boolean).join(' · ');
 
       const statsEl = document.getElementById('stats');
-      const first = path[0];
-      const last = path[path.length - 1];
-      statsEl.innerHTML = `
-        <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
-          <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Path points</span>
-          <p class="text-lg font-semibold text-white mt-0.5 font-mono">${path.length}</p>
-        </div>
-        <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
-          <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Detections</span>
-          <p class="text-lg font-semibold text-white mt-0.5 font-mono">${detections.length}</p>
-        </div>
-        <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
-          <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">First</span>
-          <p class="text-sm font-mono text-slate-200 mt-0.5 truncate">${first ? fmtNumPrec(first.lat, 6) : '—'}, ${first ? fmtNumPrec(first.lon, 6) : '—'}</p>
-        </div>
-        <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
-          <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Last</span>
-          <p class="text-sm font-mono text-slate-200 mt-0.5 truncate">${last ? fmtNumPrec(last.lat, 6) : '—'}, ${last ? fmtNumPrec(last.lon, 6) : '—'}</p>
-        </div>
-        <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
-          <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Altitude</span>
-          <p class="text-sm font-mono text-slate-200 mt-0.5">${first?.rel_alt_m != null ? first.rel_alt_m.toFixed(1) + ' m' : '—'} → ${last?.rel_alt_m != null ? last.rel_alt_m.toFixed(1) + ' m' : '—'}</p>
-        </div>
-      `;
+      function updateStats(pathArr, dets) {
+        const first = (pathArr || [])[0];
+        const last = (pathArr || []).length > 0 ? pathArr[pathArr.length - 1] : null;
+        if (!statsEl) return;
+        statsEl.innerHTML = `
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Path points</span>
+            <p class="text-lg font-semibold text-white mt-0.5 font-mono">${(pathArr || []).length}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Detections</span>
+            <p class="text-lg font-semibold text-white mt-0.5 font-mono">${(dets || []).length}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">First</span>
+            <p class="text-sm font-mono text-slate-200 mt-0.5 truncate">${first ? fmtNumPrec(first.lat, 6) : '—'}, ${first ? fmtNumPrec(first.lon, 6) : '—'}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Last</span>
+            <p class="text-sm font-mono text-slate-200 mt-0.5 truncate">${last ? fmtNumPrec(last.lat, 6) : '—'}, ${last ? fmtNumPrec(last.lon, 6) : '—'}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Altitude</span>
+            <p class="text-sm font-mono text-slate-200 mt-0.5">${first?.rel_alt_m != null ? first.rel_alt_m.toFixed(1) + ' m' : '—'} → ${last?.rel_alt_m != null ? last.rel_alt_m.toFixed(1) + ' m' : '—'}</p>
+          </div>
+        `;
+      }
+      updateStats(path, detections);
 
       let pathHomeRef = pathHome;
       const homeSourceLabels = { manual_session: 'Override', autopilot: 'Autopilot', fallback: 'First point' };
@@ -832,6 +753,15 @@
           }
           updateFromIndex(lo);
         }
+        function syncVideoToReplayTime(ts) {
+          if (!recPlayerEl || !primaryRecording) return;
+          const recStart = new Date(primaryRecording.timestamp).getTime();
+          const t = new Date(ts).getTime();
+          const offsetSec = (t - recStart) / 1000;
+          const dur = primaryRecording.duration_sec ?? recPlayerEl.duration;
+          if (offsetSec < 0 || (dur != null && offsetSec > dur)) return;
+          recPlayerEl.currentTime = Math.max(0, offsetSec);
+        }
         function fmtTime(ts) {
           const ms = new Date(ts).getTime() - tStart;
           const m = Math.floor(ms / 60000);
@@ -862,6 +792,7 @@
           document.getElementById('replay-metric-alt').textContent = s.rel_alt_m != null ? s.rel_alt_m.toFixed(0) + ' m' : '—';
           document.getElementById('replay-metric-speed').textContent = s.groundspeed_m_s != null ? s.groundspeed_m_s.toFixed(1) + ' m/s' : '—';
           renderPathPlot(path, detections, { currentSample: s, home: pathHomeRef });
+          syncVideoToReplayTime(s.timestamp);
           document.querySelectorAll('.replay-event-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
           document.querySelectorAll('.replay-phase-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
           flightEvents.forEach((ev, i) => {
@@ -909,6 +840,11 @@
           }).join('');
           itemsEl.querySelectorAll('.replay-phase-item').forEach(el => { el.addEventListener('click', () => seekToTimestamp(el.dataset.seekTs)); });
         }
+        if (primaryRecording && recPlayerEl && recPlayerContainer) {
+          recPlayerEl.src = '/recordings/' + encodeURIComponent(primaryRecording.filename);
+          recPlayerContainer.classList.remove('hidden');
+          recPlayerEl.addEventListener('loadedmetadata', () => syncVideoToReplayTime(replaySamples[currentIndex]?.timestamp || replaySamples[0]?.timestamp), { once: true });
+        }
         updateFromIndex(0);
         function playLoop(now) {
           if (!isPlaying) return;
@@ -923,7 +859,17 @@
         playBtn.addEventListener('click', () => {
           isPlaying = !isPlaying;
           playBtn.textContent = isPlaying ? '⏸' : '▶';
-          if (isPlaying) { lastPlayTime = performance.now(); playRaf = requestAnimationFrame(playLoop); } else if (playRaf) { cancelAnimationFrame(playRaf); }
+          if (isPlaying) {
+            if (recPlayerEl && primaryRecording) {
+              recPlayerEl.play();
+              recPlayerEl.playbackRate = parseFloat(speedSelect.value) || 1;
+            }
+            lastPlayTime = performance.now();
+            playRaf = requestAnimationFrame(playLoop);
+          } else {
+            if (recPlayerEl && primaryRecording) recPlayerEl.pause();
+            if (playRaf) cancelAnimationFrame(playRaf);
+          }
         });
         function jumpToPrevEvent() {
           const t = new Date(replaySamples[currentIndex].timestamp).getTime();
@@ -941,6 +887,11 @@
         nextEventBtn.addEventListener('click', jumpToNextEvent);
         prevEventBtn.disabled = flightEvents.length === 0;
         nextEventBtn.disabled = flightEvents.length === 0;
+        speedSelect.addEventListener('change', () => {
+          if (recPlayerEl && primaryRecording && isPlaying) {
+            recPlayerEl.playbackRate = parseFloat(speedSelect.value) || 1;
+          }
+        });
         let dragging = false;
         function handleMove(clientX) {
           if (!trackEl) return;
@@ -980,42 +931,96 @@
         window.__replaySeekToPhase = () => {};
       }
 
-      const detEl = document.getElementById('detections-list');
-      const detEmpty = document.getElementById('detections-empty');
-      if (detections.length === 0) {
-        detEl.classList.add('hidden');
-        detEmpty.classList.remove('hidden');
-      } else {
-        detEl.classList.remove('hidden');
-        detEmpty.classList.add('hidden');
-        const fmtTs = (ts) => ts ? new Date(ts).toLocaleString() : '—';
-        detEl.innerHTML = detections.map(d => `
-          <div class="detection-card">
-            <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
-            <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmt(d.source_backend)}</div>
-            ${d.summary ? `<div class="mt-1 text-slate-300">${d.summary}</div>` : ''}
-            <div class="mt-1.5 text-xs text-slate-500 font-mono">
-              ${fmtTs(d.timestamp)}
-              ${d.lat != null && d.lon != null ? ` · ${Number(d.lat).toFixed(5)}, ${Number(d.lon).toFixed(5)}` : ''}
-              ${d.rel_alt_m != null ? ` · ${Number(d.rel_alt_m).toFixed(1)} m` : ''}
+      function renderDetectionsList(dets) {
+        const detEl = document.getElementById('detections-list');
+        const detEmpty = document.getElementById('detections-empty');
+        if (!detEl) return;
+        if ((dets || []).length === 0) {
+          detEl.classList.add('hidden');
+          if (detEmpty) detEmpty.classList.remove('hidden');
+        } else {
+          detEl.classList.remove('hidden');
+          if (detEmpty) detEmpty.classList.add('hidden');
+          detEl.innerHTML = dets.map(d => `
+            <div class="detection-card">
+              <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
+              <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmt(d.source_backend)}</div>
+              ${d.summary ? `<div class="mt-1 text-slate-300">${d.summary}</div>` : ''}
+              <div class="mt-1.5 text-xs text-slate-500 font-mono">
+                ${fmtTs(d.timestamp)}
+                ${d.lat != null && d.lon != null ? ` · ${Number(d.lat).toFixed(5)}, ${Number(d.lon).toFixed(5)}` : ''}
+                ${d.rel_alt_m != null ? ` · ${Number(d.rel_alt_m).toFixed(1)} m` : ''}
+              </div>
             </div>
-          </div>
-        `).join('');
+          `).join('');
+        }
+      }
+
+      renderDetectionsList(detections);
+
+      let livePath = path;
+      let liveDetections = detections;
+      if (sessionMeta.ended_at == null) {
+        const socket = io();
+        socket.on('telemetry_path_update', (d) => {
+          if (d.session_id !== sessionId) return;
+          livePath = d.path || [];
+          liveDetections = d.detections || [];
+          const currentPos = d.current_position;
+          const svgEl = document.getElementById('path-svg');
+          const emptyEl = document.getElementById('path-empty');
+          if (livePath.length === 0 && !currentPos) {
+            if (svgEl) svgEl.classList.add('hidden');
+            if (emptyEl) emptyEl.classList.remove('hidden');
+          } else {
+            if (svgEl) svgEl.classList.remove('hidden');
+            if (emptyEl) emptyEl.classList.add('hidden');
+            const svg = AiraPathPlot.renderPathPlot(livePath, currentPos, liveDetections, pathHomeRef, { width: 200, height: 220 });
+            if (svgEl && svg) svgEl.innerHTML = svg;
+          }
+          updateStats(livePath, liveDetections);
+        });
+        socket.on('detections_update', (d) => {
+          if (d.session_id !== sessionId) return;
+          liveDetections = d.detections || [];
+          renderDetectionsList(liveDetections);
+          updateStats(livePath, liveDetections);
+        });
+        socket.on('trends_update', (d) => {
+          const voltage = d.voltage || [];
+          const relAlt = d.rel_alt_m || [];
+          const groundspeed = d.groundspeed_m_s || [];
+          const heartbeat = d.heartbeat_age_s || [];
+          const container = document.getElementById('trends-container');
+          const emptyEl = document.getElementById('trends-empty');
+          const hasData = voltage.length > 0 || relAlt.length > 0 || groundspeed.length > 0 || heartbeat.length > 0;
+          if (!hasData) {
+            if (container) container.classList.add('hidden');
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            return;
+          }
+          if (container) container.classList.remove('hidden');
+          if (emptyEl) emptyEl.classList.add('hidden');
+          if (container) container.innerHTML = AiraSparklines.renderTrends(voltage, relAlt, groundspeed, heartbeat);
+        });
+        socket.on('sessions_update', (d) => {
+          const sessions = d.sessions || [];
+          const s = sessions.find(x => x.id === sessionId);
+          if (s && s.ended_at) loadDebrief();
+        });
       }
 
       const recListEl = document.getElementById('session-recordings-list');
       const recLoadingEl = document.getElementById('session-recordings-loading');
       const recEmptyEl = document.getElementById('session-recordings-empty');
       const recEmptyMsgEl = document.getElementById('session-recordings-empty-msg');
-      const recPlayerEl = document.getElementById('session-video-player');
-      const recPlayerContainer = document.getElementById('session-player-container');
       recLoadingEl.classList.add('hidden');
       if (recordings.length === 0) {
         recEmptyEl.classList.remove('hidden');
         recEmptyMsgEl.textContent = sessionResolved ? 'No recordings for this session' : 'Session could not be resolved. Recordings cannot be associated.';
       } else {
         const renderRec = (r, isLast) => {
-          const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
+          const ts = fmtTs(r.timestamp);
           const dur = r.duration_sec != null ? Math.round(r.duration_sec) + ' s' : '—';
           const sz = r.size_bytes != null ? (r.size_bytes < 1024 ? r.size_bytes + ' B' : (r.size_bytes < 1048576 ? (r.size_bytes / 1024).toFixed(1) + ' KB' : (r.size_bytes / 1048576).toFixed(1) + ' MB')) : '—';
           const border = isLast ? 'border-cyan-500/60 bg-cyan-800/20' : 'border-slate-700/50 hover:border-slate-600';
