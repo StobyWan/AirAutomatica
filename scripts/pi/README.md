@@ -1,6 +1,8 @@
 # Raspberry Pi 5 Diagnostic Scripts
 
-Fast on-device diagnostics for AirAutomatica on Raspberry Pi. Use these for thermal monitoring, throttling interpretation, and benchmarking before/after hardware or code changes.
+Fast on-device diagnostics for AirAutomatica on Raspberry Pi.
+
+**Prerequisites for Ollama scripts** (`inference_probe.sh`, `watch_ollama.sh`): Install [Ollama](https://ollama.com), run `ollama pull gemma3:1b`, and ensure the Ollama service is running. See [docs/pi_setup.md](../../docs/pi_setup.md). Use these for thermal monitoring, throttling interpretation, and benchmarking before/after hardware or code changes.
 
 **Note:** `vcgencmd` is Raspberry Pi–specific. Scripts degrade gracefully when run on non-Pi systems (e.g. temp from sysfs, throttled as N/A).
 

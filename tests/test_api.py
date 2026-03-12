@@ -4,11 +4,14 @@ import json
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from airautomatica.ai.models import AiResult
+from airautomatica.ai.ollama_readiness import OllamaReadinessResult
+from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.api.server import create_app
 from airautomatica.db import init_db
@@ -65,6 +68,53 @@ def test_health(client: TestClient) -> None:
     assert "non_perception_label" in counts
     assert "unknown_label" in counts
     assert "parse_error" in counts
+
+
+def test_health_includes_ollama_ready_when_provider_ollama(
+    store: StateStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /health includes ollama_ready when LOCAL_LLM_PROVIDER=ollama."""
+    monkeypatch.setenv("LOCAL_LLM_PROVIDER", "ollama")
+    ollama_svc = OllamaAiService(
+        base_url="http://127.0.0.1:11434",
+        model="gemma3:1b",
+        timeout_sec=5.0,
+    )
+    task_service = OllamaTaskService(provider="ollama", ollama_service=ollama_svc)
+    with patch(
+        "airautomatica.api.server.check_ollama_ready",
+        return_value=OllamaReadinessResult(ready=True, reason="ready", detail=None),
+    ):
+        client = TestClient(create_app(store, task_service=task_service))
+        r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ollama_ready"] is True
+
+    with patch(
+        "airautomatica.api.server.check_ollama_ready",
+        return_value=OllamaReadinessResult(
+            ready=False, reason="unreachable", detail=None
+        ),
+    ):
+        client = TestClient(create_app(store, task_service=task_service))
+        r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ollama_ready"] is False
+
+
+def test_health_omits_ollama_ready_when_provider_mock(
+    store: StateStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /health omits ollama_ready when LOCAL_LLM_PROVIDER=mock."""
+    monkeypatch.setenv("LOCAL_LLM_PROVIDER", "mock")
+    task_service = OllamaTaskService(provider="mock", ollama_service=None)
+    client = TestClient(create_app(store, task_service=task_service))
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert "ollama_ready" not in data
 
 
 def test_health_includes_telemetry_summary_counts_when_task_service_exists(

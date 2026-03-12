@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
+from airautomatica.ai.ollama_readiness import check_ollama_ready
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
     EventClassificationResult,
@@ -20,6 +21,9 @@ from airautomatica.ai.ollama_tasks import (
 from airautomatica.config import (
     get_camera_recording_mode,
     get_effective_ai_backend,
+    get_local_llm_base_url,
+    get_local_llm_model,
+    get_local_llm_provider,
     get_serial_baud,
     get_serial_port,
     get_sqlite_db_path,
@@ -315,6 +319,12 @@ def create_app(
         health_data["perception_acceptance_rate"] = rates["perception_acceptance_rate"]
         health_data["telemetry_meaningful_rate"] = rates["telemetry_meaningful_rate"]
         health_data["camera_ready"] = get_camera_ready()
+        if get_local_llm_provider() == "ollama":
+            health_data["ollama_ready"] = check_ollama_ready(
+                get_local_llm_base_url("ollama"),
+                model=get_local_llm_model("ollama"),
+                timeout_sec=3.0,
+            ).ready
         if camera_recording_service is not None:
             rec_state = camera_recording_service.get_recording_state()
             health_data["camera_recording_available"] = (

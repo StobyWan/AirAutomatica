@@ -23,6 +23,7 @@ from airautomatica.ai import (
     OllamaAiService,
     OllamaTaskService,
 )
+from airautomatica.ai.ollama_readiness import wait_for_ollama_ready
 from airautomatica.ai.scheduler import (
     AiInferenceScheduler,
     ScheduledOllamaAiService,
@@ -43,6 +44,7 @@ from airautomatica.config import (
     get_local_llm_model,
     get_local_llm_provider,
     get_local_llm_timeout,
+    get_ollama_required,
     get_preprocessing_enabled,
     get_serial_baud,
     get_serial_port,
@@ -356,6 +358,43 @@ def main() -> None:
 
     async def run_all() -> None:
         shutdown_event = asyncio.Event()
+
+        if provider == "ollama":
+            model = get_local_llm_model("ollama")
+            result = await wait_for_ollama_ready(
+                get_local_llm_base_url("ollama"),
+                model=model,
+                max_attempts=5,
+                interval_sec=2.0,
+                timeout_sec=3.0,
+            )
+            if result.ready:
+                logger.info("Ollama ready with model %r", model)
+            else:
+                if result.reason == "unreachable":
+                    logger.warning(
+                        "Ollama not reachable at startup; proceeding without Ollama"
+                    )
+                elif result.reason == "model_missing":
+                    logger.warning(
+                        "Ollama is running but model %r is not installed; proceeding without Ollama",
+                        model,
+                    )
+                elif result.reason == "http_error":
+                    logger.warning(
+                        "Ollama returned HTTP error at startup; proceeding without Ollama"
+                    )
+                else:
+                    logger.warning(
+                        "Ollama readiness failed after retries; AI features will run in degraded mode"
+                    )
+                if get_ollama_required():
+                    logger.error(
+                        "Ollama required but not ready: %s (%s)",
+                        result.reason,
+                        result.detail or "no detail",
+                    )
+                    sys.exit(1)
 
         def _on_signal(signum: int, frame) -> None:
             shutdown_event.set()

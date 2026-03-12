@@ -6,6 +6,23 @@ REPO_URL="https://github.com/StobyWan/AirAutomatica.git"
 BASE_DIR="$HOME/dev"
 APP_DIR="$BASE_DIR/$APP_NAME"
 ENV_FILE="$APP_DIR/.env"
+WITH_OLLAMA=false
+# Model: use LOCAL_LLM_MODEL if set, else mirror app default (config.py). App config is source of truth.
+MODEL="${LOCAL_LLM_MODEL:-gemma3:1b}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --with-ollama)
+      WITH_OLLAMA=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--with-ollama]"
+      exit 1
+      ;;
+  esac
+done
 
 echo "==> Updating Raspberry Pi OS packages..."
 sudo apt update
@@ -132,6 +149,24 @@ env_path.write_text("\n".join(new_lines) + "\n")
 PY
 fi
 
+if [[ "$WITH_OLLAMA" == true ]]; then
+  echo "==> Installing Ollama (--with-ollama)..."
+  if ! command -v ollama >/dev/null 2>&1; then
+    curl -fsSL https://ollama.com/install.sh | sh
+    export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+  else
+    echo "Ollama already installed."
+  fi
+  echo "==> Pulling model $MODEL (set LOCAL_LLM_MODEL to override)..."
+  ollama pull "$MODEL" || true
+  if systemctl is-system-running &>/dev/null 2>&1; then
+    echo "==> Enabling Ollama systemd service for boot..."
+    sudo systemctl enable ollama 2>/dev/null || true
+    sudo systemctl start ollama 2>/dev/null || true
+  fi
+  echo "==> Ollama setup complete."
+fi
+
 echo
 echo "==> Setup complete."
 echo
@@ -139,6 +174,9 @@ echo "Project directory:"
 echo "  $APP_DIR"
 echo
 echo "To run (default: ollama; set LOCAL_LLM_PROVIDER=mock for no-setup testing):"
+if [[ "$WITH_OLLAMA" != true ]]; then
+  echo "  (Ollama not installed. Re-run with --with-ollama to install, or use mock mode.)"
+fi
 echo "  cd $APP_DIR"
 echo "  source .venv/bin/activate"
 echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""

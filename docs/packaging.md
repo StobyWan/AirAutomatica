@@ -137,6 +137,22 @@ GitHub Actions will:
 2. Upload it as a workflow artifact
 3. Create a GitHub Release and attach the .deb
 
+## Prerequisites for Ollama Mode
+
+Switching to `LOCAL_LLM_PROVIDER=ollama` requires Ollama to be **installed and running** on the system. The packaged install does not install or start Ollama.
+
+Before editing the env file:
+
+1. **Install Ollama** — [https://ollama.com](https://ollama.com) (Linux: `curl -fsSL https://ollama.com/install.sh | sh`).
+2. **Pull the model** — `ollama pull gemma3:1b` (or the model name you configure).
+3. **Enable on boot** — `sudo systemctl enable ollama && sudo systemctl start ollama`.
+
+See [pi_setup.md](pi_setup.md) for full prerequisites.
+
+### Ollama degraded mode
+
+If provider is ollama and readiness fails at startup: the app still starts, `/health` reports `ollama_ready: false`, AI routes return fallback output, and there are no automatic retries beyond startup wait. Set `OLLAMA_REQUIRED=1` to make startup fail when Ollama is not ready. Model must match `LOCAL_LLM_MODEL`.
+
 ## Switching to Real Hardware
 
 Edit `/etc/airautomatica/airautomatica.env`:
@@ -163,4 +179,4 @@ sudo systemctl restart airautomatica
 - **Serial port**: User `airautomatica` is in the `dialout` group for `/dev/ttyUSB0` access.
 - **Camera recording**: Requires `rpicam-vid` (modern Raspberry Pi OS) or `libcamera-vid` (legacy rpicam-apps), and ffmpeg. The full `rpicam-apps` package (not lite) is required for libav/mpegts piping. The .deb lists ffmpeg as a dependency. The service unit sets `PATH` and `SupplementaryGroups=video dialout` so the process has camera and serial device access. Without `SupplementaryGroups`, systemd may not pass the user's groups to child processes. In auto mode, a disarm debounce (default 2.5s) reduces false stops from telemetry jitter or brief disconnects; tune via `CAMERA_RECORDING_DISARM_DEBOUNCE_SEC`. **Restart the service or reboot** after install/upgrade.
 - **Python 3.12**: Raspberry Pi OS Bookworm ships Python 3.11. Use Trixie, or install python3.12 from testing/backports.
-- **Ollama**: For system service, Ollama must run as a separate service reachable at `LOCAL_LLM_BASE_URL`.
+- **Ollama**: For system service, Ollama must run as a separate service reachable at `LOCAL_LLM_BASE_URL`. Install Ollama, pull the model, and enable the Ollama systemd service before switching to `LOCAL_LLM_PROVIDER=ollama`. See [Prerequisites for Ollama Mode](#prerequisites-for-ollama-mode) above. The airautomatica unit has `After=ollama.service` and `Wants=ollama.service` so it starts after Ollama when both are installed; if Ollama is not installed, these references are harmlessly ignored by systemd.

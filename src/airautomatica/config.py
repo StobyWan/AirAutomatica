@@ -100,6 +100,17 @@ def get_local_llm_timeout() -> float:
         return 30.0
 
 
+def get_ollama_required() -> bool:
+    """True if startup should fail when Ollama is not ready. Default: False (degraded mode).
+    Env: AIRAUTOMATICA_OLLAMA_REQUIRED (wins) or OLLAMA_REQUIRED.
+    Precedence: AIRAUTOMATICA_* overrides plain OLLAMA_*."""
+    raw = os.environ.get(
+        "AIRAUTOMATICA_OLLAMA_REQUIRED",
+        os.environ.get("OLLAMA_REQUIRED", "0"),
+    ).lower()
+    return raw in ("1", "true", "yes")
+
+
 def get_ollama_num_thread() -> int:
     """Number of CPU threads Ollama uses for inference. 1-8. Default 4.
     Lower values reduce Pi 5 CPU load and thermals."""
