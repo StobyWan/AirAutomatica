@@ -1,6 +1,12 @@
 """Database module for SQLite persistence."""
 
-from airautomatica.db.base import create_db_engine, enable_wal, get_engine, init_db
+from airautomatica.db.base import (
+    create_db_engine,
+    enable_wal,
+    get_engine,
+    get_last_init_error,
+    init_db,
+)
 from airautomatica.db.models import (
     Base,
     CommandSent,
@@ -21,6 +27,7 @@ __all__ = [
     "create_db_engine",
     "enable_wal",
     "get_engine",
+    "get_last_init_error",
     "get_session",
     "init_db",
 ]

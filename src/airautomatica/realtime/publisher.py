@@ -9,7 +9,7 @@ import socketio
 
 from airautomatica.ai.ollama_tasks import get_telemetry_summary_counts
 from airautomatica.config import get_camera_recording_mode, get_sqlite_db_path
-from airautomatica.db.base import get_engine
+from airautomatica.db.base import get_engine, get_last_init_error
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.services.camera_ready_state import get as get_camera_ready
 from airautomatica.services.mission_logic import get_perception_counts
@@ -136,9 +136,13 @@ class DashboardPublisher:
                 state = self._store.get()
                 persistence_enabled = get_engine() is not None
                 last_error = (
-                    self._persistence.get_last_persistence_error()
-                    if self._persistence is not None
-                    else None
+                    get_last_init_error()
+                    if not persistence_enabled
+                    else (
+                        self._persistence.get_last_persistence_error()
+                        if self._persistence is not None
+                        else None
+                    )
                 )
 
                 # Update heartbeat buffer for sparklines
