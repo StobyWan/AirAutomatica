@@ -219,6 +219,103 @@ def test_get_recent_telemetry_samples() -> None:
         assert samples[0]["voltage_v"] == 12.5
         assert samples[0]["groundspeed_m_s"] == 10.0
         assert "timestamp" in samples[0]
+        assert "current_a" in samples[0]
+
+
+def test_get_session_telemetry_for_debrief() -> None:
+    """get_session_telemetry_for_debrief returns samples oldest first with current_a."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        base = datetime.now(timezone.utc)
+        for i in range(3):
+            state = AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=37.5 + i * 0.001,
+                lon=-122.2,
+                rel_alt_m=100.0 + i * 5,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0 + i,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=base + timedelta(seconds=i),
+                telemetry_status="connected",
+            )
+            persistence.insert_telemetry_sample(session_id, state)
+
+        samples = persistence.get_session_telemetry_for_debrief(session_id)
+        assert len(samples) == 3
+        assert (
+            samples[0]["timestamp"]
+            <= samples[1]["timestamp"]
+            <= samples[2]["timestamp"]
+        )
+        assert samples[0]["current_a"] == 2.0
+        assert samples[2]["current_a"] == 4.0
+        assert samples[0]["lat"] == 37.5
+        assert samples[2]["lat"] == 37.502
+
+
+def test_save_and_get_generated_debrief() -> None:
+    """save_generated_debrief persists summary; get_generated_debrief returns it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        assert persistence.get_generated_debrief(session_id) is None
+
+        persistence.save_generated_debrief(session_id, "Flight completed normally.")
+        assert (
+            persistence.get_generated_debrief(session_id)
+            == "Flight completed normally."
+        )
+
+        persistence.save_generated_debrief(session_id, "Updated summary.")
+        assert persistence.get_generated_debrief(session_id) == "Updated summary."
+
+
+def test_save_generated_debrief_ignores_fallback_text() -> None:
+    """save_generated_debrief does not persist fallback error text."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        persistence.save_generated_debrief(
+            session_id, "Debrief summary unavailable: connection refused"
+        )
+        assert persistence.get_generated_debrief(session_id) is None
+
+
+def test_get_generated_debrief_at() -> None:
+    """get_generated_debrief_at returns timestamp when summary exists."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        assert persistence.get_generated_debrief_at(session_id) is None
+
+        persistence.save_generated_debrief(session_id, "Flight completed.")
+        at = persistence.get_generated_debrief_at(session_id)
+        assert at is not None
 
 
 def test_get_recent_sessions_includes_detection_count() -> None:

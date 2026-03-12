@@ -43,6 +43,7 @@ from airautomatica.config import (
     get_local_llm_model,
     get_local_llm_provider,
     get_local_llm_timeout,
+    get_preprocessing_enabled,
     get_serial_baud,
     get_serial_port,
     get_session_auto_start_on_arm,
@@ -72,6 +73,7 @@ from airautomatica.telemetry import (
     TelemetrySource,
 )
 from airautomatica.telemetry.capabilities import CapabilityInfo
+from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -204,10 +206,13 @@ async def _telemetry_loop(
     lifecycle_logger: TelemetryLifecycleLogger | None = None,
     recording_auto_controller: RecordingAutoController | None = None,
     session_auto_controller: SessionAutoController | None = None,
+    preprocessor: TelemetryPreprocessor | None = None,
 ) -> None:
     """Consume telemetry stream and update store."""
     async for state in source.stream():
         store.update(state)
+        if preprocessor is not None:
+            preprocessor.on_state(state)
         if sampler is not None:
             sampler.maybe_sample(state)
         if path_recorder is not None:
@@ -300,6 +305,11 @@ def main() -> None:
         get_enabled_fn=get_session_auto_start_on_arm,
     )
 
+    preprocessor: TelemetryPreprocessor | None = None
+    if get_preprocessing_enabled():
+        preprocessor = TelemetryPreprocessor()
+        logger.debug("Telemetry preprocessing enabled")
+
     def _end_session() -> None:
         try:
             _shutdown_cleanup(persistence, session_ref, log_shutdown=False)
@@ -315,6 +325,7 @@ def main() -> None:
         persistence=persistence,
         task_service=task_service,
         camera_recording_service=camera_recording_service,
+        preprocessor=preprocessor,
     )
     asgi_app = wrap_app(app)
     host = get_api_host()
@@ -369,6 +380,7 @@ def main() -> None:
                 lifecycle_logger,
                 recording_auto_controller,
                 session_auto_controller,
+                preprocessor,
                 name="telemetry",
             )
         )

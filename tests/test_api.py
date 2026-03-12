@@ -497,6 +497,288 @@ def test_sessions_telemetry_empty_when_no_persistence(client: TestClient) -> Non
     assert r.json() == {"samples": [], "session_id": 1}
 
 
+def test_session_debrief_404_when_no_persistence(client: TestClient) -> None:
+    """GET /sessions/{id}/debrief returns 404 when persistence not configured."""
+    r = client.get("/sessions/1/debrief")
+    assert r.status_code == 404
+
+
+def test_session_debrief_404_when_no_samples(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /sessions/{id}/debrief returns 404 when session has no telemetry."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        client = TestClient(
+            create_app(store, session_ref=[session_id], persistence=persistence)
+        )
+        r = client.get(f"/sessions/{session_id}/debrief")
+        assert r.status_code == 404
+        assert "No telemetry" in r.json()["detail"]
+
+
+def test_session_debrief_returns_summary_and_compact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /sessions/{id}/debrief returns summary and compact payload when samples exist."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        now = datetime.now(timezone.utc)
+        for i in range(5):
+            state = AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=37.5 + i * 0.0001,
+                lon=-122.2 + i * 0.0001,
+                rel_alt_m=100.0 + i * 10,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=now + timedelta(seconds=i),
+                telemetry_status="connected",
+            )
+            persistence.insert_telemetry_sample(session_id, state)
+        client = TestClient(
+            create_app(store, session_ref=[session_id], persistence=persistence)
+        )
+        r = client.get(f"/sessions/{session_id}/debrief")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["session_id"] == session_id
+        assert "summary" in data
+        assert "compact" in data
+        assert "session_duration_sec" in data["summary"]
+        assert "phase_duration_sec" in data["summary"]
+        assert "top_events" in data["summary"]
+        assert "assessment_tags" in data["summary"]
+        assert "total_duration_sec" in data["compact"]
+        assert "dominant_phase" in data["compact"]
+        assert "top_3_event_summaries" in data["compact"]
+        assert "top_5_metrics" in data["compact"]
+        assert "assessment_sentence" in data["compact"]
+
+
+def test_session_debrief_without_generate_summary_no_llm_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /sessions/{id}/debrief without generate_summary does not include generated_summary."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        now = datetime.now(timezone.utc)
+        for i in range(3):
+            state = AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=37.5 + i * 0.0001,
+                lon=-122.2,
+                rel_alt_m=100.0 + i * 10,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=now + timedelta(seconds=i),
+                telemetry_status="connected",
+            )
+            persistence.insert_telemetry_sample(session_id, state)
+        task_service = OllamaTaskService(provider="mock")
+        client = TestClient(
+            create_app(
+                store,
+                session_ref=[session_id],
+                persistence=persistence,
+                task_service=task_service,
+            )
+        )
+        r = client.get(f"/sessions/{session_id}/debrief")
+        assert r.status_code == 200
+        data = r.json()
+        assert "generated_summary" not in data
+
+
+def test_session_debrief_with_generate_summary_includes_llm_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /sessions/{id}/debrief?generate_summary=true returns generated_summary when task_service available."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        now = datetime.now(timezone.utc)
+        for i in range(3):
+            state = AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=37.5 + i * 0.0001,
+                lon=-122.2,
+                rel_alt_m=100.0 + i * 10,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=now + timedelta(seconds=i),
+                telemetry_status="connected",
+            )
+            persistence.insert_telemetry_sample(session_id, state)
+        task_service = OllamaTaskService(provider="mock")
+        client = TestClient(
+            create_app(
+                store,
+                session_ref=[session_id],
+                persistence=persistence,
+                task_service=task_service,
+            )
+        )
+        r = client.get(f"/sessions/{session_id}/debrief?generate_summary=true")
+        assert r.status_code == 200
+        data = r.json()
+        assert "generated_summary" in data
+        assert data["generated_summary"] is not None
+        assert (
+            "Mock" in data["generated_summary"]
+            or "post-flight" in data["generated_summary"].lower()
+        )
+
+
+def test_session_debrief_persists_and_returns_generated_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Generated summary is persisted; normal fetch returns it without LLM call."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        now = datetime.now(timezone.utc)
+        for i in range(3):
+            state = AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=37.5 + i * 0.0001,
+                lon=-122.2,
+                rel_alt_m=100.0 + i * 10,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=now + timedelta(seconds=i),
+                telemetry_status="connected",
+            )
+            persistence.insert_telemetry_sample(session_id, state)
+        task_service = OllamaTaskService(provider="mock")
+        client = TestClient(
+            create_app(
+                store,
+                session_ref=[session_id],
+                persistence=persistence,
+                task_service=task_service,
+            )
+        )
+        r1 = client.get(f"/sessions/{session_id}/debrief?generate_summary=true")
+        assert r1.status_code == 200
+        data1 = r1.json()
+        assert "generated_summary" in data1
+        generated = data1["generated_summary"]
+        assert generated is not None
+        assert "generated_debrief_at" in data1
+        assert data1["generated_debrief_at"] is not None
+
+        r2 = client.get(f"/sessions/{session_id}/debrief")
+        assert r2.status_code == 200
+        data2 = r2.json()
+        assert "generated_summary" in data2
+        assert data2["generated_summary"] == generated
+        assert "generated_debrief_at" in data2
+        assert data2["generated_debrief_at"] is not None
+
+
+def test_session_debrief_generate_summary_no_task_service_no_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /sessions/{id}/debrief?generate_summary=true without task_service returns 200, no generated_summary."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        now = datetime.now(timezone.utc)
+        for i in range(3):
+            state = AircraftState(
+                connected=True,
+                heartbeat=1,
+                mode="GUIDED",
+                lat=37.5 + i * 0.0001,
+                lon=-122.2,
+                rel_alt_m=100.0 + i * 10,
+                heading_deg=90.0,
+                roll_rad=0.0,
+                pitch_rad=0.0,
+                yaw_rad=0.0,
+                voltage_v=12.5,
+                current_a=2.0,
+                groundspeed_m_s=10.0,
+                airspeed_m_s=12.0,
+                timestamp=now + timedelta(seconds=i),
+                telemetry_status="connected",
+            )
+            persistence.insert_telemetry_sample(session_id, state)
+        client = TestClient(
+            create_app(store, session_ref=[session_id], persistence=persistence)
+        )
+        r = client.get(f"/sessions/{session_id}/debrief?generate_summary=true")
+        assert r.status_code == 200
+        data = r.json()
+        assert "summary" in data
+        assert "compact" in data
+        assert "generated_summary" not in data
+
+
 def test_sessions_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     """GET /sessions returns 200 and list of sessions with detection_count."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -732,6 +1014,53 @@ def test_post_telemetry_summary_returns_structured_result(
     assert data["recommendations"] == []
     assert "generated_at" in data
     assert data["telemetry_sample_count"] == 0
+    assert data["provider"] == "mock"
+
+
+def test_post_telemetry_summary_with_preprocessor(
+    store: StateStore,
+) -> None:
+    """POST /ai/telemetry-summary uses preprocessor context when available."""
+    from datetime import datetime, timezone
+
+    from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
+
+    task_service = OllamaTaskService(provider="mock", ollama_service=None)
+    preprocessor = TelemetryPreprocessor()
+    state = AircraftState(
+        connected=True,
+        heartbeat=1,
+        mode="GUIDED",
+        lat=37.0,
+        lon=-122.0,
+        rel_alt_m=100.0,
+        heading_deg=45.0,
+        roll_rad=0.0,
+        pitch_rad=0.0,
+        yaw_rad=0.0,
+        voltage_v=12.5,
+        current_a=2.0,
+        groundspeed_m_s=5.0,
+        airspeed_m_s=6.0,
+        timestamp=datetime.now(timezone.utc),
+        armed=True,
+        climb_rate_m_s=0.0,
+    )
+    for _ in range(5):
+        preprocessor.on_state(state)
+    client = TestClient(
+        create_app(
+            store,
+            task_service=task_service,
+            preprocessor=preprocessor,
+        )
+    )
+    r = client.post("/ai/telemetry-summary")
+    assert r.status_code == 200
+    data = r.json()
+    assert "error" not in data
+    assert data["status"] == "ok"
+    assert data["telemetry_sample_count"] == 5
     assert data["provider"] == "mock"
 
 

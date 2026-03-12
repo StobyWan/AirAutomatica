@@ -232,6 +232,13 @@ def get_session_auto_start_on_arm() -> bool:
     return raw in ("1", "true", "yes")
 
 
+def get_preprocessing_enabled() -> bool:
+    """True if telemetry preprocessing pipeline is enabled. Default: True.
+    Env: AIRAUTOMATICA_PREPROCESSING_ENABLED (1/true/yes)."""
+    raw = os.environ.get("AIRAUTOMATICA_PREPROCESSING_ENABLED", "1").lower().strip()
+    return raw in ("1", "true", "yes")
+
+
 def get_session_auto_stop_disarm_debounce_sec() -> float:
     """Seconds armed=False must persist before auto-stop. Default: 2.5.
     Env: SESSION_AUTO_STOP_DISARM_DEBOUNCE_SEC."""

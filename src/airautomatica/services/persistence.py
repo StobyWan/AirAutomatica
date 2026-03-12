@@ -576,6 +576,7 @@ class PersistenceService:
                         "lon": r.lon,
                         "rel_alt_m": r.rel_alt_m,
                         "voltage_v": r.voltage_v,
+                        "current_a": r.current_a,
                         "groundspeed_m_s": r.groundspeed_m_s,
                         "heartbeat_age_s": r.heartbeat_age_s,
                         "mode": r.mode,
@@ -583,6 +584,7 @@ class PersistenceService:
                         "roll_rad": r.roll_rad,
                         "pitch_rad": r.pitch_rad,
                         "yaw_rad": r.yaw_rad,
+                        "airspeed_m_s": r.airspeed_m_s,
                         "connected": r.connected,
                         "reconnect_count": r.reconnect_count,
                     }
@@ -592,6 +594,107 @@ class PersistenceService:
             self._record_error(str(e))
             logger.exception("get_recent_telemetry_samples failed: %s", e)
             return []
+
+    def get_session_telemetry_for_debrief(
+        self,
+        session_id: int,
+        limit: int = 10000,
+    ) -> list[dict]:
+        """Fetch all telemetry samples for session, oldest first. For debrief analysis."""
+        if get_engine() is None:
+            return []
+        try:
+            with get_session() as session:
+                if session is None:
+                    return []
+                result = session.execute(
+                    select(TelemetrySample)
+                    .where(TelemetrySample.session_id == session_id)
+                    .order_by(TelemetrySample.timestamp.asc())
+                    .limit(limit)
+                )
+                rows = result.scalars().all()
+                return [
+                    {
+                        "timestamp": r.timestamp,
+                        "lat": r.lat,
+                        "lon": r.lon,
+                        "rel_alt_m": r.rel_alt_m,
+                        "voltage_v": r.voltage_v,
+                        "current_a": r.current_a,
+                        "groundspeed_m_s": r.groundspeed_m_s,
+                        "mode": r.mode,
+                        "heading_deg": r.heading_deg,
+                        "roll_rad": r.roll_rad,
+                        "pitch_rad": r.pitch_rad,
+                        "yaw_rad": r.yaw_rad,
+                        "airspeed_m_s": r.airspeed_m_s,
+                        "connected": r.connected,
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_session_telemetry_for_debrief failed: %s", e)
+            return []
+
+    def save_generated_debrief(
+        self,
+        session_id: int,
+        generated_summary: str,
+    ) -> None:
+        """Persist generated debrief summary for a session. No-op if engine unavailable."""
+        if get_engine() is None:
+            return
+        if not generated_summary or not generated_summary.strip():
+            return
+        if generated_summary.strip().startswith("Debrief summary unavailable:"):
+            return
+        try:
+            with get_session() as session:
+                if session is None:
+                    return
+                row = session.get(FlightSession, session_id)
+                if row is not None:
+                    row.generated_debrief_summary = generated_summary.strip()
+                    row.generated_debrief_at = datetime.now(timezone.utc)
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("save_generated_debrief failed: %s", e)
+
+    def get_generated_debrief(self, session_id: int) -> str | None:
+        """Return persisted generated debrief summary for session, or None."""
+        if get_engine() is None:
+            return None
+        try:
+            with get_session() as session:
+                if session is None:
+                    return None
+                row = session.get(FlightSession, session_id)
+                if row is None or not row.generated_debrief_summary:
+                    return None
+                return row.generated_debrief_summary
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_generated_debrief failed: %s", e)
+            return None
+
+    def get_generated_debrief_at(self, session_id: int) -> datetime | None:
+        """Return persisted generated_debrief_at for session, or None."""
+        if get_engine() is None:
+            return None
+        try:
+            with get_session() as session:
+                if session is None:
+                    return None
+                row = session.get(FlightSession, session_id)
+                if row is None or row.generated_debrief_at is None:
+                    return None
+                return row.generated_debrief_at
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_generated_debrief_at failed: %s", e)
+            return None
 
     def insert_command_sent(
         self,

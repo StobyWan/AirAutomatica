@@ -10,6 +10,7 @@ from airautomatica.ai.models import AiResult
 from airautomatica.ai.ollama_service import OllamaAiService
 from airautomatica.ai.ollama_task_service import OllamaTaskService
 from airautomatica.ai.ollama_tasks import (
+    DebriefSummaryResult,
     EventClassificationResult,
     OllamaTaskType,
     TelemetrySummaryResult,
@@ -20,6 +21,7 @@ __all__ = [
     "AiService",
     "AiResult",
     "ComposedAiService",
+    "DebriefSummaryResult",
     "EventClassificationResult",
     "MockAiService",
     "OllamaAiService",
