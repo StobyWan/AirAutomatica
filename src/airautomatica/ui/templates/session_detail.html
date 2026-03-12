@@ -753,14 +753,20 @@
           }
           updateFromIndex(lo);
         }
-        function syncVideoToReplayTime(ts) {
+        const DRIFT_RESYNC_THRESHOLD_SEC = 0.5;
+        function syncVideoToReplayTime(ts, skipIfDriftBelow) {
           if (!recPlayerEl || !primaryRecording) return;
           const recStart = new Date(primaryRecording.timestamp).getTime();
           const t = new Date(ts).getTime();
           const offsetSec = (t - recStart) / 1000;
           const dur = primaryRecording.duration_sec ?? recPlayerEl.duration;
           if (offsetSec < 0 || (dur != null && offsetSec > dur)) return;
-          recPlayerEl.currentTime = Math.max(0, offsetSec);
+          const targetTime = Math.max(0, offsetSec);
+          if (skipIfDriftBelow != null && recPlayerEl.readyState >= 1) {
+            const drift = Math.abs(recPlayerEl.currentTime - targetTime);
+            if (drift < skipIfDriftBelow) return;
+          }
+          recPlayerEl.currentTime = targetTime;
         }
         function fmtTime(ts) {
           const ms = new Date(ts).getTime() - tStart;
@@ -792,7 +798,7 @@
           document.getElementById('replay-metric-alt').textContent = s.rel_alt_m != null ? s.rel_alt_m.toFixed(0) + ' m' : '—';
           document.getElementById('replay-metric-speed').textContent = s.groundspeed_m_s != null ? s.groundspeed_m_s.toFixed(1) + ' m/s' : '—';
           renderPathPlot(path, detections, { currentSample: s, home: pathHomeRef });
-          syncVideoToReplayTime(s.timestamp);
+          syncVideoToReplayTime(s.timestamp, isPlaying ? DRIFT_RESYNC_THRESHOLD_SEC : undefined);
           document.querySelectorAll('.replay-event-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
           document.querySelectorAll('.replay-phase-item').forEach(el => { el.classList.remove('ring-1', 'ring-cyan-500'); });
           flightEvents.forEach((ev, i) => {
