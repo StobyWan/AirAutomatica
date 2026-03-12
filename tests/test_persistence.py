@@ -3,6 +3,7 @@
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -360,7 +361,7 @@ def test_path_recorder_distance_based() -> None:
         session_id = persistence.start_session("mock", "mock")
         assert session_id is not None
 
-        session_ref = [session_id]
+        session_ref = cast(list[int | None], [session_id])
         recorder = PathRecorder(persistence, session_ref, min_distance_m=100.0)
         now = datetime.now(timezone.utc)
 
@@ -459,7 +460,7 @@ def test_lifecycle_logger_logs_on_status_change() -> None:
         session_id = persistence.start_session("mock", "mock")
         assert session_id is not None
 
-        session_ref = [session_id]
+        session_ref = cast(list[int | None], [session_id])
         logger = TelemetryLifecycleLogger(persistence, session_ref)
 
         logger.maybe_log_transition(_make_state("starting"))
