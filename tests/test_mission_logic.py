@@ -736,3 +736,34 @@ async def test_mission_loop_survives_ai_exception() -> None:
         pass
     assert call_count >= 2
     assert persistence.insert_detection.called
+
+
+@pytest.mark.asyncio
+async def test_run_skips_inference_when_no_session() -> None:
+    """Mission logic does not call infer when session_ref is None."""
+    store = StateStore()
+    state = _make_state()
+    store.update(state)
+
+    ai_service = MagicMock()
+    ai_service.infer = AsyncMock()
+
+    persistence = MagicMock()
+    logic = MissionLogic(
+        store=store,
+        ai_service=ai_service,
+        persistence=persistence,
+        session_ref=[None],
+        interval_sec=0.05,
+        ai_interval_sec=0.05,
+        min_confidence=0.5,
+    )
+    task = asyncio.create_task(logic.run())
+    await asyncio.sleep(0.25)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    ai_service.infer.assert_not_called()
+    persistence.insert_detection.assert_not_called()
