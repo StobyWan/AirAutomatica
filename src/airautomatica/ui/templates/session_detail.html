@@ -418,8 +418,23 @@
       const emptyEl = document.getElementById('path-empty');
       const points = (path || []).filter(p => p.lat != null && p.lon != null);
       if (points.length === 0) {
-        svgEl.classList.add('hidden');
-        emptyEl.classList.remove('hidden');
+        if (currentSample && currentSample.lat != null && currentSample.lon != null) {
+          const pad = 0.0001;
+          const minLat = currentSample.lat - pad;
+          const maxLat = currentSample.lat + pad;
+          const minLon = currentSample.lon - pad;
+          const maxLon = currentSample.lon + pad;
+          const w = 200, h = 220, margin = 8, plotW = w - 2 * margin, plotH = h - 2 * margin;
+          const toX = (lon) => margin + ((lon - minLon) / (maxLon - minLon)) * plotW;
+          const toY = (lat) => h - margin - ((lat - minLat) / (maxLat - minLat)) * plotH;
+          const svg = `<circle cx="${toX(currentSample.lon)}" cy="${toY(currentSample.lat)}" r="4" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>`;
+          svgEl.innerHTML = svg;
+          svgEl.classList.remove('hidden');
+          emptyEl.classList.add('hidden');
+        } else {
+          svgEl.classList.add('hidden');
+          emptyEl.classList.remove('hidden');
+        }
         return;
       }
       svgEl.classList.remove('hidden');
@@ -677,6 +692,7 @@
 
       if (replaySamples.length > 0) {
         let currentIndex = 0;
+        let playbackOffsetMs = 0;
         let isPlaying = false;
         let playRaf = null;
         let lastPlayTime = 0;
@@ -711,6 +727,7 @@
         function updateFromIndex(idx) {
           currentIndex = Math.max(0, Math.min(idx, replaySamples.length - 1));
           const s = replaySamples[currentIndex];
+          playbackOffsetMs = new Date(s.timestamp).getTime() - tStart;
           const pct = replaySamples.length > 1 ? (currentIndex / (replaySamples.length - 1)) * 100 : 0;
           scrubberEl.style.left = pct + '%';
           const currentPhase = phaseIntervals.find(iv => {
@@ -783,10 +800,9 @@
           const elapsed = (now - lastPlayTime) / 1000;
           lastPlayTime = now;
           const speed = parseFloat(speedSelect.value) || 1;
-          const samplesPerSec = replaySamples.length / (range / 1000);
-          const advance = Math.floor(elapsed * samplesPerSec * speed);
-          if (currentIndex + advance >= replaySamples.length - 1) { updateFromIndex(replaySamples.length - 1); isPlaying = false; playBtn.textContent = '▶'; return; }
-          updateFromIndex(currentIndex + advance);
+          playbackOffsetMs = Math.min(playbackOffsetMs + elapsed * 1000 * speed, range);
+          if (playbackOffsetMs >= range) { updateFromIndex(replaySamples.length - 1); isPlaying = false; playBtn.textContent = '▶'; return; }
+          seekToTimestamp(tStart + playbackOffsetMs);
           playRaf = requestAnimationFrame(playLoop);
         }
         playBtn.addEventListener('click', () => {
