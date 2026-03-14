@@ -149,6 +149,7 @@ Bbox coordinates are normalized 0..1 (x, y = top-left; width, height = size).
 | `RECORDING_AI_PERSIST_ENABLED` | When 1 (default when overlay enabled), recording-time detections are persisted to Recent Detections. |
 | `RECORDING_AI_PERSIST_INTERVAL_SEC` | Seconds between frame extractions (default 5). |
 | `RECORDING_AI_PERSIST_STARTUP_DELAY_SEC` | Grace period before first extraction (default 3). |
+| `RECORDING_AI_PERSIST_THRESHOLD` | Min confidence to persist recording-time detections (0–1). Default 0.5. Persist when confidence >= threshold (inclusive). Stricter than inference threshold. |
 
 ## Recording AI Overlay
 

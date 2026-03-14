@@ -114,6 +114,134 @@ def test_persist_detections_calls_insert_with_correct_source_backend() -> None:
     assert kwargs["rel_alt_m"] is None
 
 
+def test_persist_detections_passes_telemetry_context_when_get_state_provided() -> None:
+    """When get_state is provided, lat/lon/rel_alt_m are passed from state."""
+    from datetime import datetime, timezone
+
+    from airautomatica.models.state import AircraftState
+
+    persistence = MagicMock()
+    fake_state = AircraftState(
+        connected=True,
+        heartbeat=1,
+        mode="GUIDED",
+        lat=47.12345,
+        lon=-122.67890,
+        rel_alt_m=150.5,
+        heading_deg=90.0,
+        roll_rad=0.0,
+        pitch_rad=0.0,
+        yaw_rad=0.0,
+        voltage_v=12.5,
+        current_a=2.0,
+        groundspeed_m_s=10.0,
+        airspeed_m_s=10.0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    get_state = lambda: fake_state
+    ingest = RecordingAiIngest(
+        output_path=Path("/tmp/rec.mp4"),
+        get_session_id=lambda: 1,
+        persistence=persistence,
+        get_state=get_state,
+        interval_sec=5.0,
+        startup_delay_sec=0.0,
+    )
+    result = DetectionResult(
+        backend="hailo",
+        model="yolov6n",
+        state="ready",
+        structured_output_supported=True,
+        detections=[
+            Detection(
+                label="car",
+                confidence=0.9,
+                bbox=DetectionBBox(0.0, 0.0, 0.2, 0.2),
+            ),
+        ],
+        frame_width=640,
+        frame_height=480,
+        inference_time_ms=20.0,
+        errors=[],
+    )
+    ingest._persist_detections(1, result)
+    kwargs = persistence.insert_detection.call_args.kwargs
+    assert kwargs["lat"] == 47.12345
+    assert kwargs["lon"] == -122.67890
+    assert kwargs["rel_alt_m"] == 150.5
+
+
+def test_persist_detections_skips_below_threshold() -> None:
+    """Detection with confidence below persist threshold is not persisted (0.5 < 0.6)."""
+    with patch(
+        "airautomatica.services.recording_ai_ingest.get_recording_ai_persist_threshold",
+        return_value=0.6,
+    ):
+        persistence = MagicMock()
+        ingest = RecordingAiIngest(
+            output_path=Path("/tmp/rec.mp4"),
+            get_session_id=lambda: 1,
+            persistence=persistence,
+            interval_sec=5.0,
+            startup_delay_sec=0.0,
+        )
+        result = DetectionResult(
+            backend="hailo",
+            model="yolov6n",
+            state="ready",
+            structured_output_supported=True,
+            detections=[
+                Detection(
+                    label="person",
+                    confidence=0.5,
+                    bbox=DetectionBBox(0.0, 0.0, 0.2, 0.2),
+                ),
+            ],
+            frame_width=640,
+            frame_height=480,
+            inference_time_ms=20.0,
+            errors=[],
+        )
+        ingest._persist_detections(1, result)
+        persistence.insert_detection.assert_not_called()
+
+
+def test_persist_detections_persists_at_or_above_threshold() -> None:
+    """Detection with confidence >= threshold is persisted (0.5 >= 0.5, inclusive)."""
+    with patch(
+        "airautomatica.services.recording_ai_ingest.get_recording_ai_persist_threshold",
+        return_value=0.5,
+    ):
+        persistence = MagicMock()
+        ingest = RecordingAiIngest(
+            output_path=Path("/tmp/rec.mp4"),
+            get_session_id=lambda: 1,
+            persistence=persistence,
+            interval_sec=5.0,
+            startup_delay_sec=0.0,
+        )
+        result = DetectionResult(
+            backend="hailo",
+            model="yolov6n",
+            state="ready",
+            structured_output_supported=True,
+            detections=[
+                Detection(
+                    label="person",
+                    confidence=0.5,
+                    bbox=DetectionBBox(0.0, 0.0, 0.2, 0.2),
+                ),
+            ],
+            frame_width=640,
+            frame_height=480,
+            inference_time_ms=20.0,
+            errors=[],
+        )
+        ingest._persist_detections(1, result)
+        persistence.insert_detection.assert_called_once()
+        assert persistence.insert_detection.call_args.kwargs["result"].confidence == 0.5
+
+
 def test_persist_detections_deduplicates_same_label_within_window() -> None:
     """Same label within 30s is persisted once."""
     persistence = MagicMock()

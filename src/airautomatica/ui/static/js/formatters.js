@@ -93,6 +93,18 @@
     return Number(v).toFixed(2) + ' V';
   }
 
+  function fmtSourceBackend(source) {
+    if (source == null || source === '') return '<span class="na">—</span>';
+    const s = String(source);
+    const map = {
+      aihat: 'AI HAT one-shot',
+      ai_hat_recording: 'AI HAT recording',
+      mock: 'Mission (mock)',
+      ollama: 'Mission (Ollama)',
+    };
+    return map[s] != null ? map[s] : s;
+  }
+
   global.AiraFormatters = {
     fmt,
     fmtNum,
@@ -104,6 +116,7 @@
     formatDuration,
     fmtTs,
     fmtTsTime,
+    fmtSourceBackend,
     labelAutopilot,
     labelMode,
     labelSource,

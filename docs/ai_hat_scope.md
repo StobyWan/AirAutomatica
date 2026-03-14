@@ -19,8 +19,8 @@ The **AI HAT subsystem** is an optional perception/copilot-support module for th
 
 - **Continuous or streaming detection:** No repeated inference loop; only on-demand one-shot.
 - **Flight control integration:** AI HAT does not send commands to the flight controller.
-- **Structured detection during recording:** Overlay draws boxes on video; no structured events or persistence from the recording pipeline yet.
-- **Session-linked AI HAT history:** One-shot results are cached in memory; persisted detection history comes from mission flow (Ollama/mock), not from AI HAT one-shot.
+- **Structured detection during recording:** Overlay draws boxes on video. When `RECORDING_AI_PERSIST_ENABLED=1`, `RecordingAiIngest` persists detections with source `ai_hat_recording` to the database (see Persisted detection history table).
+- **Session-linked AI HAT history:** One-shot results are cached in memory; persisted detection history comes from mission flow (Ollama/mock), recording-time AI (ai_hat_recording), and one-shot when session is active (aihat).
 - **AI HAT+ 2 / Hailo-10:** Hardware target is Hailo-8L only.
 
 ## Relation to Companion Computer
@@ -36,9 +36,11 @@ The AI HAT is **not** flight-critical. It does not read MAVLink directly; it doe
 | Concept | Source | Storage | UI |
 |--------|--------|---------|-----|
 | **AI HAT last one-shot** | `POST /api/ai/detect` | In-memory cache | "AI HAT last one-shot: person, car (2) — 18s ago" |
-| **Persisted detection history** | Mission flow (Ollama/mock) via `insert_detection` | SQLite `detections` | "Recent Detections" / "Persisted mission-flow detection history" |
+| **Persisted detection history (mission flow)** | Mission flow (Ollama/mock) via `insert_detection` | SQLite `detections` | Recent Detections |
+| **Persisted detection history (recording-time)** | `RecordingAiIngest` when `RECORDING_AI_PERSIST_ENABLED=1` | SQLite `detections` (source `ai_hat_recording`) | Recent Detections |
+| **Persisted detection history (one-shot)** | `POST /api/ai/detect` when session active | SQLite `detections` (source `aihat`) | Recent Detections |
 
-AI HAT one-shot results are cached for display and quick reference. Persisted detections come from the mission logic loop (Ollama or mock) and are stored in the database. They are distinct data flows.
+AI HAT one-shot results are cached for display and quick reference. Persisted detections come from mission logic (Ollama/mock), recording-time AI (ai_hat_recording), and one-shot when a session is active (aihat).
 
 ---
 

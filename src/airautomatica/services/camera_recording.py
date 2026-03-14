@@ -84,11 +84,13 @@ class CameraRecordingService:
         recordings_dir: Optional[str] = None,
         session_ref: Optional[List[Optional[int]]] = None,
         persistence: Optional["PersistenceService"] = None,
+        get_state: Optional[Callable[[], "AircraftState | None"]] = None,
     ) -> None:
         self._recordings_dir = Path(recordings_dir or get_recordings_dir()).resolve()
         self._lock = threading.Lock()
         self._session_ref = session_ref
         self._persistence = persistence
+        self._get_state = get_state
         self._ingest: Optional[RecordingAiIngest] = None
         cam_cmd = get_camera_video_command()
         ffmpeg_cmd = get_ffmpeg_command()
@@ -476,6 +478,7 @@ class CameraRecordingService:
                     output_path=self._output_path,
                     get_session_id=_get_sid,
                     persistence=self._persistence,
+                    get_state=self._get_state,
                 )
                 self._ingest.start()
             return (

@@ -19,9 +19,12 @@ from airautomatica.ai.models import AiResult
 from airautomatica.config import (
     get_recording_ai_persist_interval_sec,
     get_recording_ai_persist_startup_delay_sec,
+    get_recording_ai_persist_threshold,
 )
+from airautomatica.models.state import nan_to_none
 
 if TYPE_CHECKING:
+    from airautomatica.models.state import AircraftState
     from airautomatica.services.persistence import PersistenceService
 
 logger = logging.getLogger(__name__)
@@ -73,12 +76,14 @@ class RecordingAiIngest:
         get_session_id: Callable[[], int | None],
         persistence: Optional["PersistenceService"],
         *,
+        get_state: Optional[Callable[[], "AircraftState | None"]] = None,
         interval_sec: Optional[float] = None,
         startup_delay_sec: Optional[float] = None,
     ) -> None:
         self._output_path = output_path
         self._get_session_id = get_session_id
         self._persistence = persistence
+        self._get_state = get_state
         self._interval_sec = interval_sec or get_recording_ai_persist_interval_sec()
         self._startup_delay_sec = (
             startup_delay_sec or get_recording_ai_persist_startup_delay_sec()
@@ -96,9 +101,10 @@ class RecordingAiIngest:
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         logger.info(
-            "Recording AI persist enabled: interval=%.0fs startup_delay=%.0fs",
+            "Recording AI persist enabled: interval=%.0fs startup_delay=%.0fs persist_threshold=%.2f",
             self._interval_sec,
             self._startup_delay_sec,
+            get_recording_ai_persist_threshold(),
         )
 
     def stop(self) -> None:
@@ -150,12 +156,21 @@ class RecordingAiIngest:
         self._persist_detections(session_id, result)
 
     def _persist_detections(self, session_id: int, result: DetectionResult) -> None:
-        """Persist each detection above threshold, with deduplication."""
+        """Persist each detection with confidence >= threshold (inclusive), with deduplication."""
         if self._persistence is None:
             return
+        persist_threshold = get_recording_ai_persist_threshold()
         now = time.monotonic()
         for det in result.detections:
             label = det.label
+            if det.confidence < persist_threshold:
+                logger.debug(
+                    "Recording AI ingest: skipped low-confidence label=%s confidence=%.2f (below persist threshold %.2f)",
+                    label,
+                    det.confidence,
+                    persist_threshold,
+                )
+                continue
             last_ts = self._last_persisted.get(label)
             if last_ts is not None and (now - last_ts) < _DEDUPE_WINDOW_SEC:
                 logger.debug(
@@ -169,6 +184,11 @@ class RecordingAiIngest:
                 bbox = (det.bbox.x, det.bbox.y, det.bbox.width, det.bbox.height)
             from datetime import datetime, timezone
 
+            state = self._get_state() if self._get_state else None
+            lat = nan_to_none(state.lat) if state is not None else None
+            lon = nan_to_none(state.lon) if state is not None else None
+            rel_alt_m = nan_to_none(state.rel_alt_m) if state is not None else None
+
             ai_result = AiResult(
                 label=label,
                 confidence=det.confidence,
@@ -181,9 +201,9 @@ class RecordingAiIngest:
             self._persistence.insert_detection(
                 session_id=session_id,
                 result=ai_result,
-                lat=None,
-                lon=None,
-                rel_alt_m=None,
+                lat=lat,
+                lon=lon,
+                rel_alt_m=rel_alt_m,
             )
             self._last_persisted[label] = now
             logger.info(

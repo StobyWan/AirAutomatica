@@ -220,7 +220,7 @@
   </div>
 
   <script>
-    const { fmt, fmtNumPrec, formatDuration, formatMetersOrKm, formatWatts, formatVolts, fmtDate, fmtDuration, labelAutopilot, labelMode, labelSource, fmtTs } = AiraFormatters;
+    const { fmt, fmtNumPrec, formatDuration, formatMetersOrKm, formatWatts, formatVolts, fmtDate, fmtDuration, fmtSourceBackend, labelAutopilot, labelMode, labelSource, fmtTs } = AiraFormatters;
 
     const sessionId = parseInt(window.location.pathname.split('/').pop(), 10);
     document.getElementById('session-id').textContent = sessionId;
@@ -951,7 +951,7 @@
           detEl.innerHTML = dets.map(d => `
             <div class="detection-card">
               <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
-              <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmt(d.source_backend)}</div>
+              <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmtSourceBackend(d.source_backend)}</div>
               ${d.summary ? `<div class="mt-1 text-slate-300">${d.summary}</div>` : ''}
               <div class="mt-1.5 text-xs text-slate-500 font-mono">
                 ${fmtTs(d.timestamp)}
