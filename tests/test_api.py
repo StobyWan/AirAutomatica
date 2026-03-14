@@ -2452,3 +2452,95 @@ def test_post_live_home_empty_body_400(store: StateStore) -> None:
     client = TestClient(create_app(store, app_home_store=app_home_store))
     r = client.post("/live/home", json={})
     assert r.status_code == 400
+
+
+def test_delete_session_404_when_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DELETE /sessions/{sid} returns 404 when session does not exist."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        client = TestClient(
+            create_app(store, session_ref=[None], persistence=persistence)
+        )
+        r = client.delete("/sessions/99999")
+        assert r.status_code == 404
+        assert "not found" in r.json()["detail"].lower()
+
+
+def test_delete_session_rejects_active_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DELETE /sessions/{sid} returns 400 when deleting the current active session."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        init_db(str(path))
+        store = StateStore()
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        client = TestClient(
+            create_app(
+                store,
+                session_ref=[session_id],
+                persistence=persistence,
+            )
+        )
+        r = client.delete(f"/sessions/{session_id}")
+        assert r.status_code == 400
+        assert "active" in r.json()["detail"].lower()
+        assert "stop" in r.json()["detail"].lower()
+
+
+def test_delete_session_removes_db_and_recordings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """DELETE /sessions/{sid} removes session from DB and deletes associated recordings."""
+    import time
+
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "airautomatica.db"))
+    init_db(str(tmp_path / "airautomatica.db"))
+    store = StateStore()
+    persistence = PersistenceService()
+    session_id = persistence.start_session("mock", "mock")
+    assert session_id is not None
+    time.sleep(2.1)  # Ensure session has duration for recording timestamp
+    persistence.end_session(session_id)
+
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    session_data = persistence.get_session(session_id)
+    assert session_data is not None
+    started = session_data["started_at"]
+    ended = session_data["ended_at"]
+    assert started and ended
+    start_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    mid_dt = start_dt + timedelta(seconds=1)
+    filename = f"{mid_dt.strftime('%Y-%m-%d_%H%M%S')}_cam.mp4"
+    (rec_dir / filename).write_bytes(b"fake video")
+    assert (rec_dir / filename).exists()
+
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(
+        create_app(
+            store,
+            session_ref=[None],
+            persistence=persistence,
+            camera_recording_service=camera_svc,
+        )
+    )
+    r = client.delete(f"/sessions/{session_id}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["recordings_deleted"] == 1
+    assert data["recordings_failed"] == 0
+
+    assert not (rec_dir / filename).exists()
+    assert persistence.get_session(session_id) is None

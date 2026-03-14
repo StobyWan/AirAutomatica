@@ -760,6 +760,61 @@ def test_lifecycle_logger_includes_reconnect_metadata() -> None:
             assert meta.get("last_disconnect_reason") == "Connection refused"
 
 
+def test_delete_session_cascades_children() -> None:
+    """delete_session removes session and all child rows."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        init_db(str(path))
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+
+        now = datetime.now(timezone.utc)
+        state = AircraftState(
+            connected=True,
+            heartbeat=1,
+            mode="GUIDED",
+            lat=37.5,
+            lon=-122.2,
+            rel_alt_m=100.0,
+            heading_deg=90.0,
+            roll_rad=0.0,
+            pitch_rad=0.0,
+            yaw_rad=0.0,
+            voltage_v=12.5,
+            current_a=2.0,
+            groundspeed_m_s=10.0,
+            airspeed_m_s=12.0,
+            timestamp=now,
+            telemetry_status="connected",
+        )
+        persistence.insert_telemetry_sample(session_id, state)
+        persistence.insert_system_event(session_id, "info", "test_event", "Test", None)
+        persistence.insert_path_point(session_id, now, 37.0, -122.0, 100.0)
+
+        ok = persistence.delete_session(session_id)
+        assert ok is True
+
+        with get_session() as session:
+            assert session is not None
+            from airautomatica.db.models import FlightSession
+
+            row = session.get(FlightSession, session_id)
+            assert row is None
+            result = session.execute(
+                select(TelemetrySample).where(TelemetrySample.session_id == session_id)
+            )
+            assert len(result.scalars().all()) == 0
+            result = session.execute(
+                select(SystemEvent).where(SystemEvent.session_id == session_id)
+            )
+            assert len(result.scalars().all()) == 0
+            result = session.execute(
+                select(PathPoint).where(PathPoint.session_id == session_id)
+            )
+            assert len(result.scalars().all()) == 0
+
+
 def test_lifecycle_logger_no_duplicate_when_status_unchanged() -> None:
     """No duplicate events when status has not changed."""
     with tempfile.TemporaryDirectory() as tmp:

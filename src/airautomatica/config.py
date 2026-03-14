@@ -238,6 +238,13 @@ def get_api_host() -> str:
     return os.environ.get("API_HOST", "0.0.0.0")
 
 
+def get_base_path() -> str:
+    """Optional base path for reverse proxy (e.g. /airautomatica). Default empty.
+    Env: AIRAUTOMATICA_BASE_PATH."""
+    raw = os.environ.get("AIRAUTOMATICA_BASE_PATH", "").strip()
+    return raw.rstrip("/") if raw else ""
+
+
 def get_api_port() -> int:
     """API server port. Default: 8000."""
     try:
