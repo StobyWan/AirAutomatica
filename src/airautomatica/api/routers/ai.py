@@ -14,7 +14,10 @@ from airautomatica.ai.event_normalizer import (
 from airautomatica.ai.models import AiResult
 
 if TYPE_CHECKING:
+    from airautomatica.services.camera_recording import CameraRecordingService
     from airautomatica.services.persistence import PersistenceService
+
+from airautomatica.ai.detection_models import DetectionResult
 from airautomatica.ai.hailo_detection import RPCAM_ASSETS_PATH, get_hailo_status
 from airautomatica.ai.hailo_detection_impl import _hailo_apps_available
 from airautomatica.ai.providers.hailo_provider import HailoAiHatProvider
@@ -37,6 +40,7 @@ def create_ai_router(
     ai_detection_store: Optional[AiDetectionStore] = None,
     persistence: Optional["PersistenceService"] = None,
     session_ref: Optional[list[int | None]] = None,
+    camera_recording_service: Optional["CameraRecordingService"] = None,
 ) -> APIRouter:
     """Create AI HAT status and diagnostics router."""
     router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -150,8 +154,27 @@ def create_ai_router(
     @router.post("/detect")
     def post_ai_detect() -> dict:
         """Execute one-shot detection: capture frame, run Hailo inference, return structured detections and normalized events."""
-        provider = HailoAiHatProvider()
-        result = provider.run_object_detection()
+        # Camera contention: rpicam-still cannot acquire camera while rpicam-vid is recording
+        if (
+            camera_recording_service is not None
+            and camera_recording_service.get_recording_state().recording
+        ):
+            result = DetectionResult(
+                backend="hailo",
+                model="yolov6n",
+                state="error",
+                structured_output_supported=True,
+                detections=[],
+                frame_width=None,
+                frame_height=None,
+                inference_time_ms=None,
+                errors=[
+                    "Camera busy: recording is active. Stop recording to run one-shot detection.",
+                ],
+            )
+        else:
+            provider = HailoAiHatProvider()
+            result = provider.run_object_detection()
         sid = session_ref[0] if session_ref else None
         if ai_detection_store is not None:
             ai_detection_store.set_last_detection(

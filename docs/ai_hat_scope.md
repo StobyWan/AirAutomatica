@@ -13,12 +13,13 @@ The **AI HAT subsystem** is an optional perception/copilot-support module for th
 - **Detection threshold:** Configurable `AI_HAT_DETECTION_THRESHOLD` (0–1) suppresses weak detections.
 - **Event normalization:** Raw detections mapped to canonical events (`person_detected`, `vehicle_detected`, `object_count`).
 - **person_detected hook:** When one-shot detects a person, a system event is appended (when persistence and session available).
+- **Recording AI overlay:** When AI HAT enabled and `RECORDING_AI_OVERLAY_ENABLED=1`, session recording uses rpicam-vid with Hailo postprocess; recorded video includes bounding-box overlays. Requires rpicam-vid (not libcamera-vid) and postprocess assets.
 
 ## Not Yet / Out of Scope
 
 - **Continuous or streaming detection:** No repeated inference loop; only on-demand one-shot.
 - **Flight control integration:** AI HAT does not send commands to the flight controller.
-- **Recording integration:** AI HAT one-shot is independent of camera recording.
+- **Structured detection during recording:** Overlay draws boxes on video; no structured events or persistence from the recording pipeline yet.
 - **Session-linked AI HAT history:** One-shot results are cached in memory; persisted detection history comes from mission flow (Ollama/mock), not from AI HAT one-shot.
 - **AI HAT+ 2 / Hailo-10:** Hardware target is Hailo-8L only.
 
@@ -87,6 +88,6 @@ AI HAT one-shot results are cached for display and quick reference. Persisted de
 ### Phase D: Future Expansion — Not Implemented
 
 - Event-driven repeated detection
-- Recording integration
+- Structured detection during recording (parse stderr, emit events, persist)
 - Perception-triggered workflows
 - Session-linked AI HAT result history

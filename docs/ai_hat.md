@@ -147,6 +147,15 @@ Bbox coordinates are normalized 0..1 (x, y = top-left; width, height = size).
 | `AI_HAT_OBJECT_DETECTION_ENABLED` | Must be 1 (default when AI HAT enabled) |
 | `AI_HAT_CAMERA_PIPELINE_ENABLED` | Must be 1 (default when AI HAT enabled) |
 | `AI_HAT_DETECTION_THRESHOLD` | Min confidence 0–1; default 0.25. Suppresses weak detections. |
+| `RECORDING_AI_OVERLAY_ENABLED` | When 1 (default when AI HAT enabled), recording uses Hailo postprocess; video shows bounding boxes. Requires rpicam-vid and postprocess assets. |
+
+## Recording AI Overlay
+
+When AI HAT is enabled and `RECORDING_AI_OVERLAY_ENABLED=1`, session recording runs `rpicam-vid` with `--post-process-file` pointing to the Hailo YOLOv6 inference config. Recorded MP4 files include bounding-box overlays on detected objects.
+
+**Requirements:** rpicam-vid (not libcamera-vid), postprocess assets at `/usr/share/rpi-camera-assets/hailo_yolov6_inference.json`, AI HAT enabled.
+
+**Limitations:** Overlay only; no structured detection events or persistence from the recording pipeline. One-shot detection remains blocked when recording (camera busy).
 
 ## Cached vs Persisted
 
@@ -175,7 +184,7 @@ The Connection & Health card shows an **AI HAT (optional)** section:
 
 - One-shot only; no continuous streaming
 - Single model: yolov6n_h8l.hef
-- Camera contention: if recording is active, capture may fail with "camera busy"
+- Camera contention: if recording is active, one-shot capture returns "Camera busy" (recording uses the camera)
 - hailo-apps is optional; install for real structured detections
 - AI HAT+ 2 / Hailo-10 is not supported
 

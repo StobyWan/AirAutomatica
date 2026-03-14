@@ -11,8 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, List, Optional
 
+from airautomatica.ai.hailo_detection import RPCAM_ASSETS_PATH
 from airautomatica.config import (
     get_camera_recording_disarm_debounce_sec,
+    get_recording_ai_overlay_enabled,
     get_recordings_dir,
 )
 from airautomatica.services.recordings_service import (
@@ -238,13 +240,32 @@ class CameraRecordingService:
                         "-t",
                         "0",
                         "--nopreview",
-                        "--codec",
-                        "libav",
-                        "--libav-format",
-                        "mpegts",
-                        "-o",
-                        "-",
                     ]
+                    if (
+                        cmd == "rpicam-vid"
+                        and get_recording_ai_overlay_enabled()
+                        and RPCAM_ASSETS_PATH.exists()
+                    ):
+                        cam_args.extend(
+                            [
+                                "--post-process-file",
+                                str(RPCAM_ASSETS_PATH),
+                                "--lores-width",
+                                "640",
+                                "--lores-height",
+                                "640",
+                            ]
+                        )
+                    cam_args.extend(
+                        [
+                            "--codec",
+                            "libav",
+                            "--libav-format",
+                            "mpegts",
+                            "-o",
+                            "-",
+                        ]
+                    )
 
                     self._process = subprocess.Popen(
                         cam_args,
@@ -286,7 +307,23 @@ class CameraRecordingService:
                         " ".join(ffmpeg_args),
                     )
                 else:
-                    args = [cmd, "-t", "0", "-o", str(self._output_path)]
+                    args = [cmd, "-t", "0"]
+                    if (
+                        cmd == "rpicam-vid"
+                        and get_recording_ai_overlay_enabled()
+                        and RPCAM_ASSETS_PATH.exists()
+                    ):
+                        args.extend(
+                            [
+                                "--post-process-file",
+                                str(RPCAM_ASSETS_PATH),
+                                "--lores-width",
+                                "640",
+                                "--lores-height",
+                                "640",
+                            ]
+                        )
+                    args.extend(["-o", str(self._output_path)])
                     self._process = subprocess.Popen(args, stderr=subprocess.PIPE)
                     self._muxer_process = None
                     logger.info(
