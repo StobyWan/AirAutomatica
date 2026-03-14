@@ -59,6 +59,7 @@ from airautomatica.models.connection_state import (
 from airautomatica.models.state import AircraftState, nan_to_none
 from airautomatica.runtime.ai_subsystem import AiSubsystemHolder, ReloadResult
 from airautomatica.runtime.telemetry_subsystem import TelemetryReconnectResult
+from airautomatica.services.ai_detection_store import AiDetectionStore
 from airautomatica.services.camera_ready_state import get as get_camera_ready
 from airautomatica.services.camera_ready_state import set_ready as set_camera_ready
 from airautomatica.services.camera_recording import CameraRecordingService
@@ -107,6 +108,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_app(
     store: StateStore,
     connection_store: Optional[ConnectionStateStore] = None,
+    ai_detection_store: Optional[AiDetectionStore] = None,
     session_ref: Optional[list[int | None]] = None,
     persistence: Optional[PersistenceService] = None,
     task_service: Optional[OllamaTaskService] = None,

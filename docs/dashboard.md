@@ -30,9 +30,13 @@ SVG plot of recent flight breadcrumb (from `path_points` or `telemetry_samples`)
 
 Four sparklines: voltage, rel_alt_m, groundspeed_m_s, heartbeat_age_s. Data from `telemetry_samples` (DB) and in-memory heartbeat buffer. Degrades to "No trend data" when empty.
 
+### AI HAT (optional)
+
+In the Connection & Health card: capability and one-shot detection. Shows Backend (Hailo/None), Hardware detected, Device, State, Threshold. **Run one-shot detection** triggers one-shot detection. **AI HAT last one-shot** shows cached result with stale age (e.g. "person, car (2) — 18s ago"). Distinct from persisted detection history (see below). See [ai_hat.md](ai_hat.md).
+
 ### Recent Detections
 
-Card layout with label, confidence, summary, timestamp, source_backend, lat/lon, rel_alt_m. Newest first. Empty state when no detections.
+Persisted mission-flow detection history (from Ollama/mock mission logic). Card layout with label, confidence, summary, timestamp, source_backend, lat/lon, rel_alt_m. Newest first. Empty state when no detections. **Not** AI HAT one-shot results—those are cached separately.
 
 ### Event Log
 
