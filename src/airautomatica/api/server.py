@@ -92,7 +92,6 @@ from airautomatica.settings import (
 )
 from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
-from airautomatica.telemetry.detector import scan_and_detect
 from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
 
 logger = logging.getLogger(__name__)
