@@ -45,7 +45,8 @@ echo "==> Creating virtual environment and installing dependencies"
 if [[ -d "$OPT_DIR/venv" ]]; then
   rm -rf "$OPT_DIR/venv"
 fi
-python3 -m venv "$OPT_DIR/venv"
+# --system-site-packages: allows python3-hailort, python3-hailo-tappas from apt (for hailo-apps)
+python3 -m venv --system-site-packages "$OPT_DIR/venv"
 "$OPT_DIR/venv/bin/pip" install --upgrade pip
 "$OPT_DIR/venv/bin/pip" install -e "$OPT_DIR"
 

@@ -100,7 +100,7 @@ def _run_inference_on_image(
                 frame_height=None,
                 inference_time_ms=None,
                 errors=[
-                    "hailo-apps not installed; pip install hailo-apps for real detection"
+                    "hailo-apps not installed; clone hailo-apps and run packaging/linux/install-ai-hat-apps.sh (Pi only)"
                 ],
             ),
             False,
