@@ -305,6 +305,18 @@ def get_recording_ai_persist_startup_delay_sec() -> float:
         return 3.0
 
 
+def get_recording_ai_persist_threshold() -> float:
+    """Min confidence to persist recording-time detections. 0.0-1.0. Default: 0.5.
+    Persist when confidence >= threshold (inclusive). Stricter than inference threshold
+    (AI_HAT_DETECTION_THRESHOLD). Aligns with AI_MIN_CONFIDENCE (mission logic).
+    """
+    try:
+        v = float(os.environ.get("RECORDING_AI_PERSIST_THRESHOLD", "0.5"))
+        return max(0.0, min(1.0, v))
+    except ValueError:
+        return 0.5
+
+
 def get_camera_recording_mode() -> str:
     """Camera recording mode: off, manual, or auto. Default: manual.
     Env: CAMERA_RECORDING_MODE (also from settings.json). Uses persisted settings for live updates.

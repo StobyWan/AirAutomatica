@@ -400,6 +400,7 @@ def main() -> None:
     camera_recording_service = CameraRecordingService(
         session_ref=session_ref,
         persistence=persistence,
+        get_state=lambda: store.get(),
     )
     logger.info(
         "Recordings path: dir=%s cwd=%s HOME=%s AIRAUTOMATICA_RECORDINGS_DIR=%s",

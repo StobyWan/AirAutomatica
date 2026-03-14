@@ -358,7 +358,7 @@
 
   <div class="card">
     <h2>Recent Detections</h2>
-    <p class="text-xs text-slate-500 mb-2">Includes mission-flow and recording-time AI detections (when recording with AI overlay)</p>
+    <p class="text-xs text-slate-500 mb-2">Mission-flow (Ollama/mock) and AI HAT recording-time detections. Source shown per card.</p>
     <div id="detections-list" class="detection-cards"></div>
   </div>
 
@@ -1050,7 +1050,7 @@
       if (decimals != null) return n.toFixed(decimals);
       return String(n);
     }
-    const { fmt, fmtNumPrec, formatDistance, fmtRate, fmtNum, fmtHeading, fmtTs, fmtTsTime } = AiraFormatters;
+    const { fmt, fmtNumPrec, formatDistance, fmtRate, fmtNum, fmtHeading, fmtTs, fmtTsTime, fmtSourceBackend } = AiraFormatters;
     function enduranceMin(remainingMah, currentA) {
       if (remainingMah == null || currentA == null || !isFinite(remainingMah) || !isFinite(currentA) || currentA <= 0) return null;
       return (remainingMah / 1000) / currentA * 60;
@@ -1899,7 +1899,7 @@
       el.innerHTML = list.map(d => `
         <div class="detection-card">
           <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
-          <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmt(d.source_backend)}</div>
+          <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmtSourceBackend(d.source_backend)}</div>
           ${d.summary ? `<div class="mt-1 text-slate-300">${d.summary}</div>` : ''}
           <div class="mt-1.5 text-xs text-slate-500 font-mono">
             ${fmtTs(d.timestamp)}

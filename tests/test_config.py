@@ -10,6 +10,7 @@ from airautomatica.config import (
     get_ollama_num_thread,
     get_ollama_required,
     get_recording_ai_overlay_enabled,
+    get_recording_ai_persist_threshold,
     validate_serial_config,
 )
 
@@ -149,3 +150,21 @@ def test_get_recording_ai_overlay_enabled_explicit_off(
     monkeypatch.setenv("AI_HAT_ENABLED", "1")
     monkeypatch.setenv("RECORDING_AI_OVERLAY_ENABLED", "0")
     assert get_recording_ai_overlay_enabled() is False
+
+
+def test_get_recording_ai_persist_threshold_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default is 0.5 when env not set."""
+    monkeypatch.delenv("RECORDING_AI_PERSIST_THRESHOLD", raising=False)
+    assert get_recording_ai_persist_threshold() == 0.5
+
+
+def test_get_recording_ai_persist_threshold_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RECORDING_AI_PERSIST_THRESHOLD env overrides default."""
+    monkeypatch.setenv("RECORDING_AI_PERSIST_THRESHOLD", "0.4")
+    assert get_recording_ai_persist_threshold() == 0.4
+    monkeypatch.setenv("RECORDING_AI_PERSIST_THRESHOLD", "0.8")
+    assert get_recording_ai_persist_threshold() == 0.8
