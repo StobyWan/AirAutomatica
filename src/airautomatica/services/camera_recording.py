@@ -246,8 +246,14 @@ class CameraRecordingService:
                         and get_recording_ai_overlay_enabled()
                         and RPCAM_ASSETS_PATH.exists()
                     ):
+                        # Lores 640x640 must be <= video size. Default 640x480 fails with
+                        # "Low res image larger than video". Use 1280x720 so lores fits.
                         cam_args.extend(
                             [
+                                "--width",
+                                "1280",
+                                "--height",
+                                "720",
                                 "--post-process-file",
                                 str(RPCAM_ASSETS_PATH),
                                 "--lores-width",
@@ -313,8 +319,13 @@ class CameraRecordingService:
                         and get_recording_ai_overlay_enabled()
                         and RPCAM_ASSETS_PATH.exists()
                     ):
+                        # Lores 640x640 must be <= video size. Default 640x480 fails.
                         args.extend(
                             [
+                                "--width",
+                                "1280",
+                                "--height",
+                                "720",
                                 "--post-process-file",
                                 str(RPCAM_ASSETS_PATH),
                                 "--lores-width",
