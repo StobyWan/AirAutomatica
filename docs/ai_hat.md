@@ -73,8 +73,77 @@ rpicam-hello -t 0 --post-process-file /usr/share/rpi-camera-assets/hailo_yolov6_
 ## API and Diagnostics
 
 - **GET /api/ai/status** — AI HAT capability status (enabled, detected, state, device_class, etc.)
-- **GET /api/ai/diagnostics** — Detailed troubleshooting output
+- **GET /api/ai/diagnostics** — Detailed troubleshooting output (includes `object_detection` block)
+- **POST /api/ai/detect** — One-shot object detection (see below)
 - **CLI:** `airautomatica --diagnose-ai` — Print diagnostics and exit
+
+## Object Detection (One-Shot)
+
+Real structured object detection returns labels, confidence, and bounding boxes (normalized 0..1).
+
+### Requirements
+
+- Hailo packages (install-ai-hat-deps.sh)
+- **hailo-apps** (optional): `pip install hailo-apps` or `git clone hailo-apps && ./install.sh`
+- **rpicam-still** for frame capture
+- HEF model: `/usr/share/hailo-models/yolov6n_h8l.hef` (from hailo-models package)
+
+Without hailo-apps, detection returns `state="unavailable"` with a clear error.
+
+Optional install script:
+
+```bash
+packaging/linux/install-ai-hat-apps.sh
+```
+
+### Endpoint
+
+**POST /api/ai/detect** — No body. Returns:
+
+```json
+{
+  "backend": "hailo",
+  "model": "yolov6n",
+  "state": "ready" | "no_detections" | "error" | "disabled" | "unavailable",
+  "structured_output_supported": true,
+  "detections": [
+    {
+      "label": "person",
+      "confidence": 0.91,
+      "bbox": {"x": 0.12, "y": 0.18, "width": 0.34, "height": 0.52},
+      "source": "camera"
+    }
+  ],
+  "frame_width": 640,
+  "frame_height": 480,
+  "inference_time_ms": 23.4,
+  "errors": []
+}
+```
+
+Bbox coordinates are normalized 0..1 (x, y = top-left; width, height = size).
+
+### Config Flags
+
+- `AI_HAT_ENABLED` — Must be 1 for detection
+- `AI_HAT_OBJECT_DETECTION_ENABLED` — Must be 1 (default when AI HAT enabled)
+- `AI_HAT_CAMERA_PIPELINE_ENABLED` — Must be 1 (default when AI HAT enabled)
+
+### UI Test
+
+Connection & Health → AI HAT → **Run AI Detection Test**. Shows state, count, labels, confidences, bboxes, errors.
+
+### Limitations (Phase 1)
+
+- One-shot only; no continuous streaming
+- Single model: yolov6n_h8l.hef
+- Camera contention: if recording is active, capture may fail with "camera busy"
+- hailo-apps is optional; install for real structured detections
+
+### Future
+
+- Continuous or event-driven detection
+- Additional model support
 
 ## Dashboard
 
@@ -84,3 +153,4 @@ The Connection & Health card shows an **AI HAT (optional)** section with:
 - Hardware detected (yes / no)
 - Device (e.g. Hailo-8L)
 - State (ready / missing_cli / missing_hardware / identify_failed / disabled / misconfigured)
+- **Run AI Detection Test** button for one-shot detection

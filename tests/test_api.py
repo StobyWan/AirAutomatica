@@ -72,6 +72,33 @@ def test_health(client: TestClient) -> None:
     assert "parse_error" in counts
 
 
+def test_post_ai_detect_returns_detection_result(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /api/ai/detect returns 200 with DetectionResult schema."""
+    monkeypatch.setenv("AI_HAT_ENABLED", "0")
+    monkeypatch.delenv("AI_MODE", raising=False)
+    r = client.post("/api/ai/detect")
+    assert r.status_code == 200
+    d = r.json()
+    assert "backend" in d
+    assert "model" in d
+    assert "state" in d
+    assert d["state"] in (
+        "ready",
+        "no_detections",
+        "error",
+        "disabled",
+        "unavailable",
+    )
+    assert "structured_output_supported" in d
+    assert "detections" in d
+    assert isinstance(d["detections"], list)
+    assert "errors" in d
+    assert isinstance(d["errors"], list)
+    assert d["state"] == "disabled"
+
+
 def test_health_includes_ollama_ready_when_provider_ollama(
     store: StateStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:

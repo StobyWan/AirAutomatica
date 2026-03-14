@@ -197,6 +197,13 @@
       <div id="ai-hat-content" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
         <span class="text-slate-500">—</span>
       </div>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" id="ai-detect-test-btn" class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-slate-200 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          Run AI Detection Test
+        </button>
+        <span id="ai-detect-loading" class="hidden text-xs text-slate-400">Running…</span>
+      </div>
+      <div id="ai-detect-result" class="mt-2 text-xs text-slate-400 hidden"></div>
     </div>
   </div>
 
@@ -643,6 +650,43 @@
       });
     }
 
+    function runAiDetectionTest() {
+      const btn = document.getElementById('ai-detect-test-btn');
+      const loading = document.getElementById('ai-detect-loading');
+      const resultEl = document.getElementById('ai-detect-result');
+      if (!btn || !loading || !resultEl) return;
+      btn.disabled = true;
+      loading.classList.remove('hidden');
+      resultEl.classList.add('hidden');
+      resultEl.textContent = '';
+      fetch('/api/ai/detect', { method: 'POST' }).then(r => r.json()).then(d => {
+        const state = d.state || 'unknown';
+        const stateClass = state === 'ready' ? 'chip-ok' : (state === 'no_detections' ? 'chip-warn' : 'chip-err');
+        let html = '<span class="chip ' + stateClass + '">' + state + '</span>';
+        const count = (d.detections || []).length;
+        html += ' <span class="text-slate-500">' + count + ' detection(s)</span>';
+        if (d.errors && d.errors.length > 0) {
+          html += '<div class="mt-1 text-amber-400">' + d.errors.join('; ') + '</div>';
+        }
+        if (count > 0) {
+          const items = d.detections.map(function(det) {
+            const b = det.bbox || {};
+            const bboxStr = 'x=' + (b.x != null ? b.x.toFixed(2) : '?') + ' y=' + (b.y != null ? b.y.toFixed(2) : '?') + ' w=' + (b.width != null ? b.width.toFixed(2) : '?') + ' h=' + (b.height != null ? b.height.toFixed(2) : '?');
+            return det.label + ' ' + (det.confidence != null ? (det.confidence * 100).toFixed(0) + '%' : '') + ' [' + bboxStr + ']';
+          });
+          html += '<div class="mt-1 text-slate-300">' + items.join('; ') + '</div>';
+        }
+        resultEl.innerHTML = html;
+        resultEl.classList.remove('hidden');
+      }).catch(function(err) {
+        resultEl.innerHTML = '<span class="chip chip-err">error</span> ' + (err.message || String(err));
+        resultEl.classList.remove('hidden');
+      }).finally(function() {
+        btn.disabled = false;
+        loading.classList.add('hidden');
+      });
+    }
+
     function initConnectionView() {
       fetch('/connection/state').then(r => r.json()).then(d => {
         const conn = d.connection_state || 'setup';
@@ -658,6 +702,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       initConnectionView();
+      document.getElementById('ai-detect-test-btn')?.addEventListener('click', runAiDetectionTest);
       document.getElementById('landing-auto-detect')?.addEventListener('click', () => {
         document.getElementById('landing-status').textContent = 'Scanning…';
         fetch('/connection/detect', { method: 'POST' }).then(r => r.json()).then(d => {
