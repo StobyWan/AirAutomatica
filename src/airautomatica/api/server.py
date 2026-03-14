@@ -25,6 +25,7 @@ from airautomatica.ai.ollama_tasks import (
     get_telemetry_summary_counts,
 )
 from airautomatica.api.helpers import build_active_summary
+from airautomatica.api.routers import ai as ai_router_mod
 from airautomatica.api.routers import camera as camera_router_mod
 from airautomatica.api.routers import connection as connection_router_mod
 from airautomatica.api.routers import dashboard as dashboard_router_mod
@@ -185,6 +186,7 @@ def create_app(
             _mission_logic, _reload_ai_fn, _reload_telemetry_fn
         )
     )
+    app.include_router(ai_router_mod.create_ai_router())
     app.include_router(camera_router_mod.create_camera_router(camera_recording_service))
     app.include_router(
         recordings_router_mod.create_recordings_router(

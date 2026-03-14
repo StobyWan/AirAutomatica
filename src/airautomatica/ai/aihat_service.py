@@ -9,8 +9,10 @@ Vision input pipeline: camera (Picamera2) -> frames -> AiHatAiService.infer.
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 
 from airautomatica.ai.models import AiResult
+from airautomatica.ai.providers.hailo_provider import HailoAiHatProvider
 from airautomatica.ai.service import AiService
 from airautomatica.models.state import AircraftState
 
@@ -21,10 +23,16 @@ class AiHatAiService(AiService):
     In flight: Matek/ArduPilot = flight control; AI HAT = perception; mission logic = rules.
     """
 
-    def __init__(self, model_name: str, device: str) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        device: str,
+        provider: Optional[HailoAiHatProvider] = None,
+    ) -> None:
         """device param is legacy/placeholder; HailoRT uses auto-discovery."""
         self._model_name = model_name
         self._device = device
+        self._provider = provider or HailoAiHatProvider()
         # TODO: Load HEF model, initialize HailoRT
 
     async def infer(self, state: AircraftState | None) -> AiResult:

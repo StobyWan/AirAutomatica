@@ -4,9 +4,11 @@ from airautomatica.settings import load_settings
 
 load_settings()
 
+import argparse
 import asyncio
 import atexit
 import dataclasses
+import json
 import logging
 import os
 import signal
@@ -87,6 +89,23 @@ from airautomatica.telemetry.capabilities import CapabilityInfo
 from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
 
 logger = logging.getLogger(__name__)
+
+
+def _run_diagnose_ai() -> None:
+    """Run AI HAT diagnostics and exit. Never fails the app."""
+    from airautomatica.ai.hailo_detection import get_hailo_status
+
+    result = get_hailo_status()
+    out = {
+        "available": result.available,
+        "state": result.state,
+        "device_class": result.device_class,
+        "board_name": result.board_name,
+        "driver_ready": result.driver_ready,
+        "camera_ai_postprocess_available": result.camera_ai_postprocess_available,
+        "errors": result.errors,
+    }
+    print(json.dumps(out, indent=2))
 
 
 def _shutdown_cleanup(
@@ -336,6 +355,15 @@ def _reload_ai_subsystem(
 
 def main() -> None:
     """Run API server, telemetry loop, and mission logic."""
+    parser = argparse.ArgumentParser(prog="airautomatica")
+    parser.add_argument(
+        "--diagnose-ai", action="store_true", help="Print AI HAT diagnostics and exit"
+    )
+    args = parser.parse_args()
+    if args.diagnose_ai:
+        _run_diagnose_ai()
+        return
+
     setup_logging()
     store = StateStore()
     provider = get_local_llm_provider()
