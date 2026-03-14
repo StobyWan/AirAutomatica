@@ -161,6 +161,8 @@ def create_app(
             _connection_store,
             persistence,
             _app_home_store,
+            camera_recording_service=camera_recording_service,
+            get_camera_recording_mode=get_camera_recording_mode,
         )
     )
 
