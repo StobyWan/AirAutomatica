@@ -36,7 +36,40 @@ def create_sessions_router(
         session_data = persistence.get_session(sid)
         if session_data is None:
             raise HTTPException(status_code=404, detail="Session not found")
+        current_sid = session_ref[0] if session_ref else None
+        if current_sid is not None:
+            session_data["current_session_id"] = current_sid
         return session_data
+
+    @router.delete("/sessions/{sid:int}")
+    def delete_session(sid: int) -> dict:
+        """Delete session and all associated recordings. 400 if active session."""
+        if persistence is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session_data = persistence.get_session(sid)
+        if session_data is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        current_sid = session_ref[0] if session_ref else None
+        if current_sid is not None and sid == current_sid:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete active session. Stop the session first.",
+            )
+        recordings_deleted = 0
+        recordings_failed = 0
+        if recordings_service is not None:
+            recordings_deleted, recordings_failed = (
+                recordings_service.delete_recordings_for_session(sid)
+            )
+        if not persistence.delete_session(sid):
+            raise HTTPException(
+                status_code=500, detail="Failed to delete session from database"
+            )
+        return {
+            "ok": True,
+            "recordings_deleted": recordings_deleted,
+            "recordings_failed": recordings_failed,
+        }
 
     @router.patch("/sessions/{sid:int}")
     def patch_session(

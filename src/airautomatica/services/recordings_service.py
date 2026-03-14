@@ -277,6 +277,18 @@ class RecordingsService:
             return (None, None)
         return self._persistence.get_session_time_range(session_id)
 
+    def delete_recordings_for_session(self, session_id: int) -> tuple[int, int]:
+        """Delete all recordings for a session. Returns (deleted_count, failed_count)."""
+        result = self.get_recordings(session_id=session_id, allow_fallback=False)
+        deleted = 0
+        failed = 0
+        for r in result.recordings:
+            if self.delete_recording(r.filename):
+                deleted += 1
+            else:
+                failed += 1
+        return (deleted, failed)
+
     def delete_recording(self, filename: str) -> bool:
         """Delete recording by basename. Returns True on success. Path traversal protected."""
         if not _safe_basename(filename):

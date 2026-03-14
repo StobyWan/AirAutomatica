@@ -33,6 +33,7 @@
     #replay-scrubber { transition: left 0.08s ease-out; }
     #replay-scrubber.replay-no-transition { transition: none; }
   </style>
+  <script>window.AIRAUTOMATICA_BASE_PATH = __BASE_PATH_JSON__; function recordingsUrl(f){ return (window.AIRAUTOMATICA_BASE_PATH||'')+'/recordings/'+encodeURIComponent(f); }</script>
 </head>
 <body>
   <div class="max-w-4xl mx-auto">
@@ -46,12 +47,31 @@
     </nav>
 
     <header class="mb-6">
-      <h1 class="text-2xl font-semibold tracking-tight text-white">
-        Session <span id="session-id" class="text-cyan-400 font-mono">—</span>
-      </h1>
-      <p class="text-slate-500 text-sm mt-1">Flight path, telemetry, detections, and recordings</p>
-      <div id="session-metadata" class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400"></div>
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight text-white">
+            Session <span id="session-id" class="text-cyan-400 font-mono">—</span>
+          </h1>
+          <p class="text-slate-500 text-sm mt-1">Flight path, telemetry, detections, and recordings</p>
+          <div id="session-metadata" class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400"></div>
+        </div>
+        <button type="button" id="delete-session-btn" class="hidden px-3 py-1.5 rounded-lg bg-red-900/50 hover:bg-red-800/60 text-red-200 text-sm font-medium border border-red-800/50 transition-colors">Delete session</button>
+      </div>
     </header>
+
+    <div id="delete-session-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+      <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/60" aria-hidden="true"></div>
+        <div class="relative rounded-xl bg-slate-800 border border-slate-700 p-6 shadow-xl max-w-md w-full">
+          <h3 class="text-lg font-semibold text-white">Delete this session?</h3>
+          <p class="mt-2 text-sm text-slate-400">This will permanently delete the session and all its recordings. This cannot be undone.</p>
+          <div class="mt-6 flex gap-3 justify-end">
+            <button type="button" id="delete-session-cancel" class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium">Cancel</button>
+            <button type="button" id="delete-session-confirm" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="loading" class="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
       <div class="inline-flex items-center gap-2 text-slate-400">
@@ -610,13 +630,41 @@
       const contentEl = document.getElementById('content');
       contentEl.classList.remove('hidden');
 
+      const deleteSessionBtn = document.getElementById('delete-session-btn');
+      const deleteSessionModal = document.getElementById('delete-session-modal');
+      const currentSessionId = sessionMeta.current_session_id;
+      if (deleteSessionBtn && (currentSessionId == null || currentSessionId !== sessionId)) {
+        deleteSessionBtn.classList.remove('hidden');
+      }
+      deleteSessionBtn?.addEventListener('click', () => {
+        deleteSessionModal?.classList.remove('hidden');
+      });
+      document.getElementById('delete-session-cancel')?.addEventListener('click', () => {
+        deleteSessionModal?.classList.add('hidden');
+      });
+      document.getElementById('delete-session-confirm')?.addEventListener('click', async () => {
+        try {
+          const r = await fetch(`/sessions/${sessionId}`, { method: 'DELETE' });
+          if (r.ok) {
+            window.location.href = '/dashboard';
+          } else {
+            const j = await r.json().catch(() => ({}));
+            alert(j.detail || 'Failed to delete session');
+            deleteSessionModal?.classList.add('hidden');
+          }
+        } catch (e) {
+          alert('Failed to delete session');
+          deleteSessionModal?.classList.add('hidden');
+        }
+      });
+
       const recPlayerEl = document.getElementById('session-video-player');
       const recPlayerContainer = document.getElementById('session-player-container');
 
       function seekVideoToTimestamp(ts) {
         if (!recPlayerEl || !primaryRecording) return;
         if (!recPlayerEl.src || !recPlayerEl.src.includes(encodeURIComponent(primaryRecording.filename))) {
-          recPlayerEl.src = '/recordings/' + encodeURIComponent(primaryRecording.filename);
+          recPlayerEl.src = recordingsUrl(primaryRecording.filename);
         }
         if (recPlayerContainer) recPlayerContainer.classList.remove('hidden');
         const recStart = new Date(primaryRecording.timestamp).getTime();
@@ -910,7 +958,7 @@
           itemsEl.querySelectorAll('.replay-phase-item').forEach(el => { el.addEventListener('click', () => seekToTimestamp(el.dataset.seekTs)); });
         }
         if (primaryRecording && recPlayerEl && recPlayerContainer) {
-          recPlayerEl.src = '/recordings/' + encodeURIComponent(primaryRecording.filename);
+          recPlayerEl.src = recordingsUrl(primaryRecording.filename);
           recPlayerContainer.classList.remove('hidden');
           recPlayerEl.addEventListener('loadedmetadata', () => syncVideoToReplayTime(replaySamples[currentIndex]?.timestamp || replaySamples[0]?.timestamp), { once: true });
         }
@@ -1139,7 +1187,7 @@
               <div class="text-xs text-slate-500 mt-0.5">${ts} · ${dur} · ${sz}</div>
             </div>
             <div class="flex items-center gap-1 flex-shrink-0">
-              <a href="/recordings/${encodeURIComponent(r.filename)}" download="${r.filename}" class="p-1.5 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700/50" title="Download" onclick="event.stopPropagation()">↓</a>
+              <a href="${recordingsUrl(r.filename)}" download="${r.filename}" class="p-1.5 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700/50" title="Download" onclick="event.stopPropagation()">↓</a>
               <button type="button" class="session-recording-delete p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700/50" title="Delete" data-filename="${r.filename}" onclick="event.stopPropagation()">✕</button>
             </div>
           </div>`;
@@ -1148,12 +1196,20 @@
         recListEl.querySelectorAll('.session-recording-card').forEach(el => {
           el.addEventListener('click', () => {
             const fn = el.dataset.filename;
-            recPlayerEl.src = '/recordings/' + encodeURIComponent(fn);
+            recPlayerEl.src = recordingsUrl(fn);
             recPlayerContainer.classList.remove('hidden');
             recListEl.querySelectorAll('.session-recording-card').forEach(c => c.classList.remove('ring-2', 'ring-cyan-500'));
             el.classList.add('ring-2', 'ring-cyan-500');
           });
         });
+        if (replaySamples.length === 0 && recordings.length > 0) {
+          recPlayerEl.src = recordingsUrl(recordings[0].filename);
+          recPlayerContainer.classList.remove('hidden');
+          recListEl.querySelectorAll('.session-recording-card').forEach((c, i) => {
+            c.classList.toggle('ring-2', i === 0);
+            c.classList.toggle('ring-cyan-500', i === 0);
+          });
+        }
         recListEl.querySelectorAll('.session-recording-delete').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1171,7 +1227,7 @@
         const fn = document.getElementById('session-delete-confirm').dataset.filename;
         if (!fn) return;
         try {
-          const r = await fetch('/recordings/' + encodeURIComponent(fn), { method: 'DELETE' });
+          const r = await fetch(recordingsUrl(fn), { method: 'DELETE' });
           if (r.ok) {
             document.getElementById('session-delete-modal').classList.add('hidden');
             if (recPlayerEl.src && recPlayerEl.src.includes(encodeURIComponent(fn))) {

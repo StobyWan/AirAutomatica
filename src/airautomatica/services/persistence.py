@@ -8,7 +8,7 @@ import typing
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from airautomatica.ai.event_normalizer import get_event_type
 from airautomatica.config import (
@@ -137,6 +137,46 @@ class PersistenceService:
         except Exception as e:
             self._record_error(str(e))
             logger.exception("end_session failed: %s", e)
+
+    def delete_session(self, session_id: int) -> bool:
+        """Delete session and all child rows. Returns True on success, False on failure."""
+        if get_engine() is None:
+            return False
+        try:
+            with get_session() as session:
+                if session is None:
+                    return False
+                session.execute(
+                    delete(TelemetrySample).where(
+                        TelemetrySample.session_id == session_id
+                    )
+                )
+                session.execute(
+                    delete(PathPoint).where(PathPoint.session_id == session_id)
+                )
+                session.execute(
+                    delete(Detection).where(Detection.session_id == session_id)
+                )
+                session.execute(
+                    delete(SystemEvent).where(SystemEvent.session_id == session_id)
+                )
+                session.execute(
+                    delete(CommandSent).where(CommandSent.session_id == session_id)
+                )
+                session.execute(
+                    delete(FlightEvent).where(FlightEvent.session_id == session_id)
+                )
+                session.execute(
+                    delete(PhaseInterval).where(PhaseInterval.session_id == session_id)
+                )
+                session.execute(
+                    delete(FlightSession).where(FlightSession.id == session_id)
+                )
+            return True
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("delete_session failed: %s", e)
+            return False
 
     def get_session_time_range(
         self, session_id: int

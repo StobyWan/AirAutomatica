@@ -126,6 +126,7 @@
     .session-row-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.8125rem; color: #94a3b8; }
     .session-row-badge { flex-shrink: 0; }
   </style>
+  <script>window.AIRAUTOMATICA_BASE_PATH = __BASE_PATH_JSON__; function recordingsUrl(f){ return (window.AIRAUTOMATICA_BASE_PATH||'')+'/recordings/'+encodeURIComponent(f); }</script>
 </head>
 <body>
   <div id="view-landing" class="view-panel active">
@@ -1708,7 +1709,7 @@
                 <div class="text-xs text-slate-500 mt-0.5">${ts} · ${dur} · ${sz}</div>
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
-                <a href="/recordings/${encodeURIComponent(r.filename)}" download="${r.filename}" class="p-1.5 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700/50" title="Download" onclick="event.stopPropagation()">↓</a>
+                <a href="${recordingsUrl(r.filename)}" download="${r.filename}" class="p-1.5 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700/50" title="Download" onclick="event.stopPropagation()">↓</a>
                 <button type="button" class="live-recording-delete-btn p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700/50" title="Delete" data-filename="${r.filename}" onclick="event.stopPropagation()">✕</button>
               </div>
             </div>`;
@@ -1737,7 +1738,7 @@
       liveSelectedFilename = filename;
       const player = document.getElementById('live-player');
       const container = document.getElementById('live-player-container');
-      player.src = '/recordings/' + encodeURIComponent(filename);
+      player.src = recordingsUrl(filename);
       container.classList.remove('hidden');
       document.querySelectorAll('.live-recording-card').forEach(el => {
         el.classList.toggle('ring-2 ring-cyan-500', el.dataset.filename === filename);
@@ -1758,7 +1759,7 @@
       const filename = document.getElementById('live-delete-confirm').dataset.filename;
       if (!filename) return;
       try {
-        const r = await fetch('/recordings/' + encodeURIComponent(filename), { method: 'DELETE' });
+        const r = await fetch(recordingsUrl(filename), { method: 'DELETE' });
         if (r.ok) {
           document.getElementById('live-delete-modal').classList.add('hidden');
           if (liveSelectedFilename === filename) {
