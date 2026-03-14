@@ -146,6 +146,9 @@ Bbox coordinates are normalized 0..1 (x, y = top-left; width, height = size).
 | `AI_HAT_CAMERA_PIPELINE_ENABLED` | Must be 1 (default when AI HAT enabled) |
 | `AI_HAT_DETECTION_THRESHOLD` | Min confidence 0–1; default 0.25. Suppresses weak detections. |
 | `RECORDING_AI_OVERLAY_ENABLED` | When 1 (default when AI HAT enabled), recording uses Hailo postprocess; video shows bounding boxes. Requires rpicam-vid and postprocess assets. |
+| `RECORDING_AI_PERSIST_ENABLED` | When 1 (default when overlay enabled), recording-time detections are persisted to Recent Detections. |
+| `RECORDING_AI_PERSIST_INTERVAL_SEC` | Seconds between frame extractions (default 5). |
+| `RECORDING_AI_PERSIST_STARTUP_DELAY_SEC` | Grace period before first extraction (default 3). |
 
 ## Recording AI Overlay
 
@@ -153,16 +156,16 @@ When AI HAT is enabled and `RECORDING_AI_OVERLAY_ENABLED=1`, session recording r
 
 **Requirements:** rpicam-vid (not libcamera-vid), postprocess assets at `/usr/share/rpi-camera-assets/hailo_yolov6_inference.json`, AI HAT enabled.
 
-**Limitations:** Overlay only; no structured detection events or persistence from the recording pipeline. One-shot detection remains blocked when recording (camera busy).
+**Recording-time persistence:** When `RECORDING_AI_PERSIST_ENABLED=1` (default when overlay enabled), a background task extracts frames from the in-progress recording and runs Hailo inference via hailo-apps. Detections are persisted to the database with source `ai_hat_recording` and appear in Recent Detections. Distinct from one-shot (on-demand) and overlay-only (no persist). One-shot detection remains blocked when recording (camera busy).
 
 ## Cached vs Persisted
 
 | Concept | Storage | Lifecycle |
 |---------|---------|-----------|
 | **Last one-shot result** | In-memory cache | Overwritten on each successful one-shot run. Lost on restart. |
-| **Persisted detection history** | SQLite `detections` | From mission flow (Ollama/mock). Survives restart. |
+| **Persisted detection history** | SQLite `detections` | From mission flow (Ollama/mock) and recording-time AI (source `ai_hat_recording`). Survives restart. |
 
-AI HAT one-shot results are cached for quick display. Persisted detections come from the mission logic loop and are stored in the database. They are distinct. When AI HAT returns scaffold (hardware path not yet implemented), the mission loop receives NONE (no detection)—mock labels do not leak into mission logic.
+AI HAT one-shot results are cached for quick display. Persisted detections come from the mission logic loop and from recording-time AI (when recording with overlay). They are distinct. When AI HAT returns scaffold (hardware path not yet implemented), the mission loop receives NONE (no detection)—mock labels do not leak into mission logic.
 
 ## Dashboard UI
 
@@ -176,7 +179,7 @@ The Connection & Health card shows an **AI HAT (optional)** section:
 - **Run one-shot detection** — Triggers one-shot detection
 - **AI HAT last one-shot** — Cached result with stale age (e.g. "person, car (2) — 18s ago")
 
-**Recent Detections** (separate card) shows persisted mission-flow detection history, not AI HAT one-shot results.
+**Recent Detections** (separate card) shows persisted detection history: mission-flow and recording-time AI (source `ai_hat_recording` when recording with overlay). Distinct from AI HAT one-shot cached result.
 
 ## Current Limitations
 

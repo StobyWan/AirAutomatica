@@ -274,6 +274,37 @@ def get_recording_ai_overlay_enabled() -> bool:
     return raw in ("1", "true", "yes")
 
 
+def get_recording_ai_persist_enabled() -> bool:
+    """True if recording-time detections should be persisted to Recent Detections.
+    Default: True when AI HAT + overlay enabled, else False.
+    Env: RECORDING_AI_PERSIST_ENABLED (1/true/yes)."""
+    if not get_ai_hat_enabled() or not get_recording_ai_overlay_enabled():
+        return False
+    raw = os.environ.get("RECORDING_AI_PERSIST_ENABLED", "1").lower().strip()
+    return raw in ("1", "true", "yes")
+
+
+def get_recording_ai_persist_interval_sec() -> float:
+    """Seconds between frame extractions for recording-time persistence. Default: 5.
+    Env: RECORDING_AI_PERSIST_INTERVAL_SEC."""
+    try:
+        return max(1.0, float(os.environ.get("RECORDING_AI_PERSIST_INTERVAL_SEC", "5")))
+    except ValueError:
+        return 5.0
+
+
+def get_recording_ai_persist_startup_delay_sec() -> float:
+    """Grace period before first frame extraction. Default: 3.
+    Avoids pounding the file before the first useful fragment exists.
+    Env: RECORDING_AI_PERSIST_STARTUP_DELAY_SEC."""
+    try:
+        return max(
+            0.0, float(os.environ.get("RECORDING_AI_PERSIST_STARTUP_DELAY_SEC", "3"))
+        )
+    except ValueError:
+        return 3.0
+
+
 def get_camera_recording_mode() -> str:
     """Camera recording mode: off, manual, or auto. Default: manual.
     Env: CAMERA_RECORDING_MODE (also from settings.json). Uses persisted settings for live updates.

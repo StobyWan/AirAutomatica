@@ -83,11 +83,23 @@ def _capture_frame() -> tuple[bytes | None, str | None]:
         return None, f"camera capture failed: {e}"
 
 
+def run_inference_on_image_bytes(
+    image_bytes: bytes,
+    hef_path: Path | None = None,
+) -> tuple[DetectionResult, bool]:
+    """Run Hailo inference on image bytes (JPEG/PNG). Returns (result, success).
+
+    Public helper for recording-time ingestion and one-shot detection.
+    """
+    path = hef_path or HEF_PATH_H8L
+    return _run_inference_on_image(image_bytes, path)
+
+
 def _run_inference_on_image(
     image_bytes: bytes,
     hef_path: Path,
 ) -> tuple[DetectionResult, bool]:
-    """Run Hailo inference. Returns (result, success)."""
+    """Run Hailo inference. Returns (result, success). Internal implementation."""
     if not _hailo_apps_available():
         return (
             DetectionResult(
@@ -339,5 +351,5 @@ def run_one_shot_detection() -> DetectionResult:
             errors=[capture_err] if capture_err else ["no frame data"],
         )
 
-    result, _ = _run_inference_on_image(frame_data, HEF_PATH_H8L)
+    result, _ = run_inference_on_image_bytes(frame_data)
     return result
