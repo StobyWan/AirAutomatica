@@ -246,8 +246,10 @@ class CameraRecordingService:
                         and get_recording_ai_overlay_enabled()
                         and RPCAM_ASSETS_PATH.exists()
                     ):
+                        # Hailo overlay: see docs/ai_hat.md Recording AI Overlay.
                         # Lores 640x640 must be <= video size. Default 640x480 fails with
                         # "Low res image larger than video". Use 1280x720 so lores fits.
+                        logger.info("Recording AI overlay enabled (Hailo post-process)")
                         cam_args.extend(
                             [
                                 "--width",
@@ -319,7 +321,8 @@ class CameraRecordingService:
                         and get_recording_ai_overlay_enabled()
                         and RPCAM_ASSETS_PATH.exists()
                     ):
-                        # Lores 640x640 must be <= video size. Default 640x480 fails.
+                        # Hailo overlay: see docs/ai_hat.md Recording AI Overlay.
+                        logger.info("Recording AI overlay enabled (Hailo post-process)")
                         args.extend(
                             [
                                 "--width",

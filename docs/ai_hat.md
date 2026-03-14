@@ -162,7 +162,7 @@ When AI HAT is enabled and `RECORDING_AI_OVERLAY_ENABLED=1`, session recording r
 | **Last one-shot result** | In-memory cache | Overwritten on each successful one-shot run. Lost on restart. |
 | **Persisted detection history** | SQLite `detections` | From mission flow (Ollama/mock). Survives restart. |
 
-AI HAT one-shot results are cached for quick display. Persisted detections come from the mission logic loop and are stored in the database. They are distinct.
+AI HAT one-shot results are cached for quick display. Persisted detections come from the mission logic loop and are stored in the database. They are distinct. When AI HAT returns scaffold (hardware path not yet implemented), the mission loop receives NONE (no detection)—mock labels do not leak into mission logic.
 
 ## Dashboard UI
 
