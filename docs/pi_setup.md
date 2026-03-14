@@ -54,3 +54,7 @@ Without `--with-ollama`, run `make setup-ollama` (or install Ollama manually) af
 ## Packaged Install (.deb)
 
 For packaged installs, see [packaging.md](packaging.md). The default is mock mode; switching to Ollama requires the prerequisites above and editing `/etc/airautomatica/airautomatica.env`.
+
+## AI HAT (optional)
+
+For Raspberry Pi AI HAT+ (Hailo-8L) support, see [ai_hat.md](ai_hat.md). AI HAT is optional; the app runs without it.

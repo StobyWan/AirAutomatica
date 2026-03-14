@@ -15,6 +15,8 @@ Packaged installs start in **mock telemetry** by default:
 
 This ensures the service starts cleanly after install, prefers Ollama when available (e.g. Raspberry Pi with Ollama installed), and does not fail if `/dev/ttyUSB0` or Ollama are missing.
 
+**AI HAT (optional):** Raspberry Pi AI HAT+ (Hailo-8L) support is optional. See [ai_hat.md](ai_hat.md) for packages and verification. The .deb does not depend on Hailo packages.
+
 To switch to real hardware, edit `/etc/airautomatica/airautomatica.env` and restart the service.
 
 ## Config Precedence

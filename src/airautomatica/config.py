@@ -138,6 +138,29 @@ def get_aihat_device() -> str:
     return os.environ.get("AIHAT_DEVICE", "auto")
 
 
+def get_ai_hat_require_hardware() -> bool:
+    """True if startup should fail when Hailo not detected. Default: False.
+    When True and Hailo not detected, log warning but do not fail startup."""
+    raw = os.environ.get("AI_HAT_REQUIRE_HARDWARE", "0").lower().strip()
+    return raw in ("1", "true", "yes")
+
+
+def get_ai_hat_camera_pipeline_enabled() -> bool:
+    """True if AI HAT camera pipeline is enabled. Default: True when AI HAT enabled."""
+    if not get_ai_hat_enabled():
+        return False
+    raw = os.environ.get("AI_HAT_CAMERA_PIPELINE_ENABLED", "1").lower().strip()
+    return raw in ("1", "true", "yes")
+
+
+def get_ai_hat_object_detection_enabled() -> bool:
+    """True if AI HAT object detection is enabled. Default: True when AI HAT enabled."""
+    if not get_ai_hat_enabled():
+        return False
+    raw = os.environ.get("AI_HAT_OBJECT_DETECTION_ENABLED", "1").lower().strip()
+    return raw in ("1", "true", "yes")
+
+
 def get_ai_min_confidence() -> float:
     """Min confidence to accept a detection. 0.0-1.0. Default: 0.5."""
     try:

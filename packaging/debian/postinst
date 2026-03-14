@@ -68,3 +68,10 @@ chown -R "$APP_USER:$APP_USER" "$OPT_DIR" "$VAR_DIR"
 # Enable service (do not start automatically on install; let operator start)
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
+
+# Informational: AI HAT support enabled but Hailo packages not present
+if [ -f "$ETC_DIR/airautomatica.env" ] && grep -qE '^AI_HAT_ENABLED=(1|true|yes)' "$ETC_DIR/airautomatica.env" 2>/dev/null; then
+  if ! dpkg -l 2>/dev/null | grep -qE '^ii[[:space:]]+hailo'; then
+    echo "airautomatica: AI HAT support enabled but Hailo packages not found. See docs/ai_hat.md and packaging/linux/install-ai-hat-deps.sh"
+  fi
+fi
