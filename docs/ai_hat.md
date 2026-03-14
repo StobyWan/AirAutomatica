@@ -98,17 +98,15 @@ Structured object detection returns labels, confidence, and bounding boxes (norm
 ### Requirements
 
 - Hailo packages (install-ai-hat-deps.sh)
-- **hailo-apps** (optional): `pip install hailo-apps` or `git clone hailo-apps && ./install.sh`
+- **hailo-apps** (optional): Not on PyPI. Clone and install into AirAutomatica venv:
+  ```bash
+  git clone https://github.com/hailo-ai/hailo-apps.git ~/hailo-apps
+  HAILO_APPS_PATH=~/hailo-apps ./packaging/linux/install-ai-hat-apps.sh
+  ```
 - **rpicam-still** for frame capture
 - HEF model: `/usr/share/hailo-models/yolov6n_h8l.hef` (from hailo-models package)
 
-Without hailo-apps, detection returns `state="unavailable"` with a clear error.
-
-Optional install script:
-
-```bash
-packaging/linux/install-ai-hat-apps.sh
-```
+Without hailo-apps, detection returns `state="unavailable"` with a clear error. hailo-apps is only available on Raspberry Pi (ARM); it cannot be installed on macOS or x86.
 
 ### POST /api/ai/detect Response
 
