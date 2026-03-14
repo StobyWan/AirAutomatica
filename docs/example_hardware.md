@@ -17,10 +17,10 @@ This document describes one concrete companion-computer bench setup used with AI
 
 **Raspberry Pi 5** — Companion computer running AIRAUTOMATICA.
 
-**Raspberry Pi AI HAT+** (13 TOPS, Hailo-8) — Future onboard perception hardware.
+**Raspberry Pi AI HAT+** (Hailo-8L) — Optional onboard perception hardware.
 
-- The AI HAT+ is intended for vision-based inference on the Pi.
-- **AI HAT mode in software is scaffolded only** — real Hailo integration is not yet implemented. Today, use mock or Ollama for AI simulation.
+- The AI HAT+ provides one-shot object detection via Hailo. See [ai_hat.md](ai_hat.md).
+- AI HAT is optional; the app runs without it. Companion-side perception only; not flight-critical.
 
 ---
 
@@ -63,7 +63,7 @@ This document describes one concrete companion-computer bench setup used with AI
 | Category | Supported now | Example / future |
 |----------|---------------|------------------|
 | Telemetry | Serial MAVLink companion link | — |
-| AI | Mock mode, Ollama simulation | Real AI HAT perception integration |
+| AI | Mock mode, Ollama simulation | AI HAT one-shot (Hailo-8L), Ollama advisory |
 | Persistence | SQLite sessions, detections | — |
 | Observability | Dashboard, API, health | — |
 | Commands | — | Command-back to ArduPilot |

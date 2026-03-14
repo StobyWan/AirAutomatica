@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import func, select
 
+from airautomatica.ai.event_normalizer import get_event_type
 from airautomatica.config import (
     get_effective_ai_backend,
     get_serial_baud,
@@ -271,12 +272,14 @@ class PersistenceService:
                         )
                     except json.JSONDecodeError:
                         meta = {}
+                    event_type = get_event_type(row.label)
                     out.append(
                         {
                             "id": row.id,
                             "session_id": row.session_id,
                             "timestamp": row.timestamp.isoformat(),
                             "label": row.label,
+                            "event_type": event_type,
                             "confidence": row.confidence,
                             "summary": row.summary,
                             "source_backend": row.source_backend,
