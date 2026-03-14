@@ -161,6 +161,17 @@ def get_ai_hat_object_detection_enabled() -> bool:
     return raw in ("1", "true", "yes")
 
 
+def get_ai_hat_detection_threshold() -> float:
+    """Min confidence for AI HAT detections. 0.0-1.0. Default: 0.25.
+    Suppresses weak detections below this threshold. Separate from AI_MIN_CONFIDENCE (mission logic).
+    """
+    try:
+        v = float(os.environ.get("AI_HAT_DETECTION_THRESHOLD", "0.25"))
+        return max(0.0, min(1.0, v))
+    except ValueError:
+        return 0.25
+
+
 def get_ai_min_confidence() -> float:
     """Min confidence to accept a detection. 0.0-1.0. Default: 0.5."""
     try:

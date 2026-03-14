@@ -97,6 +97,207 @@ def test_post_ai_detect_returns_detection_result(
     assert "errors" in d
     assert isinstance(d["errors"], list)
     assert d["state"] == "disabled"
+    assert "events" in d
+    assert isinstance(d["events"], list)
+
+
+def test_post_ai_detect_includes_events(
+    store: StateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST /api/ai/detect response includes events from normalization."""
+    from unittest.mock import MagicMock
+
+    from airautomatica.ai.detection_models import (
+        Detection,
+        DetectionBBox,
+        DetectionResult,
+    )
+    from airautomatica.services.ai_detection_store import AiDetectionStore
+
+    monkeypatch.setenv("AI_HAT_ENABLED", "0")
+    ai_store = AiDetectionStore()
+    det = Detection(
+        label="person",
+        confidence=0.9,
+        bbox=DetectionBBox(x=0.1, y=0.2, width=0.3, height=0.4),
+    )
+    mock_result = DetectionResult(
+        backend="hailo",
+        model="yolov6n",
+        state="ready",
+        structured_output_supported=True,
+        detections=[det],
+        frame_width=640,
+        frame_height=480,
+        inference_time_ms=50.0,
+        errors=[],
+    )
+    with patch("airautomatica.api.routers.ai.HailoAiHatProvider") as mock_provider_cls:
+        mock_provider = MagicMock()
+        mock_provider.run_object_detection.return_value = mock_result
+        mock_provider_cls.return_value = mock_provider
+        test_client = TestClient(create_app(store=store, ai_detection_store=ai_store))
+        r = test_client.post("/api/ai/detect")
+    assert r.status_code == 200
+    d = r.json()
+    assert "events" in d
+    events = d["events"]
+    assert isinstance(events, list)
+    assert len(events) >= 1
+    person_ev = next(
+        (e for e in events if e.get("event_type") == "person_detected"), None
+    )
+    assert person_ev is not None
+    assert person_ev["label"] == "person"
+    assert person_ev["confidence"] == 0.9
+    obj_count = next((e for e in events if e.get("event_type") == "object_count"), None)
+    assert obj_count is not None
+    assert obj_count["count"] == 1
+
+
+def test_post_ai_detect_person_detected_hook_inserts_system_event(
+    store: StateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """person_detected from AI HAT one-shot triggers system event when persistence available."""
+    from pathlib import Path
+    from unittest.mock import MagicMock, patch
+
+    from airautomatica.ai.detection_models import (
+        Detection,
+        DetectionBBox,
+        DetectionResult,
+    )
+    from airautomatica.services.ai_detection_store import AiDetectionStore
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "airautomatica.db"
+        monkeypatch.setenv("SQLITE_DB_PATH", str(path))
+        monkeypatch.setenv("AI_HAT_ENABLED", "0")
+        init_db(str(path))
+        assert get_engine() is not None
+
+        persistence = PersistenceService()
+        session_id = persistence.start_session("mock", "mock")
+        assert session_id is not None
+        session_ref: list[int | None] = [session_id]
+        ai_store = AiDetectionStore()
+
+        det = Detection(
+            label="person",
+            confidence=0.85,
+            bbox=DetectionBBox(x=0.1, y=0.2, width=0.3, height=0.4),
+        )
+        mock_result = DetectionResult(
+            backend="hailo",
+            model="yolov6n",
+            state="ready",
+            structured_output_supported=True,
+            detections=[det],
+            frame_width=640,
+            frame_height=480,
+            inference_time_ms=50.0,
+            errors=[],
+        )
+        with patch("airautomatica.api.routers.ai.HailoAiHatProvider") as mock_cls:
+            mock_cls.return_value = MagicMock(
+                run_object_detection=MagicMock(return_value=mock_result)
+            )
+            client = TestClient(
+                create_app(
+                    store=store,
+                    ai_detection_store=ai_store,
+                    persistence=persistence,
+                    session_ref=session_ref,
+                )
+            )
+            r = client.post("/api/ai/detect")
+        assert r.status_code == 200
+        events = persistence.get_recent_system_events(limit=5)
+        person_events = [e for e in events if e.get("event_type") == "person_detected"]
+        assert len(person_events) == 1
+        assert person_events[0]["message"] == "Person detected (AI HAT one-shot)"
+        assert person_events[0].get("metadata", {}).get("confidence") == 0.85
+        # Session-linking: one-shot detections persisted when session active
+        sessions = persistence.get_recent_sessions(
+            limit=5, include_detection_count=True
+        )
+        assert len(sessions) >= 1
+        assert sessions[0]["detection_count"] == 1
+
+
+def test_get_ai_last_detection_empty_when_no_store(
+    client: TestClient,
+) -> None:
+    """GET /api/ai/last-detection returns cached=False when no store."""
+    r = client.get("/api/ai/last-detection")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["cached"] is False
+    assert d["result"] is None
+    assert d["timestamp"] is None
+
+
+def test_get_ai_last_detection_empty_when_no_cache(
+    store: StateStore,
+) -> None:
+    """GET /api/ai/last-detection returns cached=False when store has no result."""
+    from airautomatica.services.ai_detection_store import AiDetectionStore
+
+    ai_store = AiDetectionStore()
+    client = TestClient(create_app(store, ai_detection_store=ai_store))
+    r = client.get("/api/ai/last-detection")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["cached"] is False
+    assert d["result"] is None
+    assert d["timestamp"] is None
+
+
+def test_get_ai_last_detection_returns_cached(
+    store: StateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /api/ai/last-detection returns cached result when store has one."""
+    from airautomatica.ai.detection_models import (
+        Detection,
+        DetectionBBox,
+        DetectionResult,
+    )
+    from airautomatica.services.ai_detection_store import AiDetectionStore
+
+    monkeypatch.setenv("AI_HAT_ENABLED", "0")
+    ai_store = AiDetectionStore()
+    det = Detection(
+        label="person",
+        confidence=0.9,
+        bbox=DetectionBBox(x=0.1, y=0.2, width=0.3, height=0.4),
+    )
+    result = DetectionResult(
+        backend="hailo",
+        model="yolov6n",
+        state="ready",
+        structured_output_supported=True,
+        detections=[det],
+        frame_width=640,
+        frame_height=480,
+        inference_time_ms=50.0,
+        errors=[],
+    )
+    ai_store.set_last_detection(result, session_id=42)
+    client = TestClient(create_app(store, ai_detection_store=ai_store))
+    r = client.get("/api/ai/last-detection")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["cached"] is True
+    assert d["result"] is not None
+    assert d["result"]["state"] == "ready"
+    assert len(d["result"]["detections"]) == 1
+    assert d["result"]["detections"][0]["label"] == "person"
+    assert d["timestamp"] is not None
+    assert d["source"] == "camera"
+    assert d["session_id"] == 42
 
 
 def test_health_includes_ollama_ready_when_provider_ollama(

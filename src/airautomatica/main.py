@@ -63,6 +63,7 @@ from airautomatica.runtime.telemetry_subsystem import (
     TelemetryController,
     TelemetryReconnectResult,
 )
+from airautomatica.services.ai_detection_store import AiDetectionStore
 from airautomatica.services.app_home_store import AppHomeStore
 from airautomatica.services.camera_recording import (
     CameraRecordingService,
@@ -389,6 +390,7 @@ def main() -> None:
 
     persistence = PersistenceService()
     connection_store = ConnectionStateStore()
+    ai_detection_store = AiDetectionStore()
     session_ref: list[int | None] = [None]
     source = _create_telemetry_source(store, persistence, session_ref)
     sampler = TelemetrySampler(persistence, session_ref, interval_sec=1.0)
@@ -498,6 +500,7 @@ def main() -> None:
     app = create_app(
         store,
         connection_store=connection_store,
+        ai_detection_store=ai_detection_store,
         session_ref=session_ref,
         persistence=persistence,
         ai_holder=ai_holder,

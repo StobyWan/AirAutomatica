@@ -28,9 +28,9 @@ Short practical notes for bench work. See [example_hardware.md](example_hardware
 | Component | Role |
 |-----------|------|
 | **Ollama** | Text/reasoning, telemetry summary, event classification. State-only input. |
-| **AI HAT** | Vision/detection (additive). Future: camera frames → HailoRT → AiResult. |
+| **AI HAT** | Vision/detection (additive). One-shot: rpicam-still → Hailo → structured detections. |
 
-AI HAT runs alongside Ollama when enabled. ComposedAiService uses AI HAT result when meaningful, else Ollama.
+AI HAT runs alongside Ollama when enabled. One-shot detection via `POST /api/ai/detect`. See [ai_hat.md](ai_hat.md).
 
 ---
 

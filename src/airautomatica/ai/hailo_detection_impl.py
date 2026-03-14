@@ -22,6 +22,7 @@ from airautomatica.ai.detection_models import (
     DetectionResult,
     DetectionState,
 )
+from airautomatica.config import get_ai_hat_detection_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -279,10 +280,13 @@ def _run_inference_on_image(
     classes = detections_dict.get("detection_classes", [])
     num_det = detections_dict.get("num_detections", 0)
 
+    threshold = get_ai_hat_detection_threshold()
     detections: list[Detection] = []
     for i in range(num_det):
         box = boxes[i]
         score = float(scores[i])
+        if score < threshold:
+            continue
         class_id = int(classes[i])
         label = labels[class_id] if class_id < len(labels) else f"class_{class_id}"
         xmin, ymin, xmax, ymax = box

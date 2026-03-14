@@ -41,7 +41,7 @@ Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `htt
 | **Mock** | None — runs on any OS |
 | **Serial MAVLink** | Raspberry Pi 5 (or compatible Debian/ARM), ArduPilot flight controller (e.g. Matek F405-WING), USB-to-TTL adapter (CP2102/FTDI), power (5V 5A buck, fuse, USB-C pigtail) |
 | **Ollama AI** | Same as above; Ollama runs on the Pi or a separate machine. See [docs/pi_setup.md](docs/pi_setup.md) for prerequisites (install Ollama, `ollama pull gemma3:1b`, enable Ollama service). |
-| **Future: AI HAT** | Raspberry Pi AI HAT+ (scaffolded only) |
+| **AI HAT** | Raspberry Pi AI HAT+ (Hailo-8L). Optional one-shot vision. See [docs/ai_hat.md](docs/ai_hat.md). |
 
 **Serial wiring:** FC UART TX → CP2102 RX; FC UART RX → CP2102 TX; FC GND → CP2102 GND. See [docs/example_hardware.md](docs/example_hardware.md) for full reference.
 
@@ -59,10 +59,10 @@ Then open `http://localhost:8000/health`, `http://localhost:8000/state`, or `htt
 | Component | Mock | Real |
 |-----------|------|------|
 | Telemetry | Simulated orbit/state | MAVLink over serial |
-| AI | Mission loop: mock. Advisory (telemetry summary, debrief): Ollama. Vision: AI HAT+ (scaffold only) |
+| AI | Mission loop: mock. Advisory (telemetry summary, debrief): Ollama. Vision: AI HAT+ one-shot (Hailo-8L). |
 | Persistence | SQLite (optional) | Same |
 
-AI HAT mode exists as a scaffold; real Hailo integration is not yet implemented.
+AI HAT provides optional one-shot object detection via Hailo-8L. Companion-side perception only; not flight-critical. See [docs/ai_hat.md](docs/ai_hat.md) and [docs/ai_hat_scope.md](docs/ai_hat_scope.md).
 
 ## Requirements
 
