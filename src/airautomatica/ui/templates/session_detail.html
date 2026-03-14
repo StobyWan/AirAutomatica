@@ -49,7 +49,7 @@
       <h1 class="text-2xl font-semibold tracking-tight text-white">
         Session <span id="session-id" class="text-cyan-400 font-mono">—</span>
       </h1>
-      <p class="text-slate-500 text-sm mt-1">Flight path, telemetry trends, and detections</p>
+      <p class="text-slate-500 text-sm mt-1">Flight path, telemetry, detections, and recordings</p>
       <div id="session-metadata" class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400"></div>
     </header>
 
@@ -615,9 +615,10 @@
       ].filter(Boolean).join(' · ');
 
       const statsEl = document.getElementById('stats');
-      function updateStats(pathArr, dets) {
+      function updateStats(pathArr, dets, recs) {
         const first = (pathArr || [])[0];
         const last = (pathArr || []).length > 0 ? pathArr[pathArr.length - 1] : null;
+        const recCount = (recs || []).length;
         if (!statsEl) return;
         statsEl.innerHTML = `
           <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
@@ -627,6 +628,10 @@
           <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
             <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Detections</span>
             <p class="text-lg font-semibold text-white mt-0.5 font-mono">${(dets || []).length}</p>
+          </div>
+          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
+            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Recordings</span>
+            <p class="text-lg font-semibold text-white mt-0.5 font-mono">${recCount}</p>
           </div>
           <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
             <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">First</span>
@@ -642,7 +647,7 @@
           </div>
         `;
       }
-      updateStats(path, detections);
+      updateStats(path, detections, recordings);
 
       let pathHomeRef = pathHome;
       const homeSourceLabels = { manual_session: 'Override', autopilot: 'Autopilot', fallback: 'First point' };
@@ -985,13 +990,13 @@
             const svg = AiraPathPlot.renderPathPlot(livePath, currentPos, liveDetections, pathHomeRef, { width: 200, height: 220 });
             if (svgEl && svg) svgEl.innerHTML = svg;
           }
-          updateStats(livePath, liveDetections);
+          updateStats(livePath, liveDetections, recordings);
         });
         socket.on('detections_update', (d) => {
           if (d.session_id !== sessionId) return;
           liveDetections = d.detections || [];
           renderDetectionsList(liveDetections);
-          updateStats(livePath, liveDetections);
+          updateStats(livePath, liveDetections, recordings);
         });
         socket.on('trends_update', (d) => {
           const voltage = d.voltage || [];

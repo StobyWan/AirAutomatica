@@ -36,7 +36,7 @@ In the Connection & Health card: capability and one-shot detection. Shows Backen
 
 ### Recent Detections
 
-Persisted mission-flow detection history (from Ollama/mock mission logic). Card layout with label, confidence, summary, timestamp, source_backend, lat/lon, rel_alt_m. Newest first. Empty state when no detections. **Not** AI HAT one-shot results—those are cached separately.
+Persisted detection history from mission-flow (Ollama/mock), AI HAT recording-time (source `ai_hat_recording`), and AI HAT one-shot when session active (source `aihat`). Card layout with label, confidence, summary, timestamp, source_backend, lat/lon, rel_alt_m. Newest first. Empty state when no detections. Source shown per card. AI HAT last one-shot is cached separately for quick display.
 
 ### Event Log
 

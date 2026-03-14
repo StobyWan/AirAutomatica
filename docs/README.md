@@ -2,6 +2,15 @@
 
 Index of documentation files.
 
+## Architecture & Reviews
+
+| Doc | Description |
+|-----|-------------|
+| [system_coherence_review.md](system_coherence_review.md) | Holistic system map, subsystem status, workflows, gaps, cleanup priorities |
+| [event_detection_review.md](event_detection_review.md) | Event/detection pipeline, evidence vs notification, source attribution |
+| [ai_hat_scope.md](ai_hat_scope.md) | AI HAT subsystem boundaries, glossary, roadmap |
+| [detection_usability_plan.md](detection_usability_plan.md) | Detection usability implementation plan |
+
 ## Core Docs
 
 | Doc | Description |
