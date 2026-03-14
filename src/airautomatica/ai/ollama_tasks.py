@@ -154,7 +154,7 @@ _SCHEMA_DEBRIEF = '{"summary":"2-4 sentence post-flight summary."}'
 
 
 def _build_debrief_summary_prompt(compact: dict[str, Any]) -> str:
-    """Build debrief prompt from compact payload only. No raw telemetry."""
+    """Build debrief prompt from compact payload. Includes telemetry, detections, recordings."""
     parts = []
     if compact.get("total_duration_sec") is not None:
         mins = int(compact["total_duration_sec"] / 60)
@@ -171,11 +171,16 @@ def _build_debrief_summary_prompt(compact: dict[str, Any]) -> str:
             parts.append(f"{k}={v}")
     if compact.get("assessment_sentence"):
         parts.append(f"assessment={compact['assessment_sentence']}")
+    if compact.get("detections_summary"):
+        parts.append(f"detections={compact['detections_summary']}")
+    if compact.get("recordings_count") is not None and compact["recordings_count"] > 0:
+        parts.append(f"recordings={compact['recordings_count']}")
     ctx = "\n".join(parts) if parts else "no data"
     return (
-        "Post-flight summary. Write 2-4 short sentences for the operator. "
+        "Post-flight mission-assist summary. Write 2-4 short sentences for the operator. "
         "1) Summarize the session briefly. 2) Highlight the most important issue or condition if any. "
-        "3) Mention one practical thing to monitor or improve next time. "
+        "3) If detections or recordings exist, mention what was observed or captured. "
+        "4) Mention one practical thing to monitor or improve next time. "
         "Stay grounded in the evidence. No exaggerated certainty. No fabricated causes. "
         "Return ONLY valid JSON. No markdown.\n"
         '{"summary":"<2-4 sentences>"}\n'

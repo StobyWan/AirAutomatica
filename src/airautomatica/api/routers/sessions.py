@@ -160,8 +160,16 @@ def create_sessions_router(
             "compact": compact.to_dict(),
         }
         ts = get_task_service()
+        recordings_count = 0
+        if recordings_service is not None:
+            rec_result = recordings_service.get_recordings(
+                session_id=sid, allow_fallback=False
+            )
+            recordings_count = len(rec_result.recordings)
         if generate_summary and ts is not None:
-            _, _, generated = await get_session_debrief_with_llm(sid, persistence, ts)
+            _, _, generated = await get_session_debrief_with_llm(
+                sid, persistence, ts, recordings_count=recordings_count
+            )
             if generated and not str(generated).startswith(
                 "Debrief summary unavailable:"
             ):
