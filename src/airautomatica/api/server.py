@@ -113,7 +113,6 @@ def create_app(
     persistence: Optional[PersistenceService] = None,
     task_service: Optional[OllamaTaskService] = None,
     ai_holder: Optional[AiSubsystemHolder] = None,
-    ai_detection_store: Optional["AiDetectionStore"] = None,
     camera_recording_service: Optional[CameraRecordingService] = None,
     preprocessor: Optional["TelemetryPreprocessor"] = None,
     mission_logic: Optional["MissionLogic"] = None,

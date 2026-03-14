@@ -31,6 +31,7 @@ class AiHatProvider(Protocol):
         """Run object detection on frame. Returns DetectionResult."""
         ...
 
+
 class HailoAiHatProvider:
     """Hailo AI HAT+ (Hailo-8L) provider. Real structured detection via hailo-apps."""
 
