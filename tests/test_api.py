@@ -227,6 +227,51 @@ def test_post_ai_detect_person_detected_hook_inserts_system_event(
         assert sessions[0]["detection_count"] == 1
 
 
+def test_post_ai_detect_returns_error_when_recording_active(
+    store: StateStore,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """POST /api/ai/detect returns state=error when camera recording is active (camera contention)."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("AI_HAT_ENABLED", "0")
+    monkeypatch.setenv("CAMERA_RECORDING_MODE", "manual")
+    load_settings()
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: "libcamera-vid",
+    )
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.subprocess.Popen",
+        lambda *a, **k: mock_proc,
+    )
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.time.sleep", lambda *a, **k: None
+    )
+
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+
+    # Start recording so camera is "busy"
+    r_start = client.post("/camera/recording/start")
+    assert r_start.status_code == 200
+    assert r_start.json().get("recording") is True
+
+    # Detection should short-circuit with clear error, not attempt rpicam-still
+    r = client.post("/api/ai/detect")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["state"] == "error"
+    errors = d.get("errors", [])
+    assert len(errors) == 1
+    assert "Camera busy" in errors[0]
+    assert "recording is active" in errors[0]
+
+
 def test_get_ai_last_detection_empty_when_no_store(
     client: TestClient,
 ) -> None:

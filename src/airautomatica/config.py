@@ -263,6 +263,17 @@ def get_recordings_dir() -> str:
     return str(Path(raw).expanduser().resolve())
 
 
+def get_recording_ai_overlay_enabled() -> bool:
+    """True if recording should use Hailo postprocess for bounding-box overlay.
+    Default: True when AI HAT enabled, else False.
+    Only applies when rpicam-vid is used (not libcamera-vid).
+    Env: RECORDING_AI_OVERLAY_ENABLED (1/true/yes)."""
+    if not get_ai_hat_enabled():
+        return False
+    raw = os.environ.get("RECORDING_AI_OVERLAY_ENABLED", "1").lower().strip()
+    return raw in ("1", "true", "yes")
+
+
 def get_camera_recording_mode() -> str:
     """Camera recording mode: off, manual, or auto. Default: manual.
     Env: CAMERA_RECORDING_MODE (also from settings.json). Uses persisted settings for live updates.

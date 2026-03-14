@@ -9,6 +9,7 @@ from airautomatica.config import (
     get_camera_recording_mode,
     get_ollama_num_thread,
     get_ollama_required,
+    get_recording_ai_overlay_enabled,
     validate_serial_config,
 )
 
@@ -121,3 +122,30 @@ def test_get_camera_recording_mode_live_update_from_save(
 
     save_settings({"CAMERA_RECORDING_MODE": "off"})
     assert get_camera_recording_mode() == "off"
+
+
+def test_get_recording_ai_overlay_enabled_default_when_ai_hat_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When AI HAT disabled, overlay is False regardless of env."""
+    monkeypatch.setenv("AI_HAT_ENABLED", "0")
+    monkeypatch.delenv("RECORDING_AI_OVERLAY_ENABLED", raising=False)
+    assert get_recording_ai_overlay_enabled() is False
+
+
+def test_get_recording_ai_overlay_enabled_default_when_ai_hat_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When AI HAT enabled and env unset, overlay defaults to True."""
+    monkeypatch.setenv("AI_HAT_ENABLED", "1")
+    monkeypatch.delenv("RECORDING_AI_OVERLAY_ENABLED", raising=False)
+    assert get_recording_ai_overlay_enabled() is True
+
+
+def test_get_recording_ai_overlay_enabled_explicit_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When AI HAT enabled and RECORDING_AI_OVERLAY_ENABLED=0, overlay is False."""
+    monkeypatch.setenv("AI_HAT_ENABLED", "1")
+    monkeypatch.setenv("RECORDING_AI_OVERLAY_ENABLED", "0")
+    assert get_recording_ai_overlay_enabled() is False

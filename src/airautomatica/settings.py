@@ -13,6 +13,7 @@ from airautomatica.config import (
     get_ai_hat_require_hardware,
     get_local_llm_provider,
     get_preprocessing_enabled,
+    get_recording_ai_overlay_enabled,
     get_session_auto_start_on_arm,
 )
 
@@ -45,6 +46,7 @@ SETTING_APPLY_MODES: dict[str, ApplyMode] = {
     "AI_DUPLICATE_WINDOW_SEC": "reconnect",
     "AI_SCHEDULER_COOLDOWN_SEC": "live",
     "CAMERA_RECORDING_MODE": "live",
+    "RECORDING_AI_OVERLAY_ENABLED": "live",
     "SESSION_AUTO_START_ON_ARM": "live",
 }
 
@@ -84,6 +86,7 @@ CANONICAL_SETTINGS_KEYS = [
     "AI_DUPLICATE_WINDOW_SEC",
     "AI_SCHEDULER_COOLDOWN_SEC",
     "CAMERA_RECORDING_MODE",
+    "RECORDING_AI_OVERLAY_ENABLED",
     "SESSION_AUTO_START_ON_ARM",
 ]
 
@@ -198,6 +201,7 @@ def get_raw_settings() -> dict:
         "AI_DUPLICATE_WINDOW_SEC": "30",
         "AI_SCHEDULER_COOLDOWN_SEC": "8",
         "CAMERA_RECORDING_MODE": "manual",
+        "RECORDING_AI_OVERLAY_ENABLED": "0",
         "SESSION_AUTO_START_ON_ARM": "0",
     }
     file_data: dict = {}
@@ -231,6 +235,8 @@ def get_raw_settings() -> dict:
             result[k] = "1" if get_ai_hat_object_detection_enabled() else "0"
         elif k == "AIRAUTOMATICA_PREPROCESSING_ENABLED":
             result[k] = "1" if get_preprocessing_enabled() else "0"
+        elif k == "RECORDING_AI_OVERLAY_ENABLED":
+            result[k] = "1" if get_recording_ai_overlay_enabled() else "0"
         elif k == "SESSION_AUTO_START_ON_ARM":
             result[k] = "1" if get_session_auto_start_on_arm() else "0"
         else:

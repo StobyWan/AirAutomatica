@@ -196,6 +196,7 @@ def create_app(
             ai_detection_store=ai_detection_store,
             persistence=persistence,
             session_ref=_session_ref,
+            camera_recording_service=camera_recording_service,
         )
     )
     app.include_router(camera_router_mod.create_camera_router(camera_recording_service))
