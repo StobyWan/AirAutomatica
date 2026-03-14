@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, cast
 
 if TYPE_CHECKING:
+    from airautomatica.services.ai_detection_store import AiDetectionStore
     from airautomatica.services.app_home_store import AppHomeStore
     from airautomatica.services.mission_logic import MissionLogic
     from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
@@ -110,6 +111,7 @@ def create_app(
     persistence: Optional[PersistenceService] = None,
     task_service: Optional[OllamaTaskService] = None,
     ai_holder: Optional[AiSubsystemHolder] = None,
+    ai_detection_store: Optional["AiDetectionStore"] = None,
     camera_recording_service: Optional[CameraRecordingService] = None,
     preprocessor: Optional["TelemetryPreprocessor"] = None,
     mission_logic: Optional["MissionLogic"] = None,
@@ -186,7 +188,13 @@ def create_app(
             _mission_logic, _reload_ai_fn, _reload_telemetry_fn
         )
     )
-    app.include_router(ai_router_mod.create_ai_router())
+    app.include_router(
+        ai_router_mod.create_ai_router(
+            ai_detection_store=ai_detection_store,
+            persistence=persistence,
+            session_ref=_session_ref,
+        )
+    )
     app.include_router(camera_router_mod.create_camera_router(camera_recording_service))
     app.include_router(
         recordings_router_mod.create_recordings_router(

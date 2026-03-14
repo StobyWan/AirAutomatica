@@ -2,6 +2,7 @@
 
 from typing import Protocol, runtime_checkable
 
+from airautomatica.ai.detection_models import DetectionResult
 from airautomatica.ai.hailo_detection import HailoStatusResult, get_hailo_status
 
 
@@ -17,8 +18,8 @@ class AiHatProvider(Protocol):
         """True if hardware is detected and ready."""
         ...
 
-    def run_object_detection(self, *args: object, **kwargs: object) -> list:
-        """Run object detection on frame. Stub for future camera integration."""
+    def run_object_detection(self, *args: object, **kwargs: object) -> DetectionResult:
+        """Run object detection on frame. Returns DetectionResult."""
         ...
 
 
@@ -33,6 +34,21 @@ class HailoAiHatProvider:
         """True if Hailo device is detected and ready."""
         return get_hailo_status().available
 
-    def run_object_detection(self, *args: object, **kwargs: object) -> list:
+    def run_object_detection(self, *args: object, **kwargs: object) -> DetectionResult:
         """Run object detection on frame. Stub for future camera integration."""
-        raise NotImplementedError("Hailo object detection not yet implemented")
+        status = get_hailo_status()
+        return DetectionResult(
+            backend="hailo",
+            model=None,
+            state="unavailable" if not status.available else "error",
+            structured_output_supported=False,
+            detections=[],
+            frame_width=None,
+            frame_height=None,
+            inference_time_ms=None,
+            errors=(
+                status.errors
+                if status.errors
+                else ["Hailo object detection not yet implemented"]
+            ),
+        )

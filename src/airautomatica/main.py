@@ -63,6 +63,7 @@ from airautomatica.runtime.telemetry_subsystem import (
     TelemetryController,
     TelemetryReconnectResult,
 )
+from airautomatica.services.ai_detection_store import AiDetectionStore
 from airautomatica.services.app_home_store import AppHomeStore
 from airautomatica.services.camera_recording import (
     CameraRecordingService,
@@ -448,6 +449,7 @@ def main() -> None:
     atexit.register(_end_session)
 
     ai_holder = AiSubsystemHolder(ai_service, task_service)
+    ai_detection_store = AiDetectionStore()
 
     mission_logic = MissionLogic(
         store,
@@ -501,6 +503,7 @@ def main() -> None:
         session_ref=session_ref,
         persistence=persistence,
         ai_holder=ai_holder,
+        ai_detection_store=ai_detection_store,
         camera_recording_service=camera_recording_service,
         preprocessor=preprocessor,
         mission_logic=mission_logic,

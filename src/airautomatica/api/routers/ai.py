@@ -3,16 +3,28 @@
 import logging
 import shutil
 import subprocess
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter
 
 from airautomatica.ai.hailo_detection import RPCAM_ASSETS_PATH, get_hailo_status
+from airautomatica.ai.models import AiResult
+from airautomatica.ai.providers.hailo_provider import HailoAiHatProvider
 from airautomatica.config import get_ai_hat_enabled
+
+if TYPE_CHECKING:
+    from airautomatica.services.ai_detection_store import AiDetectionStore
+    from airautomatica.services.persistence import PersistenceService
 
 logger = logging.getLogger(__name__)
 
 
-def create_ai_router() -> APIRouter:
+def create_ai_router(
+    ai_detection_store: Optional["AiDetectionStore"] = None,
+    persistence: Optional["PersistenceService"] = None,
+    session_ref: Optional[list[int | None]] = None,
+) -> APIRouter:
     """Create AI HAT status and diagnostics router."""
     router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -103,6 +115,66 @@ def create_ai_router() -> APIRouter:
                 "errors": result.errors,
             },
             "enabled": get_ai_hat_enabled(),
+        }
+
+    @router.post("/detect")
+    def post_ai_detect() -> dict:
+        """Execute one-shot detection: capture frame, run Hailo inference, return structured detections."""
+        provider = HailoAiHatProvider()
+        result = provider.run_object_detection()
+        sid = session_ref[0] if session_ref else None
+        if ai_detection_store is not None:
+            ai_detection_store.set_last_detection(
+                result, source="camera", session_id=sid
+            )
+        out = result.to_dict()
+        # Session-linking: persist each detection when session is active
+        if (
+            persistence is not None
+            and sid is not None
+            and result.state == "ready"
+            and result.detections
+        ):
+            now = datetime.now(timezone.utc)
+            for det in result.detections:
+                bbox = (
+                    (det.bbox.x, det.bbox.y, det.bbox.width, det.bbox.height)
+                    if det.bbox
+                    else None
+                )
+                ai_result = AiResult(
+                    label=det.label,
+                    confidence=det.confidence,
+                    summary=f"{det.label} detected (AI HAT one-shot)",
+                    source_backend="aihat",
+                    timestamp=now,
+                    bbox=bbox,
+                    metadata={"one_shot": True},
+                )
+                persistence.insert_detection(
+                    session_id=sid,
+                    result=ai_result,
+                    lat=None,
+                    lon=None,
+                    rel_alt_m=None,
+                )
+        return out
+
+    @router.get("/last-detection")
+    def get_last_detection() -> dict:
+        """Cached result of the most recent successful one-shot detection. Empty when none cached."""
+        if ai_detection_store is None:
+            return {"cached": False, "result": None, "timestamp": None}
+        cached = ai_detection_store.get_last_detection()
+        if cached is None:
+            return {"cached": False, "result": None, "timestamp": None}
+        return {
+            "cached": True,
+            "result": cached.result.to_dict(),
+            "timestamp": cached.timestamp.isoformat(),
+            "summary": cached.summary,
+            "source": cached.source,
+            "session_id": cached.session_id,
         }
 
     return router
