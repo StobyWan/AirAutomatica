@@ -54,7 +54,7 @@ AI HAT one-shot results are cached for display and quick reference. Persisted de
 | **AI HAT capability** | Whether hardware is present and runtime is ready. |
 | **One-shot detection** | Single capture + inference on demand. Not continuous. |
 | **Last one-shot result** | Cached result of the most recent successful one-shot run. |
-| **Persisted detection history** | Detections stored in SQLite from mission flow (Ollama/mock). |
+| **Persisted detection history** | Detections stored in SQLite from mission flow (Ollama/mock), recording-time AI (ai_hat_recording), and one-shot when session active (aihat). |
 | **Structured detections** | Raw output: label, confidence, bbox per object. |
 | **Normalized events** | Canonical events: `person_detected`, `vehicle_detected`, `object_count`. |
 | **Threshold** | `AI_HAT_DETECTION_THRESHOLD`; minimum confidence to include a detection. |
