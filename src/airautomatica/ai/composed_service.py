@@ -2,11 +2,12 @@
 
 Ollama = text/reasoning (state-only). AI HAT = vision/detection (future: camera frames).
 AI HAT and local LLM are complementary. ComposedAiService uses AI HAT when meaningful
-else base. When both enabled, AI HAT takes priority when it produces meaningful output;
-otherwise the local LLM result is used.
+else returns semantic "no detection". When AI HAT returns scaffold (not implemented),
+we return NONE instead of falling back to mock—avoids mock_ok leaking into mission logic.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from airautomatica.ai.models import AiResult
@@ -47,12 +48,21 @@ class ComposedAiService(AiService):
         self._aihat = aihat_service
 
     async def infer(self, state: AircraftState | None) -> AiResult:
-        """Run inference. Tries AI HAT first when enabled; falls back to base."""
+        """Run inference. Tries AI HAT first when enabled; returns NONE if scaffold (no mock fallback)."""
         if self._aihat is not None:
             try:
                 hat_result = await self._aihat.infer(state)
                 if _is_meaningful_aihat_result(hat_result):
                     return hat_result
+                # AI HAT returned scaffold (not implemented). Return semantic "no detection"
+                # instead of falling back to mock—prevents mock_ok from reaching mission logic.
+                return AiResult(
+                    label="NONE",
+                    confidence=0.0,
+                    summary="AI HAT unavailable (scaffold)",
+                    source_backend="aihat",
+                    timestamp=datetime.now(timezone.utc),
+                )
             except Exception as e:
                 logger.debug("AI HAT inference failed, using base: %s", e)
         return await self._base.infer(state)

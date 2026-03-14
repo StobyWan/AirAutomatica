@@ -1,4 +1,11 @@
-"""Mission logic loop scaffold. Consumes only normalized AircraftState and AiResult."""
+"""Mission logic loop scaffold. Consumes only normalized AircraftState and AiResult.
+
+AI ingestion semantics:
+- Mission flow: infer() -> process_result() -> persisted detections. Only labels in
+  _ALLOWED_PERCEPTION_LABELS are accepted.
+- AI HAT one-shot: separate path, cached only, does not feed mission flow.
+- Recording Hailo post-process: overlay only on video; no structured events to mission.
+"""
 
 import asyncio
 import logging
@@ -30,9 +37,11 @@ def _normalize_label(s: str) -> str:
     return t.strip("_")
 
 
-# Placeholder labels (unparseable output, error fallback) — not real detections.
+# Placeholder labels (unparseable output, error fallback, mock/scaffold) — not real detections.
 # Use normalized forms for comparison.
-_PLACEHOLDER_LABELS: frozenset[str] = frozenset({"ERROR", "LMSTUDIO", "OLLAMA"})
+_PLACEHOLDER_LABELS: frozenset[str] = frozenset(
+    {"ERROR", "LMSTUDIO", "OLLAMA", "MOCK_OK", "AIHAT_SCAFFOLD"}
+)
 
 # Telemetry/status/UI labels — not perception detections. Reject these.
 _DISALLOWED_PERCEPTION_LABELS: frozenset[str] = frozenset(
@@ -206,7 +215,14 @@ class MissionLogic:
                 _PERCEPTION_COUNTS["non_perception_label"] += 1
             elif reason == "unknown_label":
                 _PERCEPTION_COUNTS["unknown_label"] += 1
-            logger.debug("ai ignored: reason=%s label=%s", reason, result.label)
+            suffix = ""
+            if reason == "placeholder_label":
+                norm = _normalize_label(result.label or "")
+                if norm in ("MOCK_OK", "AIHAT_SCAFFOLD"):
+                    suffix = " (mock/scaffold fallback)"
+            logger.debug(
+                "ai ignored: reason=%s label=%s%s", reason, result.label, suffix
+            )
             return
         if self._is_duplicate(result):
             _PERCEPTION_COUNTS["suppressed"] += 1

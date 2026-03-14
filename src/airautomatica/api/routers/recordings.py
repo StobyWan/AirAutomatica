@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from airautomatica.services.camera_recording import CameraRecordingService
-from airautomatica.services.recordings_service import RecordingsService
+from airautomatica.services.recordings_service import RecordingInfo, RecordingsService
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 def create_recordings_router(
     recordings_service: Optional[RecordingsService],
     camera_recording_service: Optional[CameraRecordingService],
+    session_ref: Optional[list] = None,
 ) -> APIRouter:
     """Create recordings router with injected dependencies."""
 
@@ -53,6 +54,35 @@ def create_recordings_router(
             }
         sid = session_id_query
         result = recordings_service.get_recordings(session_id=sid, allow_fallback=True)
+        recordings_list = list(result.recordings)
+        # Merge in-progress recording when filtering by current session (fixes videos not visible)
+        current_sid = session_ref[0] if session_ref else None
+        if (
+            camera_recording_service is not None
+            and sid is not None
+            and current_sid is not None
+            and sid == current_sid
+        ):
+            rec_state = camera_recording_service.get_recording_state()
+            if (
+                rec_state.recording
+                and rec_state.output_file
+                and rec_state.started_at
+                and not any(
+                    r.filename == rec_state.output_file for r in recordings_list
+                )
+            ):
+                recordings_list.insert(
+                    0,
+                    RecordingInfo(
+                        filename=rec_state.output_file,
+                        timestamp_iso=rec_state.started_at.isoformat(),
+                        size_bytes=None,
+                        duration_sec=None,
+                        trigger=None,
+                        session_id=sid,
+                    ),
+                )
         recordings_dir = (
             camera_recording_service.recordings_dir
             if camera_recording_service
@@ -62,8 +92,8 @@ def create_recordings_router(
             "session_id": result.session_id,
             "session_resolved": result.session_resolved,
             "fallback_used": result.fallback_used,
-            "count": result.count,
-            "recordings": _recordings_to_dict(result.recordings),
+            "count": len(recordings_list),
+            "recordings": _recordings_to_dict(recordings_list),
             "recordings_dir": recordings_dir,
         }
 

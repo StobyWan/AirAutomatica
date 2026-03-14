@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from airautomatica.ai.ollama_task_service import OllamaTaskService
+from airautomatica.services.camera_recording import CameraRecordingService
 from airautomatica.services.debrief_service import (
     get_session_debrief,
     get_session_debrief_with_llm,
@@ -22,6 +23,7 @@ def create_sessions_router(
     get_task_service: Callable[[], Optional[OllamaTaskService]],
     recordings_service: Optional[RecordingsService],
     recordings_dir: Optional[str] = None,
+    camera_recording_service: Optional[CameraRecordingService] = None,
 ) -> APIRouter:
     """Create sessions router with injected dependencies."""
     router = APIRouter(tags=["sessions"])
@@ -220,11 +222,38 @@ def create_sessions_router(
             if r.session_id is not None:
                 d["session_id"] = r.session_id
             recordings_list.append(d)
+        # Merge in-progress recording when viewing current session (fixes videos not visible)
+        current_sid = session_ref[0] if session_ref else None
+        if (
+            camera_recording_service is not None
+            and current_sid is not None
+            and sid == current_sid
+        ):
+            rec_state = camera_recording_service.get_recording_state()
+            if (
+                rec_state.recording
+                and rec_state.output_file
+                and rec_state.started_at
+                and not any(
+                    r["filename"] == rec_state.output_file for r in recordings_list
+                )
+            ):
+                recordings_list.insert(
+                    0,
+                    {
+                        "filename": rec_state.output_file,
+                        "timestamp": rec_state.started_at.isoformat(),
+                        "size_bytes": None,
+                        "duration_sec": None,
+                        "trigger": None,
+                        "session_id": sid,
+                    },
+                )
         return {
             "session_id": result.session_id,
             "session_resolved": result.session_resolved,
             "fallback_used": result.fallback_used,
-            "count": result.count,
+            "count": len(recordings_list),
             "recordings": recordings_list,
             "recordings_dir": recordings_dir,
         }

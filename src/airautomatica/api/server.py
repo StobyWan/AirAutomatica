@@ -183,6 +183,7 @@ def create_app(
                 if camera_recording_service
                 else None
             ),
+            camera_recording_service=camera_recording_service,
         )
     )
     app.include_router(
@@ -201,7 +202,9 @@ def create_app(
     app.include_router(camera_router_mod.create_camera_router(camera_recording_service))
     app.include_router(
         recordings_router_mod.create_recordings_router(
-            recordings_service, camera_recording_service
+            recordings_service,
+            camera_recording_service,
+            session_ref=_session_ref,
         )
     )
     app.include_router(dashboard_router_mod.create_dashboard_router())

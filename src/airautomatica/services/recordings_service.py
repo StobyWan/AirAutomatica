@@ -246,12 +246,17 @@ class RecordingsService:
 
         post_filter_count = len(filtered)
         logger.debug(
-            "Recordings session filter: session_id=%s range=[%s, %s] pre=%s post=%s",
+            "Recordings session filter: session_id=%s range=[%s, %s] pre=%s post=%s%s",
             session_id,
             start_utc.isoformat(),
             end_utc.isoformat(),
             pre_filter_count,
             post_filter_count,
+            (
+                "; recording may be in progress, file not yet indexed"
+                if post_filter_count == 0 and pre_filter_count > 0
+                else ""
+            ),
         )
 
         return GetRecordingsResult(

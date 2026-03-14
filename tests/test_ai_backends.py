@@ -403,14 +403,16 @@ def test_aihat_unavailable_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_composed_uses_base_when_aihat_scaffold() -> None:
-    """ComposedAiService returns base result when AI HAT returns scaffold placeholder."""
+async def test_composed_returns_none_when_aihat_scaffold() -> None:
+    """ComposedAiService returns NONE (no mock fallback) when AI HAT returns scaffold placeholder."""
     base = MockAiService()
     aihat = AiHatAiService(model_name="x", device="y")
     composed = ComposedAiService(base_ai_service=base, aihat_service=aihat)
     result = await composed.infer(None)
-    assert result.source_backend == "mock"
-    assert "Mock inference" in result.summary
+    assert result.source_backend == "aihat"
+    assert result.label == "NONE"
+    assert result.confidence == 0.0
+    assert "scaffold" in result.summary.lower()
 
 
 @pytest.mark.asyncio
