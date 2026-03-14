@@ -17,7 +17,6 @@ from airautomatica.services.connection_state_store import (
     DetectionResult as StoreDetectionResult,
 )
 from airautomatica.settings import save_settings
-from airautomatica.telemetry.detector import scan_and_detect
 
 if TYPE_CHECKING:
     pass
@@ -70,6 +69,10 @@ def create_connection_router(
     @router.post("/detect")
     def post_connection_detect() -> dict:
         """Scan serial ports for MAVLink HEARTBEAT. Updates connection_store state."""
+        # Lazy import: telemetry.detector pulls in pymavlink/pyserial, which can cause
+        # SIGBUS on some Raspberry Pi setups when loaded at process startup.
+        from airautomatica.telemetry.detector import scan_and_detect
+
         if connection_store is not None:
             connection_store.set_connection_state(ConnectionState.DETECTING)
         try:
