@@ -33,6 +33,7 @@ async def get_session_debrief_with_llm(
     persistence: "PersistenceService",
     task_service: "OllamaTaskService",
     sample_limit: int = 10000,
+    recordings_count: int = 0,
 ) -> tuple[DebriefSummary | None, CompactDebriefPayload | None, str | None]:
     """Generate debrief and optional LLM summary. Returns (summary, compact, generated_summary) or (None, None, None)."""
     from airautomatica.ai.ollama_tasks import DebriefSummaryResult, OllamaTaskType
@@ -41,7 +42,28 @@ async def get_session_debrief_with_llm(
     if summary is None or compact is None:
         return (None, None, None)
 
-    context = {"compact_debrief": compact.to_dict()}
+    detections = persistence.get_recent_detections(session_id, limit=50)
+    det_summary: list[str] = []
+    if detections:
+        by_label: dict[str, int] = {}
+        by_source: dict[str, int] = {}
+        for d in detections:
+            lbl = d.get("label") or "unknown"
+            by_label[lbl] = by_label.get(lbl, 0) + 1
+            src = d.get("source_backend") or "unknown"
+            by_source[src] = by_source.get(src, 0) + 1
+        label_parts = [f"{lbl}×{n}" for lbl, n in sorted(by_label.items())]
+        source_parts = [f"{src}:{n}" for src, n in sorted(by_source.items())]
+        det_summary = [
+            f"labels=({', '.join(label_parts)})",
+            f"sources=({', '.join(source_parts)})",
+        ]
+    compact_dict = compact.to_dict()
+    compact_dict["detections_summary"] = (
+        "; ".join(det_summary) if det_summary else "none"
+    )
+    compact_dict["recordings_count"] = recordings_count
+    context = {"compact_debrief": compact_dict}
     result = await task_service.infer_task(OllamaTaskType.DEBRIEF_SUMMARY, context)
     if isinstance(result, DebriefSummaryResult) and result.summary:
         return (summary, compact, result.summary)

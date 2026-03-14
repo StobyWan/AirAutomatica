@@ -64,6 +64,7 @@
     </div>
 
     <div id="content" class="hidden">
+      <div id="evidence-summary" class="mb-4 rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50 text-sm text-slate-200"></div>
       <div id="stats" class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4"></div>
 
       <div class="card">
@@ -173,7 +174,16 @@
 
       <div class="card">
         <h2>Detections</h2>
-        <p class="text-xs text-slate-500 mb-2">Persisted detections for this session</p>
+        <p id="detections-subtitle" class="text-xs text-slate-500 mb-2">Persisted detections for this session</p>
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <label for="detections-filter-source" class="text-xs text-slate-400">Source</label>
+          <select id="detections-filter-source" class="px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-sm text-slate-200">
+            <option value="">All</option>
+            <option value="mission">Mission (mock/Ollama)</option>
+            <option value="ai_hat_recording">AI HAT recording</option>
+            <option value="aihat">AI HAT one-shot</option>
+          </select>
+        </div>
         <div id="detections-list" class="detection-cards"></div>
         <div id="detections-empty" class="hidden text-center py-6 text-slate-500 text-sm">No detections</div>
       </div>
@@ -603,6 +613,26 @@
       const recPlayerEl = document.getElementById('session-video-player');
       const recPlayerContainer = document.getElementById('session-player-container');
 
+      function seekVideoToTimestamp(ts) {
+        if (!recPlayerEl || !primaryRecording) return;
+        if (!recPlayerEl.src || !recPlayerEl.src.includes(encodeURIComponent(primaryRecording.filename))) {
+          recPlayerEl.src = '/recordings/' + encodeURIComponent(primaryRecording.filename);
+        }
+        if (recPlayerContainer) recPlayerContainer.classList.remove('hidden');
+        const recStart = new Date(primaryRecording.timestamp).getTime();
+        const t = new Date(ts).getTime();
+        const offsetSec = (t - recStart) / 1000;
+        const targetTime = Math.max(0, offsetSec);
+        function doSeek() {
+          const dur = primaryRecording.duration_sec ?? recPlayerEl.duration;
+          if (offsetSec < 0 || (dur != null && offsetSec > dur)) return;
+          recPlayerEl.currentTime = targetTime;
+        }
+        if (recPlayerEl.readyState >= 1) doSeek();
+        else recPlayerEl.addEventListener('loadedmetadata', doSeek, { once: true });
+        recPlayerContainer?.scrollIntoView({ behavior: 'smooth' });
+      }
+
       const metaEl = document.getElementById('session-metadata');
       const duration = fmtDuration(sessionMeta.started_at, sessionMeta.ended_at);
       metaEl.innerHTML = [
@@ -615,6 +645,32 @@
       ].filter(Boolean).join(' · ');
 
       const statsEl = document.getElementById('stats');
+      const evidenceSummaryEl = document.getElementById('evidence-summary');
+      function buildEvidenceSummary(dets, recs, meta) {
+        const parts = [];
+        const detCount = (dets || []).length;
+        if (detCount > 0) {
+          const bySource = {};
+          (dets || []).forEach(d => {
+            const s = d.source_backend || 'unknown';
+            bySource[s] = (bySource[s] || 0) + 1;
+          });
+          const labels = { aihat: 'AI HAT one-shot', ai_hat_recording: 'AI HAT recording', mock: 'Mission (mock)', ollama: 'Mission (Ollama)', lmstudio: 'Mission (LM Studio)' };
+          const breakdown = Object.entries(bySource).map(([k, n]) => n + ' ' + (labels[k] || k)).join(', ');
+          parts.push(detCount + ' detection' + (detCount === 1 ? '' : 's') + ' (' + breakdown + ')');
+        } else {
+          parts.push('0 detections');
+        }
+        const recCount = (recs || []).length;
+        parts.push(recCount + ' recording' + (recCount === 1 ? '' : 's'));
+        const dur = fmtDuration(meta?.started_at, meta?.ended_at);
+        if (dur !== '—') parts.push(dur + ' flight');
+        return parts.join(' · ');
+      }
+      function updateEvidenceSummary(dets, recs) {
+        if (!evidenceSummaryEl) return;
+        evidenceSummaryEl.textContent = buildEvidenceSummary(dets, recs, sessionMeta);
+      }
       function updateStats(pathArr, dets, recs) {
         const first = (pathArr || [])[0];
         const last = (pathArr || []).length > 0 ? pathArr[pathArr.length - 1] : null;
@@ -648,6 +704,7 @@
         `;
       }
       updateStats(path, detections, recordings);
+      updateEvidenceSummary(detections, recordings);
 
       let pathHomeRef = pathHome;
       const homeSourceLabels = { manual_session: 'Override', autopilot: 'Autopilot', fallback: 'First point' };
@@ -938,23 +995,50 @@
           const iv = phaseIntervals.find(i => norm(i.phase) === norm(phaseName));
           if (iv) { seekToTimestamp(iv.started_at); document.getElementById('replay-section')?.scrollIntoView({ behavior: 'smooth' }); }
         };
+        window.__replaySeekToDetection = (ts) => {
+          seekToTimestamp(ts);
+          document.getElementById('replay-section')?.scrollIntoView({ behavior: 'smooth' });
+        };
       } else {
         window.__replaySeekToEvent = () => {};
         window.__replaySeekToPhase = () => {};
+        window.__replaySeekToDetection = (ts) => { seekVideoToTimestamp(ts); };
       }
 
+      function filterDetectionsBySource(dets, filterVal) {
+        if (!filterVal) return dets || [];
+        const list = dets || [];
+        if (filterVal === 'mission') return list.filter(d => ['mock', 'ollama', 'lmstudio'].includes(d.source_backend));
+        if (filterVal === 'ai_hat_recording' || filterVal === 'aihat') return list.filter(d => d.source_backend === filterVal);
+        return list;
+      }
       function renderDetectionsList(dets) {
         const detEl = document.getElementById('detections-list');
         const detEmpty = document.getElementById('detections-empty');
+        const subEl = document.getElementById('detections-subtitle');
+        const filterEl = document.getElementById('detections-filter-source');
         if (!detEl) return;
-        if ((dets || []).length === 0) {
+        if (subEl) {
+          subEl.textContent = primaryRecording
+            ? 'Persisted detections for this session. Click a detection to seek video.'
+            : 'Persisted detections for this session';
+        }
+        const filterVal = filterEl ? filterEl.value : '';
+        const filtered = filterDetectionsBySource(dets, filterVal);
+        if (filtered.length === 0) {
           detEl.classList.add('hidden');
           if (detEmpty) detEmpty.classList.remove('hidden');
+          if (detEmpty) detEmpty.textContent = (dets || []).length === 0 ? 'No detections' : 'No detections match filter';
         } else {
           detEl.classList.remove('hidden');
           if (detEmpty) detEmpty.classList.add('hidden');
-          detEl.innerHTML = dets.map(d => `
-            <div class="detection-card">
+          const canSeek = primaryRecording && recPlayerEl && typeof window.__replaySeekToDetection === 'function';
+          detEl.innerHTML = filtered.map(d => {
+            const ts = d.timestamp || '';
+            const seekable = canSeek && ts;
+            const cardClass = 'detection-card' + (seekable ? ' cursor-pointer hover:bg-slate-700/30 transition-colors' : '');
+            return `
+            <div class="${cardClass}"${seekable ? ` data-seek-ts="${String(ts).replace(/"/g, '&quot;')}"` : ''}>
               <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
               <div class="text-slate-400 text-xs mt-0.5">${d.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—'} · ${fmtSourceBackend(d.source_backend)}</div>
               ${d.summary ? `<div class="mt-1 text-slate-300">${d.summary}</div>` : ''}
@@ -964,11 +1048,22 @@
                 ${d.rel_alt_m != null ? ` · ${Number(d.rel_alt_m).toFixed(1)} m` : ''}
               </div>
             </div>
-          `).join('');
+          `;
+          }).join('');
+          detEl.querySelectorAll('.detection-card[data-seek-ts]').forEach(el => {
+            const ts = el.dataset.seekTs;
+            if (ts && typeof window.__replaySeekToDetection === 'function') {
+              el.addEventListener('click', () => window.__replaySeekToDetection(ts));
+            }
+          });
         }
       }
 
       renderDetectionsList(detections);
+
+      document.getElementById('detections-filter-source')?.addEventListener('change', () => {
+        renderDetectionsList(liveDetections);
+      });
 
       let livePath = path;
       let liveDetections = detections;
@@ -991,12 +1086,14 @@
             if (svgEl && svg) svgEl.innerHTML = svg;
           }
           updateStats(livePath, liveDetections, recordings);
+          updateEvidenceSummary(liveDetections, recordings);
         });
         socket.on('detections_update', (d) => {
           if (d.session_id !== sessionId) return;
           liveDetections = d.detections || [];
           renderDetectionsList(liveDetections);
           updateStats(livePath, liveDetections, recordings);
+          updateEvidenceSummary(liveDetections, recordings);
         });
         socket.on('trends_update', (d) => {
           const voltage = d.voltage || [];
