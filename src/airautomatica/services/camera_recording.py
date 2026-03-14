@@ -15,8 +15,10 @@ from airautomatica.ai.hailo_detection import RPCAM_ASSETS_PATH
 from airautomatica.config import (
     get_camera_recording_disarm_debounce_sec,
     get_recording_ai_overlay_enabled,
+    get_recording_ai_persist_enabled,
     get_recordings_dir,
 )
+from airautomatica.services.recording_ai_ingest import RecordingAiIngest
 from airautomatica.services.recordings_service import (
     _FILENAME_PATTERN,
     _meta_path_for_recording,
@@ -24,6 +26,7 @@ from airautomatica.services.recordings_service import (
 
 if TYPE_CHECKING:
     from airautomatica.models.state import AircraftState
+    from airautomatica.services.persistence import PersistenceService
 
 logger = logging.getLogger(__name__)
 
@@ -76,9 +79,17 @@ class RecordingState:
 class CameraRecordingService:
     """Manages rpicam-vid or libcamera-vid subprocess for video recording."""
 
-    def __init__(self, recordings_dir: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        recordings_dir: Optional[str] = None,
+        session_ref: Optional[List[Optional[int]]] = None,
+        persistence: Optional["PersistenceService"] = None,
+    ) -> None:
         self._recordings_dir = Path(recordings_dir or get_recordings_dir()).resolve()
         self._lock = threading.Lock()
+        self._session_ref = session_ref
+        self._persistence = persistence
+        self._ingest: Optional[RecordingAiIngest] = None
         cam_cmd = get_camera_video_command()
         ffmpeg_cmd = get_ffmpeg_command()
         # Strategy: rpicam-vid + ffmpeg -> pipe (MPEG-TS to MP4); else direct file output
@@ -451,6 +462,22 @@ class CameraRecordingService:
             self._last_error = None
             basename = self._output_path.name
             logger.info("Recording started (%s): %s", cmd, basename)
+            if (
+                get_recording_ai_persist_enabled()
+                and self._output_path is not None
+                and self._session_ref is not None
+                and self._persistence is not None
+            ):
+
+                def _get_sid() -> Optional[int]:
+                    return self._session_ref[0] if self._session_ref else None
+
+                self._ingest = RecordingAiIngest(
+                    output_path=self._output_path,
+                    get_session_id=_get_sid,
+                    persistence=self._persistence,
+                )
+                self._ingest.start()
             return (
                 RecordingState(
                     recording=True,
@@ -466,6 +493,9 @@ class CameraRecordingService:
         with self._lock:
             basename = self._output_path.name if self._output_path else None
             if self._process is None or self._process.poll() is not None:
+                if self._ingest is not None:
+                    self._ingest.stop()
+                    self._ingest = None
                 if self._muxer_process is not None:
                     try:
                         self._muxer_process.wait(timeout=_MUXER_WAIT_SEC)
@@ -489,6 +519,9 @@ class CameraRecordingService:
                     ),
                     None,
                 )
+            if self._ingest is not None:
+                self._ingest.stop()
+                self._ingest = None
             # SIGTERM: rpicam-vid may finalize MP4 if given enough time. SIGINT when run as systemd child
             # can exit without writing; --signal has limited MP4 support on Pi 5.
             self._process.terminate()

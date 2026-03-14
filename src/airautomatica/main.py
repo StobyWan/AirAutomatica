@@ -397,7 +397,10 @@ def main() -> None:
     path_recorder = PathRecorder(persistence, session_ref, min_distance_m=5.0)
     lifecycle_logger = TelemetryLifecycleLogger(persistence, session_ref)
 
-    camera_recording_service = CameraRecordingService()
+    camera_recording_service = CameraRecordingService(
+        session_ref=session_ref,
+        persistence=persistence,
+    )
     logger.info(
         "Recordings path: dir=%s cwd=%s HOME=%s AIRAUTOMATICA_RECORDINGS_DIR=%s",
         camera_recording_service.recordings_dir,

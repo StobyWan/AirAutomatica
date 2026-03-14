@@ -358,7 +358,7 @@
 
   <div class="card">
     <h2>Recent Detections</h2>
-    <p class="text-xs text-slate-500 mb-2">Persisted mission-flow detection history</p>
+    <p class="text-xs text-slate-500 mb-2">Includes mission-flow and recording-time AI detections (when recording with AI overlay)</p>
     <div id="detections-list" class="detection-cards"></div>
   </div>
 
@@ -1720,6 +1720,7 @@
           listEl.querySelectorAll('.live-recording-delete-btn').forEach(btn => {
             btn.addEventListener('click', (e) => { e.stopPropagation(); showLiveDeleteModal(btn.dataset.filename); });
           });
+          selectLiveRecording(recordings[0].filename);
         }
       }).catch(() => {
         loadingEl.classList.add('hidden');
