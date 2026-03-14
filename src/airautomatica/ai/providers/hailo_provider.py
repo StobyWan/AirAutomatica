@@ -27,8 +27,8 @@ class AiHatProvider(Protocol):
         """True if hardware is detected and ready."""
         ...
 
-    def run_object_detection(self) -> DetectionResult:
-        """Run one-shot object detection. Returns structured result."""
+    def run_object_detection(self, *args: object, **kwargs: object) -> DetectionResult:
+        """Run object detection on frame. Returns DetectionResult."""
         ...
 
 

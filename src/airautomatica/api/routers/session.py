@@ -1,6 +1,8 @@
 """Session routes: start, stop, live/home."""
 
+import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
 from fastapi import APIRouter, Body, HTTPException
@@ -16,7 +18,9 @@ from airautomatica.services.persistence import (
 from airautomatica.services.state_store import StateStore
 
 if TYPE_CHECKING:
-    pass
+    from airautomatica.services.camera_recording import CameraRecordingService
+
+logger = logging.getLogger(__name__)
 
 
 def create_session_router(
@@ -25,13 +29,17 @@ def create_session_router(
     connection_store: Optional[ConnectionStateStore],
     persistence: Optional[PersistenceService],
     app_home_store: Optional[AppHomeStore],
+    camera_recording_service: Optional["CameraRecordingService"] = None,
+    get_camera_recording_mode: Optional[Callable[[], str]] = None,
 ) -> APIRouter:
     """Create session router with injected dependencies."""
     router = APIRouter(tags=["session"])
 
     @router.post("/session/start")
     def post_session_start(body: dict = Body(...)) -> dict:
-        """Start a session. Requires connection_state in mock_idle or connected_*."""
+        """Start a session. Requires connection_state in mock_idle or connected_*.
+        When camera recording mode is manual or auto, also starts camera recording
+        (covers mock mode where armed state is unavailable)."""
         if session_ref[0] is not None:
             return {
                 "ok": True,
@@ -47,6 +55,20 @@ def create_session_router(
         session_ref[0] = sid
         if connection_store is not None:
             connection_store.set_session_state(SessionState.ACTIVE)
+        if (
+            camera_recording_service is not None
+            and get_camera_recording_mode is not None
+            and get_camera_recording_mode() != "off"
+        ):
+            rec_state, err = camera_recording_service.start_recording()
+            if err is not None:
+                logger.warning(
+                    "Session start: camera recording failed to start: %s", err
+                )
+            elif rec_state.output_file:
+                logger.info(
+                    "Session start: camera recording started: %s", rec_state.output_file
+                )
         return {
             "ok": True,
             "session_id": sid,
@@ -55,10 +77,23 @@ def create_session_router(
 
     @router.post("/session/stop")
     def post_session_stop() -> dict:
-        """End current session. Idempotent when no session active."""
+        """End current session. Idempotent when no session active.
+        Stops camera recording when active."""
         sid = session_ref[0]
         if sid is not None and persistence is not None:
             persistence.end_session(sid)
+        if (
+            camera_recording_service is not None
+            and camera_recording_service.get_recording_state().recording
+        ):
+            rec_state, err = camera_recording_service.stop_recording()
+            if err is not None:
+                logger.warning("Session stop: camera recording stop failed: %s", err)
+            elif rec_state.last_recorded_file and sid is not None:
+                basename = rec_state.last_recorded_file
+                video_path = Path(camera_recording_service.recordings_dir) / basename
+                if video_path.is_file():
+                    camera_recording_service.mark_as_auto(basename, sid)
         session_ref[0] = None
         if app_home_store is not None:
             app_home_store.clear_app_home()

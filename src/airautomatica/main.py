@@ -450,6 +450,7 @@ def main() -> None:
     atexit.register(_end_session)
 
     ai_holder = AiSubsystemHolder(ai_service, task_service)
+    ai_detection_store = AiDetectionStore()
 
     mission_logic = MissionLogic(
         store,
@@ -500,10 +501,10 @@ def main() -> None:
     app = create_app(
         store,
         connection_store=connection_store,
-        ai_detection_store=ai_detection_store,
         session_ref=session_ref,
         persistence=persistence,
         ai_holder=ai_holder,
+        ai_detection_store=ai_detection_store,
         camera_recording_service=camera_recording_service,
         preprocessor=preprocessor,
         mission_logic=mission_logic,

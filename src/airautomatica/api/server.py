@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, cast
 
 if TYPE_CHECKING:
+    from airautomatica.services.ai_detection_store import AiDetectionStore
     from airautomatica.services.app_home_store import AppHomeStore
     from airautomatica.services.mission_logic import MissionLogic
     from airautomatica.telemetry.preprocessing import TelemetryPreprocessor
@@ -160,6 +161,8 @@ def create_app(
             _connection_store,
             persistence,
             _app_home_store,
+            camera_recording_service=camera_recording_service,
+            get_camera_recording_mode=get_camera_recording_mode,
         )
     )
 

@@ -26,6 +26,10 @@ from airautomatica.config import (
 )
 from airautomatica.services.ai_detection_store import AiDetectionStore
 
+if TYPE_CHECKING:
+    from airautomatica.services.ai_detection_store import AiDetectionStore
+    from airautomatica.services.persistence import PersistenceService
+
 logger = logging.getLogger(__name__)
 
 
