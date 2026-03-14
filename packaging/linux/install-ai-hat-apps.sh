@@ -37,29 +37,48 @@ if [ ! -f "$HAILO_APPS_PATH/setup.py" ] && [ ! -f "$HAILO_APPS_PATH/pyproject.to
   exit 1
 fi
 
-# Prefer packaged venv; else repo venv
-if [ -x "/opt/airautomatica/venv/bin/pip" ]; then
+# Prefer uv (avoids PEP 668 on Raspberry Pi); else use venv pip
+USE_UV=false
+VENV_BIN=""
+if command -v uv >/dev/null 2>&1; then
+  cd "$REPO_ROOT"
+  if [ ! -d ".venv" ]; then
+    echo "  Creating .venv with --system-site-packages (for Hailo apt packages)..."
+    uv venv .venv --system-site-packages
+  fi
+  echo "  Using uv (project .venv)"
+  USE_UV=true
+  VENV_BIN="$REPO_ROOT/.venv/bin"
+elif [ -x "/opt/airautomatica/venv/bin/pip" ]; then
   PIP="/opt/airautomatica/venv/bin/pip"
   echo "  Using venv: /opt/airautomatica/venv"
+  VENV_BIN="/opt/airautomatica/venv/bin"
 elif [ -x "$REPO_ROOT/.venv/bin/pip" ]; then
   PIP="$REPO_ROOT/.venv/bin/pip"
   echo "  Using venv: $REPO_ROOT/.venv"
+  VENV_BIN="$REPO_ROOT/.venv/bin"
 elif [ -x "$REPO_ROOT/packaging/linux/.venv/bin/pip" ]; then
   PIP="$REPO_ROOT/packaging/linux/.venv/bin/pip"
   echo "  Using venv: $REPO_ROOT/packaging/linux/.venv"
+  VENV_BIN="$REPO_ROOT/packaging/linux/.venv/bin"
 else
-  echo "ERROR: No AirAutomatica venv found."
-  echo "  Run packaging/linux/install.sh first (creates /opt/airautomatica/venv)"
+  echo "ERROR: No AirAutomatica venv found and uv not available."
+  echo "  Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
+  echo "  Or run: sudo packaging/linux/install.sh (creates /opt/airautomatica/venv)"
   echo "  Or create a venv: cd $REPO_ROOT && python3 -m venv .venv --system-site-packages"
   exit 1
 fi
 
-# Install hailo-apps in editable mode (avoids PEP 668; uses venv's pip)
-"$PIP" install -e "$HAILO_APPS_PATH"
+# Install hailo-apps in editable mode
+if [ "$USE_UV" = true ]; then
+  cd "$REPO_ROOT"
+  uv pip install -e "$HAILO_APPS_PATH"
+else
+  "$PIP" install -e "$HAILO_APPS_PATH"
+fi
 
 # Post-install: download models and compile postprocess libs (if hailo-post-install exists in venv)
 # Use UTF-8 to avoid UnicodeEncodeError when hailo-post-install prints emoji (hailo-apps bug)
-VENV_BIN="$(dirname "$PIP")"
 if [ -x "$VENV_BIN/hailo-post-install" ]; then
   echo "Running hailo-post-install..."
   LANG="${LANG:-en_US.UTF-8}" LC_ALL="${LC_ALL:-en_US.UTF-8}" "$VENV_BIN/hailo-post-install" --group detection 2>/dev/null || true
