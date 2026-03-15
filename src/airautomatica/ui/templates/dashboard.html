@@ -425,6 +425,7 @@
     <h2>Recent Detections</h2>
     <p class="text-xs text-slate-500 mb-2">Mission-flow (Ollama/mock), AI HAT recording-time, and one-shot (aihat) when session active. Source shown per card.</p>
     <div id="detections-list" class="detection-cards"></div>
+    <div id="detections-empty" class="py-6 text-center text-slate-500 text-sm">No detections yet. Start a session and run AI HAT or mission-flow to see results.</div>
   </div>
 
   <div class="card card-compact">
@@ -458,6 +459,7 @@
   <div class="card">
     <h2>Recent Events</h2>
     <div id="events-list" class="max-h-64 overflow-y-auto"></div>
+    <div id="events-empty" class="py-6 text-center text-slate-500 text-sm">No events yet. System events will appear here as they occur.</div>
   </div>
   </div>
 
@@ -1694,8 +1696,12 @@
       fetch('/recent-events').then(r => r.json()).then(d => {
         const list = (d.events || []).slice(0, 20);
         const el = document.getElementById('events-list');
-        if (list.length === 0) el.innerHTML = '<span class="na">No events</span>';
-        else {
+        const emptyEl = document.getElementById('events-empty');
+        if (list.length === 0) {
+          el.innerHTML = '';
+          if (emptyEl) emptyEl.classList.remove('hidden');
+        } else {
+          if (emptyEl) emptyEl.classList.add('hidden');
           el.innerHTML = list.map(e => `<div class="event-item"><span class="text-slate-500 font-mono text-[10px]">${fmtTsTime(e.timestamp)}</span> <span class="text-slate-400">${fmt(e.event_type)}</span> <span class="text-slate-300">${fmt(e.message)}</span></div>`).join('');
         }
       }).catch(() => {});
@@ -2239,10 +2245,13 @@
     socket.on('detections_update', (d) => {
       const list = d.detections || [];
       const el = document.getElementById('detections-list');
+      const emptyEl = document.getElementById('detections-empty');
       if (list.length === 0) {
-        el.innerHTML = '<span class="na">No detections</span>';
+        el.innerHTML = '';
+        if (emptyEl) { emptyEl.classList.remove('hidden'); }
         return;
       }
+      if (emptyEl) { emptyEl.classList.add('hidden'); }
       el.innerHTML = list.map(d => `
         <div class="detection-card">
           <div class="font-semibold text-cyan-400">${fmt(d.label)}</div>
@@ -2268,10 +2277,13 @@
     socket.on('events_update', (d) => {
       const list = (d.events || []).slice(0, 20);
       const el = document.getElementById('events-list');
+      const emptyEl = document.getElementById('events-empty');
       if (list.length === 0) {
-        el.innerHTML = '<span class="na">No events</span>';
+        el.innerHTML = '';
+        if (emptyEl) { emptyEl.classList.remove('hidden'); }
         return;
       }
+      if (emptyEl) { emptyEl.classList.add('hidden'); }
       el.innerHTML = list.map(e => `
         <div class="event-item">
           <span class="text-slate-500 font-mono text-[10px]">${fmtTsTime(e.timestamp)}</span>
