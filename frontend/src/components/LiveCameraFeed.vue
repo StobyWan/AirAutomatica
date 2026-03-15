@@ -49,8 +49,8 @@ const cameraAvailable = computed(
 )
 
 const previewUrl = computed(() => {
-  const base = API_BASE ? API_BASE.replace(/\/$/, '') : ''
-  return `${base}/camera/preview/stream`
+  const base = String(API_BASE ?? '').replace(/\/$/, '')
+  return base ? `${base}/camera/preview/stream` : '/camera/preview/stream'
 })
 
 const previewError = ref<string | null>(null)
