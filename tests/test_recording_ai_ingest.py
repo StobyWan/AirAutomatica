@@ -424,8 +424,175 @@ def test_tick_skips_when_frame_not_ready(tmp_path: Path) -> None:
     persistence.insert_detection.assert_not_called()
 
 
+def test_tick_no_detections_does_not_count_as_failure(tmp_path: Path) -> None:
+    """Repeated no_detections is success; failure_count stays 0, no warning."""
+    out = tmp_path / "rec.mp4"
+    out.write_bytes(b"x")
+    persistence = MagicMock()
+    ingest = RecordingAiIngest(
+        output_path=out,
+        get_session_id=lambda: 1,
+        persistence=persistence,
+        interval_sec=5.0,
+        startup_delay_sec=0.0,
+    )
+    no_detections_result = (
+        DetectionResult(
+            backend="hailo",
+            model="yolov6n",
+            state="no_detections",
+            structured_output_supported=True,
+            detections=[],
+            frame_width=640,
+            frame_height=480,
+            inference_time_ms=20.0,
+            errors=[],
+        ),
+        True,
+    )
+    with patch(
+        "airautomatica.services.recording_ai_ingest.shutil.which",
+        return_value="/usr/bin/ffmpeg",
+    ):
+        with patch(
+            "airautomatica.services.recording_ai_ingest.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout=b"\xff\xd8"),
+        ):
+            with patch(
+                "airautomatica.services.recording_ai_ingest.run_detection_pipeline",
+                return_value=no_detections_result,
+            ):
+                for _ in range(6):
+                    ingest._tick()
+    assert ingest._failure_count == 0
+    persistence.insert_detection.assert_not_called()
+
+
+def test_tick_no_detections_resets_failure_count_then_error_increments(
+    tmp_path: Path,
+) -> None:
+    """After no_detections ticks, failure_count is 0; next error tick increments it."""
+    out = tmp_path / "rec.mp4"
+    out.write_bytes(b"x")
+    persistence = MagicMock()
+    ingest = RecordingAiIngest(
+        output_path=out,
+        get_session_id=lambda: 1,
+        persistence=persistence,
+        interval_sec=5.0,
+        startup_delay_sec=0.0,
+    )
+    no_detections_result = (
+        DetectionResult(
+            backend="hailo",
+            model="yolov6n",
+            state="no_detections",
+            structured_output_supported=True,
+            detections=[],
+            frame_width=640,
+            frame_height=480,
+            inference_time_ms=20.0,
+            errors=[],
+        ),
+        True,
+    )
+    error_result = (
+        DetectionResult(
+            backend="hailo",
+            model="yolov6n",
+            state="error",
+            structured_output_supported=True,
+            detections=[],
+            frame_width=640,
+            frame_height=480,
+            inference_time_ms=0.0,
+            errors=["inference failed"],
+        ),
+        False,
+    )
+    with patch(
+        "airautomatica.services.recording_ai_ingest.shutil.which",
+        return_value="/usr/bin/ffmpeg",
+    ):
+        with patch(
+            "airautomatica.services.recording_ai_ingest.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout=b"\xff\xd8"),
+        ):
+            with patch(
+                "airautomatica.services.recording_ai_ingest.run_detection_pipeline",
+                side_effect=[no_detections_result, no_detections_result, error_result],
+            ):
+                ingest._tick()
+                ingest._tick()
+                assert ingest._failure_count == 0
+                ingest._tick()
+    assert ingest._failure_count == 1
+    persistence.insert_detection.assert_not_called()
+
+
+def test_tick_missing_file_retry_non_fatal(tmp_path: Path) -> None:
+    """First tick gets None (file not ready); second gets frame+ready; persist on second."""
+    out = tmp_path / "rec.mp4"
+    out.write_bytes(b"x")
+    persistence = MagicMock()
+    ingest = RecordingAiIngest(
+        output_path=out,
+        get_session_id=lambda: 99,
+        persistence=persistence,
+        interval_sec=5.0,
+        startup_delay_sec=0.0,
+    )
+    frame_bytes = b"\xff\xd8\xff\xe0"
+    ready_result = (
+        DetectionResult(
+            backend="hailo",
+            model="yolov6n",
+            state="ready",
+            structured_output_supported=True,
+            detections=[
+                Detection(
+                    label="person",
+                    confidence=0.9,
+                    bbox=DetectionBBox(0.1, 0.2, 0.3, 0.4),
+                ),
+            ],
+            frame_width=640,
+            frame_height=480,
+            inference_time_ms=22.0,
+            errors=[],
+        ),
+        True,
+    )
+    extract_calls = 0
+
+    def extract_side_effect(path: Path) -> bytes | None:
+        nonlocal extract_calls
+        extract_calls += 1
+        if extract_calls == 1:
+            return None
+        return frame_bytes
+
+    with patch(
+        "airautomatica.services.recording_ai_ingest.shutil.which",
+        return_value="/usr/bin/ffmpeg",
+    ):
+        with patch(
+            "airautomatica.services.recording_ai_ingest._extract_latest_frame",
+            side_effect=extract_side_effect,
+        ):
+            with patch(
+                "airautomatica.services.recording_ai_ingest.run_detection_pipeline",
+                return_value=ready_result,
+            ):
+                ingest._tick()
+                assert persistence.insert_detection.call_count == 0
+                ingest._tick()
+    persistence.insert_detection.assert_called_once()
+    assert persistence.insert_detection.call_args.kwargs["result"].label == "person"
+
+
 def test_tick_skips_when_inference_fails(tmp_path: Path) -> None:
-    """When inference fails or state != ready, _tick does not persist."""
+    """When inference fails (error state or success=False), _tick does not persist."""
     out = tmp_path / "rec.mp4"
     out.write_bytes(b"x")
     persistence = MagicMock()
