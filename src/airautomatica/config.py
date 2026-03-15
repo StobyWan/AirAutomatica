@@ -268,6 +268,15 @@ def get_telemetry_backend() -> str:
     return os.environ.get("TELEMETRY_BACKEND", "mock").lower()
 
 
+def get_mock_telemetry_type() -> str:
+    """Mock telemetry profile: 'ardupilot', 'inav', or 'generic'. Default: ardupilot.
+    Used when TELEMETRY_BACKEND=mock. See MOCK_TELEMETRY_TYPE in settings."""
+    raw = os.environ.get("MOCK_TELEMETRY_TYPE", "ardupilot").lower().strip()
+    if raw in ("ardupilot", "inav", "generic"):
+        return raw
+    return "ardupilot"
+
+
 def get_serial_port() -> str:
     """Serial port for MAVLink. Default: /dev/ttyUSB0 (Pi 5, CP2102/FTDI).
     Bench setup: Pi 5 + CP2102 USB-TTL + Matek F405-WING V2.

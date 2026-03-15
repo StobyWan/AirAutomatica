@@ -7,6 +7,7 @@ import {
   setConnectionMode,
   disconnect,
   normalizeConnectionState,
+  type ConnectionMode,
 } from '@/api/connection'
 import type { ConnectionStateResponse, PortInfo } from '@/types'
 import { useSocket } from '@/composables/useSocket'
@@ -136,17 +137,13 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
-  async function setMode(
-    m: 'mock' | 'ardupilot' | 'inav',
-    port?: string,
-    baud?: number
-  ) {
+  async function setMode(m: ConnectionMode, port?: string, baud?: number) {
     loading.value = true
     error.value = null
     try {
       await setConnectionMode(m, port, baud)
       await fetchState()
-      if (m !== 'mock' && port && baud != null) {
+      if ((m === 'ardupilot' || m === 'inav') && port && baud != null) {
         lastConnectedPort.value = port
         lastConnectedBaud.value = baud
         saveLastPort(port, baud)

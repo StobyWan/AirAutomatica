@@ -75,9 +75,25 @@
           type="button"
           class="landing-btn landing-btn-secondary w-full"
           :disabled="connectionStore.loading"
+          @click="onSetMode('mock_ardupilot')"
+        >
+          Mock ArduPilot
+        </button>
+        <button
+          type="button"
+          class="landing-btn landing-btn-secondary w-full"
+          :disabled="connectionStore.loading"
+          @click="onSetMode('mock_inav')"
+        >
+          Mock iNav
+        </button>
+        <button
+          type="button"
+          class="landing-btn landing-btn-secondary w-full"
+          :disabled="connectionStore.loading"
           @click="onSetMode('mock')"
         >
-          Mock Mode
+          Mock (Generic)
         </button>
       </div>
 
@@ -101,6 +117,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+import type { ConnectionMode } from '@/api/connection'
 import { useConnectionStore } from '@/stores/connection'
 import { useSocket } from '@/composables/useSocket'
 import DetectedPortsPanel from '@/components/DetectedPortsPanel.vue'
@@ -157,7 +174,7 @@ async function onAutoDetect() {
   }
 }
 
-async function onSetMode(mode: 'mock' | 'ardupilot' | 'inav') {
+async function onSetMode(mode: ConnectionMode) {
   try {
     const det = connectionStore.detectionResult
     const port = det?.port

@@ -28,8 +28,15 @@ export function detectConnection(body?: {
   return post<DetectResponse>('/connection/detect', body ?? {})
 }
 
+export type ConnectionMode =
+  | 'mock'
+  | 'mock_ardupilot'
+  | 'mock_inav'
+  | 'ardupilot'
+  | 'inav'
+
 export function setConnectionMode(
-  mode: 'mock' | 'ardupilot' | 'inav',
+  mode: ConnectionMode,
   port?: string,
   baud?: number
 ): Promise<{ restart_required?: boolean }> {

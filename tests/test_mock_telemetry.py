@@ -7,6 +7,7 @@ import pytest
 
 from airautomatica.models.state import AircraftState
 from airautomatica.services.state_store import StateStore
+from airautomatica.telemetry.capabilities import CapabilityInfo
 from airautomatica.telemetry.mock import MockTelemetry
 
 
@@ -48,6 +49,67 @@ async def test_mock_telemetry_yields_states() -> None:
         assert 0 <= s.heading_deg < 360
         assert s.voltage_v > 0
         assert isinstance(s.timestamp, datetime)
+
+
+@pytest.mark.asyncio
+async def test_mock_emits_capability_info_ardupilot() -> None:
+    """Mock telemetry with mock_type=ardupilot emits ArduPilot CapabilityInfo."""
+    received: list[CapabilityInfo] = []
+
+    def cb(info: CapabilityInfo) -> None:
+        received.append(info)
+
+    source = MockTelemetry(
+        mock_type="ardupilot", capability_callback=cb, interval_sec=0.01
+    )
+    states: list[AircraftState] = []
+    async for state in source.stream():
+        states.append(state)
+        if len(states) >= 2:
+            break
+    assert len(received) == 1
+    assert received[0].firmware_name == "ArduPilot (Mock)"
+    assert received[0].profile_id == "ardupilot"
+    assert received[0].profile.supports_message_interval is True
+    assert received[0].profile.supports_guided_actions is True
+
+
+@pytest.mark.asyncio
+async def test_mock_emits_capability_info_inav() -> None:
+    """Mock telemetry with mock_type=inav emits INAV CapabilityInfo."""
+    received: list[CapabilityInfo] = []
+
+    def cb(info: CapabilityInfo) -> None:
+        received.append(info)
+
+    source = MockTelemetry(mock_type="inav", capability_callback=cb, interval_sec=0.01)
+    states: list[AircraftState] = []
+    async for state in source.stream():
+        states.append(state)
+        if len(states) >= 2:
+            break
+    assert len(received) == 1
+    assert received[0].firmware_name == "INAV (Mock)"
+    assert received[0].profile_id == "inav"
+    assert received[0].profile.supports_message_interval is False
+    assert received[0].profile.supports_guided_actions is False
+
+
+@pytest.mark.asyncio
+async def test_mock_cycles_mode_sequence() -> None:
+    """Mock telemetry cycles through APM mode sequence (MANUAL, FBWA, AUTO, etc.)."""
+    source = MockTelemetry(
+        mock_type="ardupilot",
+        interval_sec=0.01,
+        heartbeat_interval_sec=0.05,
+    )
+    modes: list[str] = []
+    async for state in source.stream():
+        modes.append(state.mode)
+        if len(modes) >= 25:
+            break
+    assert "MANUAL" in modes or "FBWA" in modes or "AUTO" in modes or "GUIDED" in modes
+    assert all(m != "UNKNOWN" for m in modes[:10])  # ArduPilot mock uses real modes
 
 
 @pytest.mark.asyncio

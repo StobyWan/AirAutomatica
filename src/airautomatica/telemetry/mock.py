@@ -3,34 +3,91 @@
 import asyncio
 import math
 import time
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timezone
-from typing import AsyncIterator
+from typing import Optional
 
 from airautomatica.models.state import AircraftState
 from airautomatica.telemetry.base import TelemetrySource
+from airautomatica.telemetry.capabilities import (
+    CapabilityInfo,
+    ardupilot_profile,
+    capability_info,
+    generic_readonly_profile,
+    inav_profile,
+)
+
+# Mode sequence for ArduPilot/INAV mock: cycle through common APM modes
+# (from telemetry_contract.md / MODE_MAPPING_APM)
+_MOCK_MODE_SEQUENCE = [
+    "MANUAL",
+    "FBWA",
+    "AUTO",
+    "GUIDED",
+    "RTL",
+    "LOITER",
+]
+
+
+def _get_profile_and_firmware(mock_type: str) -> tuple[str, str]:
+    """Return (firmware_name, profile_id) for mock_type."""
+    if mock_type == "ardupilot":
+        return "ArduPilot (Mock)", "ardupilot"
+    if mock_type == "inav":
+        return "INAV (Mock)", "inav"
+    return "Unknown (Mock)", "generic"
+
+
+def _get_capability_info(mock_type: str) -> CapabilityInfo:
+    """Build CapabilityInfo for mock_type."""
+    firmware_name, profile_id = _get_profile_and_firmware(mock_type)
+    if mock_type == "ardupilot":
+        profile = ardupilot_profile()
+    elif mock_type == "inav":
+        profile = inav_profile()
+    else:
+        profile = generic_readonly_profile()
+    return capability_info(firmware_name, profile_id, profile)
 
 
 class MockTelemetry(TelemetrySource):
     """Simulates changing flight data for local development.
+
+    Supports mock_type: ardupilot, inav, generic. Each emits matching CapabilityInfo
+    and uses doc-based realistic values and mode sequences from MODE_MAPPING_APM.
     Simulates one disconnect after startup so users see what happens when FC is unplugged.
-    Simulates heartbeat at ~1 Hz so heartbeat_age_s increases between heartbeats.
     """
 
     def __init__(
-        self, interval_sec: float = 0.5, heartbeat_interval_sec: float = 1.0
+        self,
+        mock_type: str = "ardupilot",
+        capability_callback: Optional[Callable[[CapabilityInfo], None]] = None,
+        interval_sec: float = 0.5,
+        heartbeat_interval_sec: float = 1.0,
     ) -> None:
+        self._mock_type = (
+            mock_type if mock_type in ("ardupilot", "inav", "generic") else "ardupilot"
+        )
+        self._capability_callback = capability_callback
         self._interval = interval_sec
         self._heartbeat_interval = heartbeat_interval_sec
         self._heartbeat = 0
         self._last_heartbeat_time: float | None = None
         self._disconnect_demo_done = False
+        self._capability_emitted = False
+
+    def _mode_for_heartbeat(self) -> str:
+        """Return mode for current heartbeat. Cycles through APM modes."""
+        if self._mock_type == "generic":
+            return "UNKNOWN"
+        idx = (self._heartbeat // 3) % len(_MOCK_MODE_SEQUENCE)
+        return _MOCK_MODE_SEQUENCE[idx]
 
     def _make_connected_state(self, t: float) -> AircraftState:
-        """Build a connected state at time t. Simulates heartbeat at intervals."""
+        """Build a connected state at time t. Doc-based value ranges."""
         now_mono = time.monotonic()
         now = datetime.now(timezone.utc)
 
-        # Simulate heartbeat: only "receive" one every heartbeat_interval_sec
         if self._last_heartbeat_time is None or (
             now_mono - self._last_heartbeat_time >= self._heartbeat_interval
         ):
@@ -43,6 +100,7 @@ class MockTelemetry(TelemetrySource):
             else 0.0
         )
 
+        # Doc-based ranges: voltage 11-14V, current 0-30A, groundspeed 0-50 m/s
         lat = 37.6213 + 0.0001 * math.sin(t)
         lon = -122.3790 + 0.0001 * math.cos(t)
         rel_alt_m = 50.0 + 10.0 * math.sin(t * 0.5)
@@ -50,12 +108,12 @@ class MockTelemetry(TelemetrySource):
         roll_rad = 0.1 * math.sin(t)
         pitch_rad = -0.05 * math.cos(t)
         yaw_rad = math.radians(heading_deg)
-        voltage_v = 12.4 - 0.01 * (self._heartbeat % 100)
-        current_a = 2.5 + 0.5 * math.sin(t * 0.3)
-        groundspeed_m_s = 15.0 + 5.0 * math.sin(t * 0.2)
+        voltage_v = 12.4 - 0.01 * (self._heartbeat % 100)  # 11-14V range
+        current_a = 2.5 + 0.5 * math.sin(t * 0.3)  # 0-30A typical
+        groundspeed_m_s = 15.0 + 5.0 * math.sin(t * 0.2)  # 0-50 m/s
         airspeed_m_s = groundspeed_m_s + 2.0
         climb_rate_m_s = 0.5 * math.sin(t * 0.4)
-        mode = "GUIDED" if (self._heartbeat % 20) > 10 else "AUTO"
+        mode = self._mode_for_heartbeat()
         home_lat, home_lon = 37.6213, -122.3790
         return AircraftState(
             connected=True,
@@ -88,6 +146,11 @@ class MockTelemetry(TelemetrySource):
 
     async def stream(self) -> AsyncIterator[AircraftState]:
         """Yield simulated state updates at regular intervals."""
+        if not self._capability_emitted and self._capability_callback is not None:
+            self._capability_emitted = True
+            cap = _get_capability_info(self._mock_type)
+            self._capability_callback(cap)
+
         t = 0.0
         while True:
             if not self._disconnect_demo_done and self._heartbeat >= 4:

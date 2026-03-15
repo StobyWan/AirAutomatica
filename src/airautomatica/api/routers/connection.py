@@ -194,21 +194,33 @@ def create_connection_router(
 
     @router.post("/mode")
     async def post_connection_mode(body: dict = Body(...)) -> dict:
-        """Set connection mode. Persists to settings. Serial modes trigger telemetry reconnect."""
+        """Set connection mode. Persists to settings. Serial/mock modes trigger telemetry reconnect."""
         mode = (body.get("mode") or "").lower()
         port = body.get("port") or get_serial_port()
         baud = body.get("baud") or get_serial_baud()
-        if mode not in ("mock", "ardupilot", "inav"):
-            return {"ok": False, "error": "Invalid mode. Use mock, ardupilot, or inav."}
-        updates = {
-            "TELEMETRY_BACKEND": "mock" if mode == "mock" else "serial",
+        valid_modes = ("mock", "mock_ardupilot", "mock_inav", "ardupilot", "inav")
+        if mode not in valid_modes:
+            return {
+                "ok": False,
+                "error": "Invalid mode. Use mock, mock_ardupilot, mock_inav, ardupilot, or inav.",
+            }
+        is_mock = mode in ("mock", "mock_ardupilot", "mock_inav")
+        mock_type = "generic"
+        if mode == "mock_ardupilot":
+            mock_type = "ardupilot"
+        elif mode == "mock_inav":
+            mock_type = "inav"
+        updates: dict[str, str] = {
+            "TELEMETRY_BACKEND": "mock" if is_mock else "serial",
             "SERIAL_PORT": str(port),
             "SERIAL_BAUD": str(int(baud)),
         }
+        if is_mock:
+            updates["MOCK_TELEMETRY_TYPE"] = mock_type
         save_settings(updates)
         restart_required = mode in ("ardupilot", "inav")
         if connection_store is not None:
-            if mode == "mock":
+            if is_mock:
                 connection_store.set_connection_state(ConnectionState.MOCK_IDLE)
                 connection_store.set_mode(ConnectionMode.MOCK)
             elif mode == "ardupilot":
@@ -219,7 +231,9 @@ def create_connection_router(
             else:
                 connection_store.set_connection_state(ConnectionState.CONNECTED_INAV)
                 connection_store.set_mode(ConnectionMode.INAV)
-        if mode in ("ardupilot", "inav") and reload_telemetry_fn is not None:
+        if (
+            mode in ("ardupilot", "inav") or is_mock
+        ) and reload_telemetry_fn is not None:
             await reload_telemetry_fn()
         return {"ok": True, "restart_required": restart_required}
 
