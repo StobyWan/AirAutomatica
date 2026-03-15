@@ -47,6 +47,7 @@ from airautomatica.config import (
     get_serial_port,
     get_sqlite_db_path,
     get_telemetry_backend,
+    get_use_spa_dashboard,
     validate_serial_config,
 )
 from airautomatica.db.base import get_engine, get_last_init_error
@@ -208,6 +209,25 @@ def create_app(
         )
     )
     app.include_router(dashboard_router_mod.create_dashboard_router())
+
+    # Mount SPA static assets when serving Vue dashboard
+    if get_use_spa_dashboard():
+        _project_root = Path(__file__).resolve().parent.parent.parent.parent
+        _spa_dist = _project_root / "frontend" / "dist"
+        _spa_assets = _spa_dist / "assets"
+        if _spa_dist.is_dir():
+            # index.html references /assets/* when built with base '/'
+            if _spa_assets.is_dir():
+                app.mount(
+                    "/assets",
+                    StaticFiles(directory=str(_spa_assets)),
+                    name="dashboard-spa-assets",
+                )
+            app.mount(
+                "/dashboard",
+                StaticFiles(directory=str(_spa_dist), html=True),
+                name="dashboard-spa",
+            )
 
     @app.get("/health")
     def health() -> dict:
