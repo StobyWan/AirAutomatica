@@ -17,16 +17,26 @@ export interface DetectResponse {
   detected: boolean
   connection_state?: string
   message?: string
+  port?: string | null
+  baud?: number | null
 }
 
-export function detectConnection(): Promise<DetectResponse> {
-  return post<DetectResponse>('/connection/detect')
+export function detectConnection(body?: {
+  port?: string
+  baud?: number
+}): Promise<DetectResponse> {
+  return post<DetectResponse>('/connection/detect', body ?? {})
 }
 
 export function setConnectionMode(
-  mode: 'mock' | 'ardupilot' | 'inav'
+  mode: 'mock' | 'ardupilot' | 'inav',
+  port?: string,
+  baud?: number
 ): Promise<{ restart_required?: boolean }> {
-  return post<{ restart_required?: boolean }>('/connection/mode', { mode })
+  const body: Record<string, unknown> = { mode }
+  if (port != null) body.port = port
+  if (baud != null) body.baud = baud
+  return post<{ restart_required?: boolean }>('/connection/mode', body)
 }
 
 export function disconnect(): Promise<void> {
