@@ -16,9 +16,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: "frontend/.nvmrc"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Enforce Node 22
+        run: node --version | grep -E '^v22\.'
 
       - name: Build frontend
         run: |
