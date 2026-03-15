@@ -241,7 +241,9 @@ class RecordingsService:
             ts = datetime.fromisoformat(r.timestamp_iso)
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
-            if ts >= start_utc and ts <= end_utc:
+            in_time_range = ts >= start_utc and ts <= end_utc
+            meta_matches = r.session_id == session_id
+            if in_time_range or meta_matches:
                 filtered.append(r)
 
         post_filter_count = len(filtered)
