@@ -2330,6 +2330,51 @@ def test_get_session_recordings_returns_trigger_session_id_when_meta_exists(
     assert rec["session_id"] == session_id
 
 
+def test_get_session_recordings_includes_meta_session_id_even_when_time_filter_excludes(
+    store: StateStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recording with .meta session_id is included when time filter would exclude it."""
+    import time
+
+    monkeypatch.setenv("SQLITE_DB_PATH", str(tmp_path / "test.db"))
+    init_db(str(tmp_path / "test.db"))
+    persistence = PersistenceService()
+    session_id = persistence.start_session("mock", "mock")
+    assert session_id is not None
+    persistence.end_session(session_id)
+    time.sleep(2.1)  # Recording timestamp will be after session ended_at
+
+    now = datetime.now(timezone.utc)
+    filename = f"{now.strftime('%Y-%m-%d_%H%M%S')}_cam.mp4"
+    rec_dir = tmp_path / "recordings"
+    rec_dir.mkdir()
+    (rec_dir / filename).write_bytes(b"video")
+    (rec_dir / f"{filename}.meta").write_text(
+        '{"trigger":"auto","session_id":' + str(session_id) + "}", encoding="utf-8"
+    )
+
+    camera_svc = CameraRecordingService(recordings_dir=str(rec_dir))
+    client = TestClient(
+        create_app(
+            store,
+            camera_recording_service=camera_svc,
+            persistence=persistence,
+        )
+    )
+    r = client.get(f"/sessions/{session_id}/recordings")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["session_resolved"] is True
+    assert (
+        len(data["recordings"]) == 1
+    ), "Recording with .meta session_id must be included even when timestamp is after session ended_at"
+    rec = data["recordings"][0]
+    assert rec["filename"] == filename
+    assert rec["session_id"] == session_id
+
+
 def test_delete_recording(
     store: StateStore,
     tmp_path: Path,
