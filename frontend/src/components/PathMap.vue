@@ -11,14 +11,38 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useTelemetryPathStore } from '@/stores/telemetryPath'
 import { useStateStore } from '@/stores/state'
+import type { PathPoint } from '@/api/session'
+
+const props = withDefaults(
+  defineProps<{
+    path?: PathPoint[]
+    homeLat?: number | null
+    homeLon?: number | null
+    detections?: PathPoint[]
+    showPositionMarker?: boolean
+  }>(),
+  { showPositionMarker: true }
+)
 
 const pathStore = useTelemetryPathStore()
 const stateStore = useStateStore()
-const { path, currentPosition, detections } = storeToRefs(pathStore)
+const { path: storePath, currentPosition, detections: storeDetections } = storeToRefs(pathStore)
 const { lastState } = storeToRefs(stateStore)
 
-const homeLat = computed(() => lastState.value?.home_lat ?? null)
-const homeLon = computed(() => lastState.value?.home_lon ?? null)
+const useSessionData = computed(() => props.path !== undefined)
+
+const path = computed(() =>
+  useSessionData.value ? (props.path ?? []) : storePath.value
+)
+const homeLat = computed(() =>
+  useSessionData.value ? (props.homeLat ?? null) : (lastState.value?.home_lat ?? null)
+)
+const homeLon = computed(() =>
+  useSessionData.value ? (props.homeLon ?? null) : (lastState.value?.home_lon ?? null)
+)
+const detections = computed(() =>
+  useSessionData.value ? (props.detections ?? []) : storeDetections.value
+)
 
 const mapContainerRef = ref<HTMLDivElement | null>(null)
 let map: L.Map | null = null
@@ -88,6 +112,10 @@ function updatePath() {
 
 function updateMarker() {
   if (!marker) return
+  if (!props.showPositionMarker) {
+    marker.setOpacity(0)
+    return
+  }
   const pos = currentPosition.value
   if (pos?.lat != null && pos?.lon != null) {
     marker.setLatLng([pos.lat, pos.lon])

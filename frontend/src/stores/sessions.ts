@@ -13,6 +13,7 @@ export interface SessionFilters {
 
 export const useSessionsStore = defineStore('sessions', () => {
   const sessions = ref<SessionSummary[]>([])
+  const total = ref(0)
   const currentSessionId = ref<number | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -33,12 +34,15 @@ export const useSessionsStore = defineStore('sessions', () => {
   async function fetchSessions(params?: {
     autopilot?: string
     connection_mode?: string
+    limit?: number
+    offset?: number
   }) {
     loading.value = true
     error.value = null
     try {
       const res = await getSessions(params)
       sessions.value = (res.sessions ?? []).map(normalizeSession)
+      total.value = res.total ?? 0
       currentSessionId.value = res.current_session_id ?? null
       return res
     } catch (e) {
@@ -54,22 +58,35 @@ export const useSessionsStore = defineStore('sessions', () => {
     error.value = null
   }
 
-  function setFilters(updates?: { autopilot?: string; connection_mode?: string }) {
+  function setFilters(updates?: {
+    autopilot?: string
+    connection_mode?: string
+    limit?: number
+    offset?: number
+  }) {
     if (updates?.autopilot !== undefined) filters.value.autopilot = updates.autopilot
     if (updates?.connection_mode !== undefined) filters.value.connection_mode = updates.connection_mode
-    const params: { autopilot?: string; connection_mode?: string } = {}
+    const params: {
+      autopilot?: string
+      connection_mode?: string
+      limit?: number
+      offset?: number
+    } = {}
     if (filters.value.autopilot) params.autopilot = filters.value.autopilot
     if (filters.value.connection_mode) params.connection_mode = filters.value.connection_mode
+    if (updates?.limit != null) params.limit = updates.limit
+    if (updates?.offset != null) params.offset = updates.offset
     return fetchSessions(params)
   }
 
-  function clearFilters() {
+  function clearFilters(opts?: { limit?: number; offset?: number }) {
     filters.value = { autopilot: '', connection_mode: '' }
-    return fetchSessions()
+    return fetchSessions(opts)
   }
 
   return {
     sessions,
+    total,
     currentSessionId,
     loading,
     error,

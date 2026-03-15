@@ -224,18 +224,25 @@ def create_sessions_router(
     def get_sessions(
         autopilot: str | None = Query(None, alias="autopilot"),
         connection_mode: str | None = Query(None, alias="connection_mode"),
+        limit: int = Query(12, ge=1, le=100),
+        offset: int = Query(0, ge=0),
     ) -> dict:
         """Return recent flight sessions with detection counts. For dashboard initial load."""
         sid = session_ref[0]
         if persistence is None:
-            return {"sessions": [], "current_session_id": sid}
+            return {"sessions": [], "current_session_id": sid, "total": 0}
+        total = persistence.get_sessions_count(
+            autopilot_filter=autopilot,
+            connection_mode_filter=connection_mode,
+        )
         sessions = persistence.get_recent_sessions(
-            limit=10,
+            limit=limit,
+            offset=offset,
             include_detection_count=True,
             autopilot_filter=autopilot,
             connection_mode_filter=connection_mode,
         )
-        return {"sessions": sessions, "current_session_id": sid}
+        return {"sessions": sessions, "current_session_id": sid, "total": total}
 
     @router.get("/sessions/{sid:int}/recordings")
     def get_session_recordings(sid: int) -> dict:
