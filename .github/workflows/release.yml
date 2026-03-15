@@ -27,9 +27,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL 2>/dev/null || true
-          df -h
+        uses: jlumbroso/free-disk-space@main
 
       - name: Install build dependencies
         run: |
