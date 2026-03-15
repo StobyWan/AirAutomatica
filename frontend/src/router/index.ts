@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const basePath = (import.meta.env.VITE_BASE_PATH || '').replace(/\/$/, '')
-const base = basePath ? basePath + '/' : '/'
+const base = basePath ? basePath : '/'
 
 // When served at /dashboard, root path '' shows Dashboard. When at /, we have / and /dashboard.
 const routes =
