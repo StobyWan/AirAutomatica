@@ -72,11 +72,11 @@ export function precomputeChartData(
  * Select primary recording for video sync.
  * Prefers auto-trigger matching session; else closest to session start.
  */
-export function selectPrimaryRecording(
-  recs: { timestamp: string; trigger?: string | null; session_id?: number | null }[],
+export function selectPrimaryRecording<T extends { timestamp: string; trigger?: string | null; session_id?: number | null }>(
+  recs: T[],
   sessionStartMs: number,
   sessionId: number | null
-): typeof recs[0] | null {
+): T | null {
   if (recs.length === 0) return null
   const autoMatch = recs.find(
     (r) => r.trigger === 'auto' && r.session_id === sessionId
