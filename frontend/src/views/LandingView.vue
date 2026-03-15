@@ -1,6 +1,25 @@
 <template>
-  <div class="p-4 max-w-xl">
-    <h1 class="text-2xl font-bold mb-2">AIRAUTOMATICA</h1>
+  <div class="p-4 w-full max-w-3xl mx-auto">
+    <h1 class="flex items-center gap-1 mb-2">
+      <span class="text-connecting shrink-0">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 512 512"
+          role="img"
+          aria-label="AirAutomatica logo"
+          class="h-10 w-10"
+        >
+          <title>AirAutomatica</title>
+          <g fill="currentColor">
+            <path d="M56 252 L210 168 L242 186 L144 252 L242 326 L210 344 Z" />
+            <path d="M456 252 L302 168 L270 186 L368 252 L270 326 L302 344 Z" />
+            <path d="M256 86 L374 404 H324 L294 334 H218 L188 404 H138 Z M237 284 H275 L256 226 Z" />
+            <rect x="208" y="284" width="96" height="32" rx="16" />
+          </g>
+        </svg>
+      </span>
+      <span class="text-2xl font-bold">AIRAUTOMATICA</span>
+    </h1>
     <h2 class="text-muted font-normal text-base mb-4">Connection Setup</h2>
     <p class="text-[var(--text)]/80 text-sm mb-6">
       Choose how to connect to your flight controller or continue in mock mode.
@@ -20,39 +39,50 @@
       </button>
     </div>
 
-    <div class="flex flex-col items-start gap-2 mb-6">
-      <button
-        type="button"
-        class="landing-btn landing-btn-primary w-full max-w-xs"
-        :disabled="connectionStore.loading"
-        @click="onAutoDetect"
-      >
-        {{ connectionStore.loading ? 'Detecting…' : 'Auto Detect' }}
-      </button>
-      <button
-        type="button"
-        class="landing-btn landing-btn-secondary w-full max-w-xs"
-        :disabled="connectionStore.loading"
-        @click="onSetMode('ardupilot')"
-      >
-        Use ArduPilot
-      </button>
-      <button
-        type="button"
-        class="landing-btn landing-btn-secondary w-full max-w-xs"
-        :disabled="connectionStore.loading"
-        @click="onSetMode('inav')"
-      >
-        Use iNav
-      </button>
-      <button
-        type="button"
-        class="landing-btn landing-btn-secondary w-full max-w-xs"
-        :disabled="connectionStore.loading"
-        @click="onSetMode('mock')"
-      >
-        Mock Mode
-      </button>
+    <div class="flex flex-col md:flex-row md:items-start gap-6 mb-6">
+      <div class="flex flex-col gap-2 flex-shrink-0 w-full md:w-auto md:min-w-[12rem]">
+        <button
+          type="button"
+          class="landing-btn landing-btn-primary w-full"
+          :disabled="connectionStore.loading"
+          @click="onAutoDetect"
+        >
+          {{ connectionStore.loading ? 'Detecting…' : 'Auto Detect' }}
+        </button>
+        <button
+          type="button"
+          class="landing-btn landing-btn-secondary w-full"
+          :disabled="connectionStore.loading"
+          @click="onSetMode('ardupilot')"
+        >
+          Use ArduPilot
+        </button>
+        <button
+          type="button"
+          class="landing-btn landing-btn-secondary w-full"
+          :disabled="connectionStore.loading"
+          @click="onSetMode('inav')"
+        >
+          Use iNav
+        </button>
+        <button
+          type="button"
+          class="landing-btn landing-btn-secondary w-full"
+          :disabled="connectionStore.loading"
+          @click="onSetMode('mock')"
+        >
+          Mock Mode
+        </button>
+      </div>
+
+      <div class="flex-1 min-w-0 w-full">
+        <DetectedPortsPanel
+          :ports="connectionStore.ports"
+          :ports-loading="connectionStore.portsLoading"
+          :ports-error="connectionStore.portsError"
+          @retry="connectionStore.fetchPorts"
+        />
+      </div>
     </div>
 
     <div v-if="connectionStore.detectionResult" class="card text-sm">
@@ -63,22 +93,36 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useConnectionStore } from '@/stores/connection'
+import { useSocket } from '@/composables/useSocket'
+import DetectedPortsPanel from '@/components/DetectedPortsPanel.vue'
+import type { PortInfo } from '@/types'
 
 const router = useRouter()
 const connectionStore = useConnectionStore()
+const { socket } = useSocket()
 
 const dashboardPath = (import.meta.env.VITE_BASE_PATH || '').replace(/\/$/, '')
   ? ''
   : '/dashboard'
 
+function handlePortsUpdate(payload: { ports: PortInfo[] }) {
+  connectionStore.updatePortsFromSocket(payload)
+}
+
 onMounted(async () => {
+  connectionStore.fetchPorts()
+  socket.on('ports_update', handlePortsUpdate)
   await connectionStore.fetchState()
   if (connectionStore.connectionState !== 'setup') {
     router.replace(dashboardPath || '/')
   }
+})
+
+onBeforeUnmount(() => {
+  socket.off('ports_update', handlePortsUpdate)
 })
 
 async function onAutoDetect() {

@@ -294,3 +294,68 @@ class DashboardPublisher:
                 logger.exception("Dashboard publisher error: %s", e)
 
             await asyncio.sleep(self._interval_sec)
+
+
+def _ports_fingerprint(
+    ports: list[dict],
+) -> tuple[tuple[str, str, bool, str | None], ...]:
+    """Fingerprint for duplicate detection. Returns comparable tuple."""
+    return tuple(
+        (
+            p.get("path", ""),
+            p.get("status", ""),
+            p.get("mavlink_active", False),
+            p.get("autopilot"),
+        )
+        for p in ports
+    )
+
+
+class PortsPublisher:
+    """Emits ports_update via Socket.IO when port list/status changes. Lightweight scan loop."""
+
+    def __init__(
+        self,
+        sio: socketio.AsyncServer,
+        interval_sec: float = 15.0,
+    ) -> None:
+        self._sio = sio
+        self._interval_sec = interval_sec
+        self._last_fingerprint: tuple[tuple[str, str, bool, str | None], ...] | None = (
+            None
+        )
+
+    async def run(self) -> None:
+        """Scan ports at interval, emit only when changed. Runs until cancelled."""
+        while True:
+            try:
+                ports = await asyncio.to_thread(_list_ports_safe)
+                payload = {
+                    "ports": [
+                        {
+                            "path": p.path,
+                            "mavlink_active": p.mavlink_active,
+                            "autopilot": p.autopilot,
+                            "baud": p.baud,
+                            "status": p.status,
+                        }
+                        for p in ports
+                    ]
+                }
+                fingerprint = _ports_fingerprint(payload["ports"])
+                if self._last_fingerprint != fingerprint:
+                    self._last_fingerprint = fingerprint
+                    await self._sio.emit("ports_update", payload)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("Ports publisher error: %s", e)
+
+            await asyncio.sleep(self._interval_sec)
+
+
+def _list_ports_safe() -> list:
+    """Call list_ports_with_status in thread. Lazy import to avoid pymavlink at startup."""
+    from airautomatica.telemetry.detector import list_ports_with_status
+
+    return list(list_ports_with_status())

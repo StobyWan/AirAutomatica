@@ -59,7 +59,7 @@ from airautomatica.config import (
 )
 from airautomatica.db import init_db
 from airautomatica.logging_config import setup_logging
-from airautomatica.realtime import DashboardPublisher, sio, wrap_app
+from airautomatica.realtime import DashboardPublisher, PortsPublisher, sio, wrap_app
 from airautomatica.runtime.ai_subsystem import AiSubsystemHolder, ReloadResult
 from airautomatica.runtime.telemetry_subsystem import (
     TelemetryController,
@@ -600,6 +600,8 @@ def main() -> None:
             _run_with_restart(mission_logic.run, name="mission")
         )
         publisher_task = asyncio.create_task(publisher.run())
+        ports_publisher = PortsPublisher(sio, interval_sec=15.0)
+        ports_publisher_task = asyncio.create_task(ports_publisher.run())
         shutdown_waiter = asyncio.create_task(shutdown_event.wait())
 
         done, pending = await asyncio.wait(
@@ -616,7 +618,13 @@ def main() -> None:
         _shutdown_cleanup(persistence, session_ref, app_home_store=app_home_store)
         camera_recording_service.stop_and_cleanup()
 
-        all_tasks = [server_task, telemetry_task, mission_task, publisher_task]
+        all_tasks = [
+            server_task,
+            telemetry_task,
+            mission_task,
+            publisher_task,
+            ports_publisher_task,
+        ]
         if scheduler_task is not None:
             all_tasks.append(scheduler_task)
         for t in all_tasks:
