@@ -423,7 +423,11 @@ class PersistenceService:
             return []
 
     def get_session(self, session_id: int) -> dict | None:
-        """Fetch a single session by id. Returns None if not found or DB disabled."""
+        """Fetch a single session by id. Returns None if not found or DB disabled.
+
+        Includes home_lat/home_lon only when manual override is set (from row, no extra query).
+        For autopilot/fallback home, use get_session_path or get_session_home.
+        """
         if get_engine() is None:
             return None
         try:
@@ -445,14 +449,15 @@ class PersistenceService:
                     "connection_mode": row.connection_mode,
                     "baud": row.baud,
                 }
-                home_lat, home_lon, home_source = self._get_session_home_impl(
-                    session, session_id, row
-                )
-                if home_lat is not None and home_lon is not None:
-                    out["home_lat"] = home_lat
-                    out["home_lon"] = home_lon
-                if home_source is not None:
-                    out["home_source"] = home_source
+                if (
+                    row.manual_home_lat is not None
+                    and row.manual_home_lon is not None
+                    and not math.isnan(row.manual_home_lat)
+                    and not math.isnan(row.manual_home_lon)
+                ):
+                    out["home_lat"] = float(row.manual_home_lat)
+                    out["home_lon"] = float(row.manual_home_lon)
+                    out["home_source"] = "manual_session"
                 return out
         except Exception as e:
             self._record_error(str(e))
@@ -485,29 +490,50 @@ class PersistenceService:
                 "manual_session",
             )
 
-        result = db_session.execute(
-            select(TelemetrySample)
-            .where(TelemetrySample.session_id == session_id)
+        # Targeted query: first sample with autopilot home (avoids fetching 100 full rows)
+        home_result = db_session.execute(
+            select(TelemetrySample.home_lat, TelemetrySample.home_lon)
+            .where(
+                TelemetrySample.session_id == session_id,
+                TelemetrySample.home_lat.isnot(None),
+                TelemetrySample.home_lon.isnot(None),
+            )
             .order_by(TelemetrySample.timestamp.asc())
-            .limit(100)
+            .limit(1)
         )
-        samples = result.scalars().all()
-        for s in samples:
-            if _valid(s.home_lat) and _valid(s.home_lon):
-                return (float(s.home_lat), float(s.home_lon), "autopilot")
-        for s in samples:
-            if _valid(s.lat) and _valid(s.lon):
-                return (float(s.lat), float(s.lon), "fallback")
+        home_row = home_result.first()
+        if home_row is not None and _valid(home_row[0]) and _valid(home_row[1]):
+            return (float(home_row[0]), float(home_row[1]), "autopilot")
 
+        # Targeted query: first sample with lat/lon as fallback
+        fallback_result = db_session.execute(
+            select(TelemetrySample.lat, TelemetrySample.lon)
+            .where(
+                TelemetrySample.session_id == session_id,
+                TelemetrySample.lat.isnot(None),
+                TelemetrySample.lon.isnot(None),
+            )
+            .order_by(TelemetrySample.timestamp.asc())
+            .limit(1)
+        )
+        fallback_row = fallback_result.first()
+        if (
+            fallback_row is not None
+            and _valid(fallback_row[0])
+            and _valid(fallback_row[1])
+        ):
+            return (float(fallback_row[0]), float(fallback_row[1]), "fallback")
+
+        # PathPoint fallback (uses ix_path_points_session_timestamp)
         path_result = db_session.execute(
-            select(PathPoint)
+            select(PathPoint.lat, PathPoint.lon)
             .where(PathPoint.session_id == session_id)
             .order_by(PathPoint.timestamp.asc())
             .limit(1)
         )
-        path_row = path_result.scalars().first()
-        if path_row is not None and _valid(path_row.lat) and _valid(path_row.lon):
-            return (float(path_row.lat), float(path_row.lon), "fallback")
+        path_row = path_result.first()
+        if path_row is not None and _valid(path_row[0]) and _valid(path_row[1]):
+            return (float(path_row[0]), float(path_row[1]), "fallback")
 
         return (None, None, None)
 
