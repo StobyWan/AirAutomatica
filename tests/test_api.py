@@ -1266,7 +1266,7 @@ def test_sessions_empty_when_no_persistence(client: TestClient) -> None:
     """GET /sessions returns empty when persistence not configured."""
     r = client.get("/sessions")
     assert r.status_code == 200
-    assert r.json() == {"sessions": [], "current_session_id": None}
+    assert r.json() == {"sessions": [], "current_session_id": None, "total": 0}
 
 
 def test_get_settings(client: TestClient) -> None:
