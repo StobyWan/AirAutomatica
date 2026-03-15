@@ -139,6 +139,43 @@ export function getSessionPhaseIntervals(
   return get<{ intervals: unknown[]; session_id: number }>(`/sessions/${sid}/phase-intervals`)
 }
 
+export interface ReplaySample {
+  timestamp: string
+  lat?: number | null
+  lon?: number | null
+  rel_alt_m?: number | null
+  voltage_v?: number | null
+  current_a?: number | null
+  groundspeed_m_s?: number | null
+  mode?: string | null
+  heading_deg?: number | null
+  roll_rad?: number | null
+  pitch_rad?: number | null
+  yaw_rad?: number | null
+  airspeed_m_s?: number | null
+  connected?: boolean | null
+  watts?: number | null
+  heartbeat_age_s?: number | null
+  reconnect_count?: number | null
+}
+
+export interface TelemetrySamplesResponse {
+  samples: ReplaySample[]
+  session_id: number
+}
+
+export function getSessionTelemetrySamples(
+  sid: number,
+  params?: { limit?: number; order?: 'asc' | 'desc' }
+): Promise<TelemetrySamplesResponse> {
+  const q = new URLSearchParams()
+  q.set('limit', String(params?.limit ?? 5000))
+  q.set('order', params?.order ?? 'asc')
+  return get<TelemetrySamplesResponse>(
+    `/sessions/${sid}/telemetry-samples?${q.toString()}`
+  )
+}
+
 export function patchSession(
   sid: number,
   body: { home_lat?: number; home_lon?: number; clear_home?: boolean }
