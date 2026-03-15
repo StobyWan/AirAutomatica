@@ -2,96 +2,89 @@
   <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
     <h2 class="text-base font-semibold text-slate-200 mb-3">Operations</h2>
 
-    <p class="text-sm text-slate-400 mb-3">
-      {{ sessionStatusText }}
-    </p>
-
-    <div class="operations-hud-strip grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
-        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Connection</div>
-        <span
-          class="operations-chip inline-flex items-center gap-0.25 px-2 py-0.5 rounded-md text-xs font-semibold"
-          :class="connectionChipClass"
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+      <div class="flex-1 min-w-0">
+        <p class="text-sm text-slate-400">
+          {{ sessionStatusText }}
+        </p>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button
+          v-if="!connectionStore.liveSessionId && canStartSession"
+          type="button"
+          class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium disabled:opacity-50"
+          :disabled="operationsStore.startingSession"
+          @click="operationsStore.startSession"
         >
-          {{ connectionChipText }}
+          {{ operationsStore.startingSession ? 'Starting…' : 'Start Session' }}
+        </button>
+        <button
+          v-if="connectionStore.liveSessionId"
+          type="button"
+          class="px-4 py-2 rounded-lg bg-amber-900/30 hover:bg-amber-800/40 text-amber-200 text-sm font-medium border border-amber-700/50 disabled:opacity-50"
+          :disabled="operationsStore.stoppingSession"
+          @click="operationsStore.stopSession"
+        >
+          {{ operationsStore.stoppingSession ? 'Stopping…' : 'Stop Session' }}
+        </button>
+        <span v-if="connectionStore.liveSessionId" class="text-cyan-400 font-mono text-sm">
+          #{{ connectionStore.liveSessionId }}
         </span>
       </div>
-      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
-        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Session</div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <span v-if="connectionStore.liveSessionId" class="text-cyan-400 font-mono text-sm">
-            #{{ connectionStore.liveSessionId }}
-          </span>
-          <span v-else class="text-slate-500 text-sm">Idle</span>
-          <button
-            v-if="!connectionStore.liveSessionId && canStartSession"
-            type="button"
-            class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium disabled:opacity-50"
-            :disabled="operationsStore.startingSession"
-            @click="operationsStore.startSession"
-          >
-            {{ operationsStore.startingSession ? 'Starting…' : 'Start Session' }}
-          </button>
-          <button
-            v-if="connectionStore.liveSessionId"
-            type="button"
-            class="px-3 py-1.5 rounded-lg bg-amber-900/30 hover:bg-amber-800/40 text-amber-200 text-sm font-medium border border-amber-700/50 disabled:opacity-50"
-            :disabled="operationsStore.stoppingSession"
-            @click="operationsStore.stopSession"
-          >
-            {{ operationsStore.stoppingSession ? 'Stopping…' : 'Stop Session' }}
-          </button>
-        </div>
-      </div>
-      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
-        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Camera</div>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="cameraReady"
-            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-            :class="cameraReady ? 'bg-cyan-600' : 'bg-slate-600'"
-            @click="toggleCameraReady"
-          >
-            <span
-              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-              :class="cameraReady ? 'translate-x-5' : 'translate-x-0.5'"
-            />
-          </button>
-          <span class="text-sm text-slate-400">{{ cameraReady ? 'Ready' : 'Not ready' }}</span>
-        </div>
-      </div>
-      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
-        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Recording</div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <span
-            class="operations-chip inline-flex items-center gap-0.25 px-2 py-0.5 rounded-md text-xs font-semibold"
-            :class="recordingChipClass"
-          >
-            {{ recordingChipText }}
-          </span>
-          <span v-if="recordingTimer" class="text-xs font-mono text-slate-400">{{ recordingTimer }}</span>
-          <button
-            v-if="cameraRecording && !operationsStore.stoppingRecording"
-            type="button"
-            class="px-2 py-1 rounded text-xs font-medium bg-red-900/30 text-red-300 hover:bg-red-800/40 border border-red-800/50 disabled:opacity-50"
-            :disabled="operationsStore.stoppingRecording"
-            @click="operationsStore.stopRecording"
-          >
-            Stop
-          </button>
-          <button
-            v-else-if="connectionStore.liveSessionId && cameraRecordingAvailable && !cameraRecording"
-            type="button"
-            class="px-2 py-1 rounded text-xs font-medium bg-cyan-600/20 text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-50"
-            :disabled="operationsStore.startingRecording"
-            @click="operationsStore.startRecording"
-          >
-            Start
-          </button>
-        </div>
-      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 py-2 border-t border-b border-slate-700/50">
+      <h3 class="sr-only">Status</h3>
+      <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Connection</span>
+      <span
+        class="operations-chip inline-flex items-center gap-0.25 px-2 py-0.5 rounded-md text-xs font-semibold"
+        :class="connectionChipClass"
+      >
+        {{ connectionChipText }}
+      </span>
+      <span class="text-slate-600">·</span>
+      <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Camera</span>
+      <button
+        type="button"
+        role="switch"
+        :aria-checked="cameraReady"
+        class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+        :class="cameraReady ? 'bg-cyan-600' : 'bg-slate-600'"
+        @click="toggleCameraReady"
+      >
+        <span
+          class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+          :class="cameraReady ? 'translate-x-4' : 'translate-x-0.5'"
+        />
+      </button>
+      <span class="text-xs text-slate-400">{{ cameraReady ? 'Ready' : 'Not ready' }}</span>
+      <span class="text-slate-600">·</span>
+      <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Recording</span>
+      <span
+        class="operations-chip inline-flex items-center gap-0.25 px-2 py-0.5 rounded-md text-xs font-semibold"
+        :class="recordingChipClass"
+      >
+        {{ recordingChipText }}
+      </span>
+      <span v-if="recordingTimer" class="text-xs font-mono text-slate-400">{{ recordingTimer }}</span>
+      <button
+        v-if="cameraRecording && !operationsStore.stoppingRecording"
+        type="button"
+        class="px-2 py-1 rounded text-xs font-medium bg-red-900/30 text-red-300 hover:bg-red-800/40 border border-red-800/50 disabled:opacity-50"
+        :disabled="operationsStore.stoppingRecording"
+        @click="operationsStore.stopRecording"
+      >
+        Stop
+      </button>
+      <button
+        v-else-if="connectionStore.liveSessionId && cameraRecordingAvailable && !cameraRecording"
+        type="button"
+        class="px-2 py-1 rounded text-xs font-medium bg-cyan-600/20 text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-50"
+        :disabled="operationsStore.startingRecording"
+        @click="operationsStore.startRecording"
+      >
+        Start
+      </button>
     </div>
 
     <div

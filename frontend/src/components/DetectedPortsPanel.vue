@@ -37,8 +37,28 @@
         class="port-row rounded-lg border p-3 text-sm transition-colors"
         :class="port.mavlink_active ? 'port-active' : 'port-neutral'"
       >
-        <div class="font-medium text-[var(--text)] truncate" :title="port.path">
-          {{ port.path }}
+        <div class="flex items-center gap-2">
+          <span
+            v-if="port.mavlink_active"
+            class="shrink-0 text-connected"
+            title="MAVLink traffic detected"
+            aria-hidden="true"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path
+                d="M2 10a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1Zm3-1a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm3-2a1 1 0 0 1 1 1v5a1 1 0 1 1-2 0V8a1 1 0 0 1 1-1Zm3-3a1 1 0 0 1 1 1v8a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1Z"
+              />
+            </svg>
+          </span>
+          <span class="font-medium text-[var(--text)] truncate" :title="port.path">
+            {{ port.path }}
+          </span>
         </div>
         <div class="mt-1 flex items-center gap-2">
           <span
