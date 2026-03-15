@@ -16,6 +16,7 @@ from airautomatica.config import (
     get_camera_recording_disarm_debounce_sec,
     get_recording_ai_overlay_enabled,
     get_recording_ai_persist_enabled,
+    get_recording_telemetry_overlay_enabled,
     get_recordings_dir,
 )
 from airautomatica.services.recording_ai_ingest import RecordingAiIngest
@@ -23,6 +24,7 @@ from airautomatica.services.recordings_service import (
     _FILENAME_PATTERN,
     _meta_path_for_recording,
 )
+from airautomatica.services.telemetry_overlay import TelemetryWriter
 
 if TYPE_CHECKING:
     from airautomatica.models.state import AircraftState
@@ -153,6 +155,7 @@ class CameraRecordingService:
         self._started_at: Optional[datetime] = None
         self._last_recorded_file: Optional[str] = None
         self._last_error: Optional[str] = None
+        self._telemetry_writer: Optional[TelemetryWriter] = None
 
     @property
     def recordings_dir(self) -> str:
@@ -168,6 +171,15 @@ class CameraRecordingService:
             last_recorded_file=self._last_recorded_file,
         )
 
+    def _stop_telemetry_writer(self) -> None:
+        """Stop telemetry overlay writer and remove temp file. Idempotent."""
+        if self._telemetry_writer is not None:
+            try:
+                self._telemetry_writer.stop()
+            except Exception as e:
+                logger.warning("Telemetry writer stop failed: %s", e)
+            self._telemetry_writer = None
+
     def _reconcile_dead_processes(self) -> None:
         """Idempotent: detect and clean up dead cam/muxer processes. Call once at start of get_recording_state."""
         if self._muxer_process is not None and self._muxer_process.poll() is not None:
@@ -180,6 +192,7 @@ class CameraRecordingService:
                 mux_err,
             )
             self._last_error = f"muxer_exit_code={mux_exit}: {mux_err}"
+            self._stop_telemetry_writer()
             if self._process is not None and self._process.poll() is None:
                 _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
                 self._process = None
@@ -198,6 +211,7 @@ class CameraRecordingService:
                 exit_code,
                 err,
             )
+            self._stop_telemetry_writer()
             if self._muxer_process is not None:
                 _wait_and_terminate(self._muxer_process, _MUXER_WAIT_SEC)
                 self._muxer_process = None
@@ -302,22 +316,56 @@ class CameraRecordingService:
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                     )
-                    ffmpeg_args = [
-                        ffmpeg_cmd,
-                        "-hide_banner",
-                        "-loglevel",
-                        "error",
-                        "-y",
-                        "-f",
-                        "mpegts",
-                        "-i",
-                        "pipe:0",
-                        "-c",
-                        "copy",
-                        "-movflags",
-                        "frag_keyframe+empty_moov+default_base_moof",
-                        str(self._output_path),
-                    ]
+                    use_telemetry_overlay = (
+                        get_recording_telemetry_overlay_enabled()
+                        and self._get_state is not None
+                    )
+                    if use_telemetry_overlay and self._get_state is not None:
+                        get_state_fn = self._get_state
+                        self._telemetry_writer = TelemetryWriter(get_state=get_state_fn)
+                        telemetry_path = self._telemetry_writer.start()
+                        drawtext_filter = (
+                            f"drawtext=textfile={telemetry_path}:reload=1:"
+                            "fontsize=20:fontcolor=white:borderw=2:bordercolor=black:"
+                            "x=10:y=10"
+                        )
+                        ffmpeg_args = [
+                            ffmpeg_cmd,
+                            "-hide_banner",
+                            "-loglevel",
+                            "error",
+                            "-y",
+                            "-f",
+                            "mpegts",
+                            "-i",
+                            "pipe:0",
+                            "-vf",
+                            drawtext_filter,
+                            "-c:v",
+                            "libx264",
+                            "-preset",
+                            "veryfast",
+                            "-movflags",
+                            "frag_keyframe+empty_moov+default_base_moof",
+                            str(self._output_path),
+                        ]
+                    else:
+                        ffmpeg_args = [
+                            ffmpeg_cmd,
+                            "-hide_banner",
+                            "-loglevel",
+                            "error",
+                            "-y",
+                            "-f",
+                            "mpegts",
+                            "-i",
+                            "pipe:0",
+                            "-c",
+                            "copy",
+                            "-movflags",
+                            "frag_keyframe+empty_moov+default_base_moof",
+                            str(self._output_path),
+                        ]
                     self._muxer_process = subprocess.Popen(
                         ffmpeg_args,
                         stdin=self._process.stdout,
@@ -355,6 +403,7 @@ class CameraRecordingService:
                 # 7. Cleanup failure (Popen raised)
                 self._last_error = str(e)
                 logger.warning("Recording start failed: %s", e)
+                self._stop_telemetry_writer()
                 if self._process is not None:
                     try:
                         self._process.kill()
@@ -380,6 +429,7 @@ class CameraRecordingService:
                 err = _read_process_stderr(self._process) or "Process exited"
                 err_msg = f"exit_code={exit_code}: {err}"
                 self._last_error = err_msg
+                self._stop_telemetry_writer()
                 if self._muxer_process is not None:
                     _wait_and_terminate(self._muxer_process, _MUXER_WAIT_SEC)
                     self._muxer_process = None
@@ -402,6 +452,7 @@ class CameraRecordingService:
                 err = _read_process_stderr(self._muxer_process) or "Process exited"
                 err_msg = f"muxer_exit_code={exit_code}: {err}"
                 self._last_error = err_msg
+                self._stop_telemetry_writer()
                 if self._process is not None:
                     _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
                     self._process = None
@@ -469,6 +520,7 @@ class CameraRecordingService:
         with self._lock:
             basename = self._output_path.name if self._output_path else None
             if self._process is None or self._process.poll() is not None:
+                self._stop_telemetry_writer()
                 if self._ingest is not None:
                     self._ingest.stop()
                     self._ingest = None
@@ -482,6 +534,7 @@ class CameraRecordingService:
             if self._ingest is not None:
                 self._ingest.stop()
                 self._ingest = None
+            self._stop_telemetry_writer()
             # SIGTERM: rpicam-vid may finalize MP4 if given enough time. SIGINT when run as systemd child
             # can exit without writing; --signal has limited MP4 support on Pi 5.
             _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
@@ -518,10 +571,12 @@ class CameraRecordingService:
         """Terminate active recording on app shutdown."""
         with self._lock:
             if self._process is None or self._process.poll() is not None:
+                self._stop_telemetry_writer()
                 if self._muxer_process is not None:
                     _wait_and_terminate(self._muxer_process, _MUXER_WAIT_SEC)
                     self._muxer_process = None
                 return
+            self._stop_telemetry_writer()
             _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
             self._process = None
             if self._muxer_process is not None:

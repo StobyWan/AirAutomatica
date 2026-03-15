@@ -388,6 +388,12 @@ def get_recording_ai_persist_startup_delay_sec() -> float:
     return get_detection_config().recording_persist_startup_delay_sec
 
 
+def get_recording_telemetry_overlay_enabled() -> bool:
+    """True if telemetry should be burned into recordings via ffmpeg drawtext.
+    Default: True. Env: RECORDING_TELEMETRY_OVERLAY (1/true/yes)."""
+    return _parse_positive_env("RECORDING_TELEMETRY_OVERLAY", "1")
+
+
 def get_recording_ai_persist_threshold() -> float:
     """Min confidence to persist recording-time detections. 0.0-1.0. Default: 0.5.
     Persist when confidence >= threshold (inclusive). Stricter than inference threshold
