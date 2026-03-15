@@ -1084,6 +1084,40 @@ def test_ingest_startup_only_on_successful_recording(
     assert svc._ingest is None
 
 
+def test_ingest_not_created_when_session_none(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When persist enabled but session is None, ingest is not created (fail fast)."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.read.return_value = b""
+    mock_persistence = MagicMock()
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(
+                    recordings_dir=recordings_dir,
+                    session_ref=[None],
+                    persistence=mock_persistence,
+                )
+                with patch(
+                    "airautomatica.services.camera_recording.get_recording_ai_persist_enabled",
+                    return_value=True,
+                ):
+                    state, err = svc.start_recording()
+    assert err is None
+    assert state.recording is True
+    assert svc._ingest is None
+
+
 def test_stop_after_failed_or_partial_start_does_not_explode(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:

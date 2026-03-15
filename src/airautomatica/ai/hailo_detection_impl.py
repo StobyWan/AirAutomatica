@@ -1,7 +1,8 @@
-"""Hailo one-shot object detection implementation.
+"""Hailo object detection implementation.
 
+Shared inference pipeline for one-shot (camera capture) and recording-time (frame extraction).
 Uses hailo-apps when available: HailoInfer + extract_detections.
-Frame capture via rpicam-still. Model: yolov6n_h8l.hef from hailo-models.
+Model: yolov6n_h8l.hef from hailo-models.
 
 Verified imports (hailo-apps):
 - hailo_apps.python.core.common.hailo_inference.HailoInfer
@@ -14,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from enum import Enum
 from pathlib import Path
 
 from airautomatica.ai.detection_models import (
@@ -30,6 +32,13 @@ logger = logging.getLogger(__name__)
 HEF_PATH_H8L = Path("/usr/share/hailo-models/yolov6n_h8l.hef")
 CAPTURE_TIMEOUT_SEC = 20
 INFERENCE_TIMEOUT_MS = 15000
+
+
+class DetectionMode(str, Enum):
+    """Explicit mode for detection pipeline. Used for logging and tracing."""
+
+    ONE_SHOT = "one_shot"
+    RECORDING_TIME = "recording_time"
 
 
 def _hailo_apps_available() -> bool:
@@ -89,10 +98,24 @@ def run_inference_on_image_bytes(
 ) -> tuple[DetectionResult, bool]:
     """Run Hailo inference on image bytes (JPEG/PNG). Returns (result, success).
 
-    Public helper for recording-time ingestion and one-shot detection.
+    Prefer run_detection_pipeline for explicit mode handling. This remains for
+    backward compatibility and direct inference calls.
     """
     path = hef_path or HEF_PATH_H8L
     return _run_inference_on_image(image_bytes, path)
+
+
+def run_detection_pipeline(
+    image_bytes: bytes,
+    mode: DetectionMode,
+    hef_path: Path | None = None,
+) -> tuple[DetectionResult, bool]:
+    """Single entry point for inference. Shared by one-shot and recording-time.
+
+    Caller-specific logic (persist, cache, events) stays at call site.
+    """
+    logger.debug("run_detection_pipeline mode=%s len=%s", mode.value, len(image_bytes))
+    return run_inference_on_image_bytes(image_bytes, hef_path)
 
 
 def _run_inference_on_image(
@@ -351,5 +374,5 @@ def run_one_shot_detection() -> DetectionResult:
             errors=[capture_err] if capture_err else ["no frame data"],
         )
 
-    result, _ = run_inference_on_image_bytes(frame_data)
+    result, _ = run_detection_pipeline(frame_data, DetectionMode.ONE_SHOT)
     return result

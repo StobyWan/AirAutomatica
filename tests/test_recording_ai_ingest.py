@@ -71,6 +71,28 @@ def test_extract_latest_frame_returns_none_when_ffmpeg_fails(tmp_path: Path) -> 
             assert _extract_latest_frame(out) is None
 
 
+def test_extract_latest_frame_fallback_to_first_frame_when_latest_fails(
+    tmp_path: Path,
+) -> None:
+    """When latest-frame extraction fails, fall back to first frame; return bytes if fallback succeeds."""
+    out = tmp_path / "rec.mp4"
+    out.write_bytes(b"fake video")
+    fake_frame = b"\xff\xd8\xff\xe0\x00\x10JFIF"
+    with patch(
+        "airautomatica.services.recording_ai_ingest.shutil.which",
+        return_value="/usr/bin/ffmpeg",
+    ):
+        with patch(
+            "airautomatica.services.recording_ai_ingest.subprocess.run",
+            side_effect=[
+                MagicMock(returncode=1, stdout=b"", stderr=b"Invalid argument"),
+                MagicMock(returncode=0, stdout=fake_frame),
+            ],
+        ):
+            result = _extract_latest_frame(out)
+    assert result == fake_frame
+
+
 def test_persist_detections_calls_insert_with_correct_source_backend() -> None:
     """Persisted detections use source_backend=ai_hat_recording and metadata.recording."""
     persistence = MagicMock()
@@ -173,9 +195,22 @@ def test_persist_detections_passes_telemetry_context_when_get_state_provided() -
 
 def test_persist_detections_skips_below_threshold() -> None:
     """Detection with confidence below persist threshold is not persisted (0.5 < 0.6)."""
+    from airautomatica.config import DetectionConfig
+
+    cfg = DetectionConfig(
+        ai_hat_enabled=True,
+        ai_hat_camera_pipeline_enabled=True,
+        ai_hat_object_detection_enabled=True,
+        inference_threshold=0.25,
+        recording_overlay_enabled=True,
+        recording_persist_enabled=True,
+        recording_persist_interval_sec=5.0,
+        recording_persist_startup_delay_sec=3.0,
+        persist_threshold=0.6,
+    )
     with patch(
-        "airautomatica.services.recording_ai_ingest.get_recording_ai_persist_threshold",
-        return_value=0.6,
+        "airautomatica.services.recording_ai_ingest.get_detection_config",
+        return_value=cfg,
     ):
         persistence = MagicMock()
         ingest = RecordingAiIngest(
@@ -208,9 +243,22 @@ def test_persist_detections_skips_below_threshold() -> None:
 
 def test_persist_detections_persists_at_or_above_threshold() -> None:
     """Detection with confidence >= threshold is persisted (0.5 >= 0.5, inclusive)."""
+    from airautomatica.config import DetectionConfig
+
+    cfg = DetectionConfig(
+        ai_hat_enabled=True,
+        ai_hat_camera_pipeline_enabled=True,
+        ai_hat_object_detection_enabled=True,
+        inference_threshold=0.25,
+        recording_overlay_enabled=True,
+        recording_persist_enabled=True,
+        recording_persist_interval_sec=5.0,
+        recording_persist_startup_delay_sec=3.0,
+        persist_threshold=0.5,
+    )
     with patch(
-        "airautomatica.services.recording_ai_ingest.get_recording_ai_persist_threshold",
-        return_value=0.5,
+        "airautomatica.services.recording_ai_ingest.get_detection_config",
+        return_value=cfg,
     ):
         persistence = MagicMock()
         ingest = RecordingAiIngest(
@@ -326,7 +374,7 @@ def test_tick_skips_persist_when_persistence_none(tmp_path: Path) -> None:
             return_value=MagicMock(returncode=0, stdout=b"\xff\xd8"),
         ):
             with patch(
-                "airautomatica.services.recording_ai_ingest.run_inference_on_image_bytes",
+                "airautomatica.services.recording_ai_ingest.run_detection_pipeline",
                 return_value=(
                     DetectionResult(
                         backend="hailo",
@@ -397,7 +445,7 @@ def test_tick_skips_when_inference_fails(tmp_path: Path) -> None:
             return_value=MagicMock(returncode=0, stdout=b"\xff\xd8"),
         ):
             with patch(
-                "airautomatica.services.recording_ai_ingest.run_inference_on_image_bytes",
+                "airautomatica.services.recording_ai_ingest.run_detection_pipeline",
                 return_value=(
                     DetectionResult(
                         backend="hailo",
@@ -438,7 +486,7 @@ def test_tick_persists_when_all_ready(tmp_path: Path) -> None:
             return_value=MagicMock(returncode=0, stdout=b"\xff\xd8"),
         ):
             with patch(
-                "airautomatica.services.recording_ai_ingest.run_inference_on_image_bytes",
+                "airautomatica.services.recording_ai_ingest.run_detection_pipeline",
                 return_value=(
                     DetectionResult(
                         backend="hailo",
@@ -466,6 +514,51 @@ def test_tick_persists_when_all_ready(tmp_path: Path) -> None:
     assert ai_result.source_backend == "ai_hat_recording"
     assert ai_result.label == "person"
     assert ai_result.confidence == 0.92
+
+
+def test_tick_calls_detection_pipeline_with_recording_mode(tmp_path: Path) -> None:
+    """Recording-time detection uses run_detection_pipeline with RECORDING_TIME mode."""
+    from airautomatica.ai.hailo_detection_impl import DetectionMode
+
+    out = tmp_path / "rec.mp4"
+    out.write_bytes(b"x")
+    persistence = MagicMock()
+    ingest = RecordingAiIngest(
+        output_path=out,
+        get_session_id=lambda: 1,
+        persistence=persistence,
+        interval_sec=5.0,
+        startup_delay_sec=0.0,
+    )
+    with patch(
+        "airautomatica.services.recording_ai_ingest.shutil.which",
+        return_value="/usr/bin/ffmpeg",
+    ):
+        with patch(
+            "airautomatica.services.recording_ai_ingest.subprocess.run",
+            return_value=MagicMock(returncode=0, stdout=b"\xff\xd8"),
+        ):
+            with patch(
+                "airautomatica.services.recording_ai_ingest.run_detection_pipeline",
+            ) as mock_pipeline:
+                mock_pipeline.return_value = (
+                    DetectionResult(
+                        backend="hailo",
+                        model="yolov6n",
+                        state="ready",
+                        structured_output_supported=True,
+                        detections=[],
+                        frame_width=640,
+                        frame_height=480,
+                        inference_time_ms=20.0,
+                        errors=[],
+                    ),
+                    True,
+                )
+                ingest._tick()
+    mock_pipeline.assert_called_once()
+    args = mock_pipeline.call_args[0]
+    assert args[1] == DetectionMode.RECORDING_TIME
 
 
 def test_start_stop_does_not_crash() -> None:
