@@ -1,6 +1,9 @@
 {
   "name": "airautomatica-frontend",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

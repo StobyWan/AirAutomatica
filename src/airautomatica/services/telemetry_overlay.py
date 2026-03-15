@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _UPDATE_INTERVAL_SEC = 0.5
-_PLACEHOLDER = "Mode: — | Alt: — | Spd: — | Batt: — | Armed: — | Sats: —"
+_PLACEHOLDER_LINE1 = "Mode: — | Alt: — | Spd: —"
+_PLACEHOLDER_LINE2 = "Batt: — | Armed: — | Sats: —"
 
 
 def _safe_float(v: float | None, fmt: str = ".1f") -> str:
@@ -25,10 +26,11 @@ def _safe_float(v: float | None, fmt: str = ".1f") -> str:
 
 
 def format_telemetry(state: "AircraftState | None") -> str:
-    """Format telemetry for drawtext overlay. Compact single line: mode, alt, speed, battery, armed, sats."""
+    """Format telemetry for drawtext overlay. Two compact lines to fit video frame.
+    Line 1: mode, alt, speed. Line 2: battery, armed, sats."""
     dash = "—"
     if state is None:
-        return _PLACEHOLDER
+        return f"{_PLACEHOLDER_LINE1}\n{_PLACEHOLDER_LINE2}"
     mode = state.mode or dash
     alt = _safe_float(state.rel_alt_m)
     spd = _safe_float(state.groundspeed_m_s)
@@ -37,7 +39,7 @@ def format_telemetry(state: "AircraftState | None") -> str:
     sats = (
         str(state.satellites_visible) if state.satellites_visible is not None else dash
     )
-    return f"Mode: {mode} | Alt: {alt}m | Spd: {spd}m/s | Batt: {batt}V | Armed: {armed} | Sats: {sats}"
+    return f"Mode: {mode} | Alt: {alt}m | Spd: {spd}m/s\nBatt: {batt}V | Armed: {armed} | Sats: {sats}"
 
 
 class TelemetryWriter:

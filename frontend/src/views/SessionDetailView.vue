@@ -58,7 +58,9 @@
       {{ error }}
     </div>
 
-    <div v-else class="space-y-6">
+    <div v-else class="grid grid-rows-[minmax(0,1fr)_auto] gap-6 max-h-[calc(100vh-12rem)] min-h-[32rem]">
+      <!-- Top: path, debrief, detections, AI -->
+      <div class="overflow-y-auto min-h-0 space-y-6 pr-1">
       <!-- Flight path (lazy-loaded when in view) -->
       <section ref="pathSectionRef" class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
         <h2 class="text-base font-semibold text-slate-200 mb-3">Flight Path</h2>
@@ -286,9 +288,11 @@
           </div>
         </div>
       </section>
+      </div>
 
-      <!-- Recordings -->
-      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+      <!-- Bottom: Recordings + Delete -->
+      <div class="overflow-y-auto min-h-0 space-y-6">
+      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4 shrink-0">
         <h2 class="text-base font-semibold text-slate-200 mb-3">Recordings</h2>
         <p class="text-xs text-slate-500 mb-3">Recordings for this flight session</p>
         <div v-if="recordingsLoading" class="py-6 text-center">
@@ -321,11 +325,11 @@
               </button>
             </div>
           </div>
-          <div v-if="playingFilename" class="mt-4 rounded-lg bg-black overflow-hidden">
+          <div v-if="playingFilename" class="mt-4 rounded-lg bg-black overflow-hidden max-w-2xl max-h-[60vh]">
             <video
               ref="videoEl"
               controls
-              class="w-full max-w-2xl"
+              class="w-full h-full object-contain"
               preload="metadata"
               :src="recordingsUrl(playingFilename)"
               @ended="playingFilename = null"
@@ -358,7 +362,7 @@
       <!-- Delete session (bottom) -->
       <section
         v-if="session && !isCurrentSession"
-        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4 flex justify-end"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4 flex justify-end shrink-0"
       >
         <button
           type="button"
@@ -368,6 +372,7 @@
           Delete session
         </button>
       </section>
+      </div>
     </div>
   </div>
 </template>

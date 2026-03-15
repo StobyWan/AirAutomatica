@@ -4,14 +4,7 @@
 
     <div class="relative aspect-video rounded bg-slate-900/50 overflow-hidden">
       <div
-        v-if="cameraRecording"
-        class="absolute inset-0 flex items-center justify-center"
-      >
-        <p class="text-slate-500 text-sm">Camera recording — preview unavailable</p>
-      </div>
-
-      <div
-        v-else-if="!cameraAvailable"
+        v-if="!cameraAvailable"
         class="absolute inset-0 flex items-center justify-center"
       >
         <p class="text-slate-500 text-sm">Camera not available</p>
@@ -29,6 +22,7 @@
           :src="previewUrl"
           class="w-full h-full object-contain"
           alt="Live camera preview"
+          @load="previewError = null"
           @error="onPreviewError"
         />
         <p
@@ -99,12 +93,15 @@ function formatTelemetryHud(state: AircraftState | null): {
 
 const previewUrl = computed(() => {
   const base = String(API_BASE ?? '').replace(/\/$/, '')
-  return base ? `${base}/camera/preview/stream` : '/camera/preview/stream'
+  const path = cameraRecording.value ? '/camera/recording/stream' : '/camera/preview/stream'
+  return base ? `${base}${path}` : path
 })
 
 const previewError = ref<string | null>(null)
 
 function onPreviewError() {
-  previewError.value = 'Unable to load preview'
+  previewError.value = cameraRecording.value
+    ? 'Camera recording — preview unavailable'
+    : 'Unable to load preview'
 }
 </script>

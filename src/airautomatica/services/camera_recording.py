@@ -2,6 +2,7 @@
 
 import json
 import logging
+import queue
 import shutil
 import subprocess
 import threading
@@ -9,7 +10,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, Iterator, List, Optional
 
 from airautomatica.ai.hailo_detection import RPCAM_ASSETS_PATH
 from airautomatica.config import (
@@ -41,6 +42,11 @@ _TERMINATE_WAIT_SEC = (
 )
 _LIVENESS_POLL_SEC = 0.2
 _MUXER_WAIT_SEC = 8.0
+_JPEG_SOI = b"\xff\xd8\xff"
+_JPEG_EOI = b"\xff\xd9"
+_RECORDING_STREAM_BOUNDARY = b"frame"
+_RECORDING_STREAM_QUEUE_MAX = 2
+_RECORDING_STREAM_SENTINEL = object()
 
 
 def get_camera_video_command() -> Optional[str]:
@@ -157,6 +163,8 @@ class CameraRecordingService:
         self._last_recorded_file: Optional[str] = None
         self._last_error: Optional[str] = None
         self._telemetry_writer: Optional[TelemetryWriter] = None
+        self._recording_stream_queue: Optional[queue.Queue[object]] = None
+        self._recording_stream_thread: Optional[threading.Thread] = None
 
     @property
     def recordings_dir(self) -> str:
@@ -181,6 +189,97 @@ class CameraRecordingService:
                 logger.warning("Telemetry writer stop failed: %s", e)
             self._telemetry_writer = None
 
+    def _stop_recording_stream(self) -> None:
+        """Stop recording stream drain thread and signal consumers. Idempotent."""
+        if self._recording_stream_queue is not None:
+            q = self._recording_stream_queue
+            self._recording_stream_queue = None
+            try:
+                while q.full():
+                    q.get_nowait()
+                q.put_nowait(_RECORDING_STREAM_SENTINEL)
+            except Exception:
+                pass
+        if self._recording_stream_thread is not None:
+            self._recording_stream_thread.join(timeout=2.0)
+            self._recording_stream_thread = None
+
+    def _drain_recording_stream(self) -> None:
+        """Read MJPEG from ffmpeg stdout, parse JPEG frames, put in queue. Runs in thread."""
+        if self._muxer_process is None or self._muxer_process.stdout is None:
+            return
+        pipe = self._muxer_process.stdout
+        buf = b""
+        q = self._recording_stream_queue
+        try:
+            while q is not None:
+                chunk = pipe.read(8192) if pipe else b""
+                if not chunk:
+                    break
+                buf += chunk
+                while True:
+                    soi = buf.find(_JPEG_SOI)
+                    if soi < 0:
+                        break
+                    eoi = buf.find(_JPEG_EOI, soi)
+                    if eoi <= soi:
+                        break
+                    frame = buf[soi : eoi + 2]
+                    buf = buf[eoi + 2 :]
+                    try:
+                        if q.full():
+                            q.get_nowait()
+                        q.put_nowait(frame)
+                    except queue.Full:
+                        try:
+                            q.get_nowait()
+                            q.put_nowait(frame)
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.debug("Recording stream drain stopped: %s", e)
+        finally:
+            if q is not None:
+                try:
+                    q.put(_RECORDING_STREAM_SENTINEL)
+                except Exception:
+                    pass
+
+    def get_recording_stream(self) -> Optional[Iterator[bytes]]:
+        """Yield multipart MJPEG chunks when recording with overlay. None when unavailable."""
+        if self._recording_stream_queue is None:
+            return None
+        if self._process is None or self._process.poll() is not None:
+            return None
+        if self._muxer_process is None or self._muxer_process.poll() is not None:
+            return None
+
+        def _generate() -> Iterator[bytes]:
+            q = self._recording_stream_queue
+            if q is None:
+                return
+            try:
+                while True:
+                    item = q.get(timeout=30.0)
+                    if item is _RECORDING_STREAM_SENTINEL:
+                        break
+                    if isinstance(item, bytes):
+                        yield (
+                            b"--"
+                            + _RECORDING_STREAM_BOUNDARY
+                            + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                            + str(len(item)).encode()
+                            + b"\r\n\r\n"
+                            + item
+                            + b"\r\n"
+                        )
+            except queue.Empty:
+                pass
+            except Exception as e:
+                logger.debug("Recording stream consumer stopped: %s", e)
+
+        return _generate()
+
     def _reconcile_dead_processes(self) -> None:
         """Idempotent: detect and clean up dead cam/muxer processes. Call once at start of get_recording_state."""
         if self._muxer_process is not None and self._muxer_process.poll() is not None:
@@ -194,6 +293,7 @@ class CameraRecordingService:
             )
             self._last_error = f"muxer_exit_code={mux_exit}: {mux_err}"
             self._stop_telemetry_writer()
+            self._stop_recording_stream()
             if self._process is not None and self._process.poll() is None:
                 _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
                 self._process = None
@@ -213,6 +313,7 @@ class CameraRecordingService:
                 err,
             )
             self._stop_telemetry_writer()
+            self._stop_recording_stream()
             if self._muxer_process is not None:
                 _wait_and_terminate(self._muxer_process, _MUXER_WAIT_SEC)
                 self._muxer_process = None
@@ -345,6 +446,8 @@ class CameraRecordingService:
                             "pipe:0",
                             "-vf",
                             drawtext_filter,
+                            "-map",
+                            "0:v",
                             "-c:v",
                             "libx264",
                             "-preset",
@@ -352,6 +455,15 @@ class CameraRecordingService:
                             "-movflags",
                             "frag_keyframe+empty_moov+default_base_moof",
                             str(self._output_path),
+                            "-map",
+                            "0:v",
+                            "-c:v",
+                            "mjpeg",
+                            "-q:v",
+                            "5",
+                            "-f",
+                            "mjpeg",
+                            "pipe:1",
                         ]
                     else:
                         ffmpeg_args = [
@@ -370,14 +482,31 @@ class CameraRecordingService:
                             "frag_keyframe+empty_moov+default_base_moof",
                             str(self._output_path),
                         ]
+                    muxer_stdout = (
+                        subprocess.PIPE
+                        if use_telemetry_overlay and self._get_state is not None
+                        else subprocess.DEVNULL
+                    )
                     self._muxer_process = subprocess.Popen(
                         ffmpeg_args,
                         stdin=self._process.stdout,
-                        stdout=subprocess.DEVNULL,
+                        stdout=muxer_stdout,
                         stderr=subprocess.PIPE,
                     )
                     if self._process.stdout:
                         self._process.stdout.close()
+                    if (
+                        muxer_stdout == subprocess.PIPE
+                        and self._muxer_process.stdout is not None
+                    ):
+                        self._recording_stream_queue = queue.Queue(
+                            maxsize=_RECORDING_STREAM_QUEUE_MAX
+                        )
+                        self._recording_stream_thread = threading.Thread(
+                            target=self._drain_recording_stream,
+                            daemon=True,
+                        )
+                        self._recording_stream_thread.start()
                     logger.info(
                         "Recording command launched pid=%s: %s",
                         self._process.pid,
@@ -408,6 +537,7 @@ class CameraRecordingService:
                 self._last_error = str(e)
                 logger.warning("Recording start failed: %s", e)
                 self._stop_telemetry_writer()
+                self._stop_recording_stream()
                 if self._process is not None:
                     try:
                         self._process.kill()
@@ -434,6 +564,7 @@ class CameraRecordingService:
                 err_msg = f"exit_code={exit_code}: {err}"
                 self._last_error = err_msg
                 self._stop_telemetry_writer()
+                self._stop_recording_stream()
                 if self._muxer_process is not None:
                     _wait_and_terminate(self._muxer_process, _MUXER_WAIT_SEC)
                     self._muxer_process = None
@@ -457,6 +588,7 @@ class CameraRecordingService:
                 err_msg = f"muxer_exit_code={exit_code}: {err}"
                 self._last_error = err_msg
                 self._stop_telemetry_writer()
+                self._stop_recording_stream()
                 if self._process is not None:
                     _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
                     self._process = None
@@ -525,6 +657,7 @@ class CameraRecordingService:
             basename = self._output_path.name if self._output_path else None
             if self._process is None or self._process.poll() is not None:
                 self._stop_telemetry_writer()
+                self._stop_recording_stream()
                 if self._ingest is not None:
                     self._ingest.stop()
                     self._ingest = None
@@ -539,6 +672,7 @@ class CameraRecordingService:
                 self._ingest.stop()
                 self._ingest = None
             self._stop_telemetry_writer()
+            self._stop_recording_stream()
             # SIGTERM: rpicam-vid may finalize MP4 if given enough time. SIGINT when run as systemd child
             # can exit without writing; --signal has limited MP4 support on Pi 5.
             _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
@@ -576,11 +710,13 @@ class CameraRecordingService:
         with self._lock:
             if self._process is None or self._process.poll() is not None:
                 self._stop_telemetry_writer()
+                self._stop_recording_stream()
                 if self._muxer_process is not None:
                     _wait_and_terminate(self._muxer_process, _MUXER_WAIT_SEC)
                     self._muxer_process = None
                 return
             self._stop_telemetry_writer()
+            self._stop_recording_stream()
             _wait_and_terminate(self._process, _TERMINATE_WAIT_SEC)
             self._process = None
             if self._muxer_process is not None:

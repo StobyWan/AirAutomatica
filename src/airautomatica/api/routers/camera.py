@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Body
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from airautomatica.config import get_camera_recording_mode
 from airautomatica.services.camera_preview import stream_preview_frames
@@ -65,30 +65,22 @@ def create_camera_router(
     def get_camera_preview_stream():
         """Stream live camera preview as MJPEG. Returns 503 when recording."""
         if camera_recording_service is None:
-            from fastapi.responses import JSONResponse
-
             return JSONResponse(
                 status_code=503,
                 content={"error": "Camera not available"},
             )
         state = camera_recording_service.get_recording_state()
         if state.recording:
-            from fastapi.responses import JSONResponse
-
             return JSONResponse(
                 status_code=503,
                 content={"error": "Camera busy (recording)"},
             )
         if not camera_recording_service.is_available():
-            from fastapi.responses import JSONResponse
-
             return JSONResponse(
                 status_code=503,
                 content={"error": "Camera not available"},
             )
         if not get_camera_ready():
-            from fastapi.responses import JSONResponse
-
             return JSONResponse(
                 status_code=503,
                 content={
@@ -102,6 +94,27 @@ def create_camera_router(
 
         return StreamingResponse(
             stream_preview_frames(is_recording),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
+
+    @router.get("/recording/stream")
+    def get_camera_recording_stream():
+        """Stream live MJPEG from recording pipeline when recording with overlay. Returns 503 otherwise."""
+        if camera_recording_service is None:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Camera not available"},
+            )
+        stream = camera_recording_service.get_recording_stream()
+        if stream is None:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Recording stream unavailable (not recording or overlay disabled)",
+                },
+            )
+        return StreamingResponse(
+            stream,
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
 
