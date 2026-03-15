@@ -1256,7 +1256,15 @@
     });
   </script>
   <script>
-    const socket = io();
+    const basePath = (window.AIRAUTOMATICA_BASE_PATH || '').replace(/\/$/, '');
+    const socket = basePath ? io({ path: basePath + '/socket.io' }) : io();
+    const CONNECT_TIMEOUT_MS = 8000;
+    const connectTimeout = setTimeout(() => {
+      const el = document.getElementById('connection-status');
+      if (el && el.textContent === 'Connecting…') {
+        el.textContent = 'Connection timeout — check server';
+      }
+    }, CONNECT_TIMEOUT_MS);
 
     // --- Telemetry utilities ---
     const R_EARTH_M = 6_371_000;
@@ -1511,14 +1519,13 @@
         }
       }
 
-      // Quick telemetry row
+      // Quick telemetry row (relAlt already declared above in altitude section)
       const qtAlt = document.getElementById('qt-alt');
       const qtSpeed = document.getElementById('qt-speed');
       const qtVoltage = document.getElementById('qt-voltage');
       const qtGps = document.getElementById('qt-gps');
       const qtHeading = document.getElementById('qt-heading');
       const qtLink = document.getElementById('qt-link');
-      const relAlt = s.rel_alt_m;
       const spd = s.airspeed_m_s ?? s.groundspeed_m_s;
       const gpsFix = s.gps_fix_type;
       const linkStatus = s.telemetry_status ?? 'disconnected';
@@ -1688,7 +1695,9 @@
 
     let aiStatusPollInterval = null;
     socket.on('connect', () => {
-      document.getElementById('connection-status').textContent = 'Connected';
+      clearTimeout(connectTimeout);
+      const el = document.getElementById('connection-status');
+      if (el) el.textContent = 'Connected';
       refreshRecordingsUI();
       refreshAiStatus();
       if (aiStatusPollInterval) clearInterval(aiStatusPollInterval);
@@ -1715,9 +1724,15 @@
         renderSessionsList(list, currentId, ap, cm);
       }).catch(() => {});
     });
+    socket.on('connect_error', () => {
+      clearTimeout(connectTimeout);
+      const el = document.getElementById('connection-status');
+      if (el) el.textContent = 'Connection failed';
+    });
     socket.on('disconnect', () => {
       if (aiStatusPollInterval) { clearInterval(aiStatusPollInterval); aiStatusPollInterval = null; }
-      document.getElementById('connection-status').textContent = 'Disconnected';
+      const el = document.getElementById('connection-status');
+      if (el) el.textContent = 'Disconnected';
       const stateBadge = document.getElementById('video-state-badge');
       if (stateBadge) {
         stateBadge.textContent = 'Disconnected';
