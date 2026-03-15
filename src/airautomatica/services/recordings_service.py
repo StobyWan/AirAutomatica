@@ -122,7 +122,7 @@ def _get_duration_sec(path: Path) -> Optional[float]:
     return None
 
 
-def _safe_basename(filename: str) -> bool:
+def _is_safe_basename(filename: str) -> bool:
     """Return True if filename is a safe basename (no path traversal)."""
     if not filename or ".." in filename or "/" in filename or "\\" in filename:
         return False
@@ -291,7 +291,7 @@ class RecordingsService:
 
     def delete_recording(self, filename: str) -> bool:
         """Delete recording by basename. Returns True on success. Path traversal protected."""
-        if not _safe_basename(filename):
+        if not _is_safe_basename(filename):
             return False
         path = self._dir / filename
         if not path.is_file():

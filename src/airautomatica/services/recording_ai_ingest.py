@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -182,8 +183,6 @@ class RecordingAiIngest:
             bbox = None
             if det.bbox is not None:
                 bbox = (det.bbox.x, det.bbox.y, det.bbox.width, det.bbox.height)
-            from datetime import datetime, timezone
-
             state = self._get_state() if self._get_state else None
             lat = nan_to_none(state.lat) if state is not None else None
             lon = nan_to_none(state.lon) if state is not None else None
