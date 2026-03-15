@@ -86,6 +86,15 @@ def create_camera_router(
                 status_code=503,
                 content={"error": "Camera not available"},
             )
+        if not get_camera_ready():
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Camera not ready. Turn on Camera Ready in Operations."
+                },
+            )
 
         def is_recording() -> bool:
             s = camera_recording_service.get_recording_state()

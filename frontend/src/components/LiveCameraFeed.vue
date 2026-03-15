@@ -16,6 +16,13 @@
       <p class="text-slate-500 text-sm">Camera not available</p>
     </div>
 
+    <div
+      v-else-if="!cameraReady"
+      class="aspect-video rounded bg-slate-900/50 flex items-center justify-center"
+    >
+      <p class="text-slate-500 text-sm">Turn on Camera Ready in Operations to view live feed</p>
+    </div>
+
     <div v-else class="relative aspect-video rounded bg-black overflow-hidden">
       <img
         :src="previewUrl"
@@ -46,6 +53,10 @@ const cameraRecording = computed(
 
 const cameraAvailable = computed(
   () => healthStore.lastHealth?.camera_recording_available !== false
+)
+
+const cameraReady = computed(
+  () => healthStore.lastHealth?.camera_ready === true
 )
 
 const previewUrl = computed(() => {
