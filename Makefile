@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check run setup-ollama pi-thermal pi-ollama pi-log-thermal pi-snapshot pi-diag pi-download-deb pi-upgrade-deb pi-upgrade-latest
+.PHONY: install format lint typecheck test check run setup-ollama pi-thermal pi-ollama pi-log-thermal pi-snapshot pi-diag pi-recordings pi-download-deb pi-upgrade-deb pi-upgrade-latest
 
 install:
 	uv pip install -e ".[dev]"
@@ -41,6 +41,9 @@ pi-snapshot:
 
 pi-diag:
 	bash scripts/pi/quick_diag.sh
+
+pi-recordings:
+	bash scripts/pi/list_recordings.sh
 
 pi-verify-video:
 	uv run python scripts/pi/verify_video_playback.py
