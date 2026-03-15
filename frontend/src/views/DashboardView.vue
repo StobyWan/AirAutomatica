@@ -8,9 +8,26 @@
       Reconnecting…
     </div>
     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-      <h1 class="text-xl font-bold text-slate-100 tracking-tight">
+      <h1 class="flex items-center gap-2 text-xl font-bold text-slate-100 tracking-tight">
+        <span class="text-connecting shrink-0" aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 512 512"
+            role="img"
+            aria-label="AirAutomatica logo"
+            class="h-8 w-8"
+          >
+            <title>AirAutomatica</title>
+            <g fill="currentColor">
+              <path d="M56 252 L210 168 L242 186 L144 252 L242 326 L210 344 Z" />
+              <path d="M456 252 L302 168 L270 186 L368 252 L270 326 L302 344 Z" />
+              <path d="M256 86 L374 404 H324 L294 334 H218 L188 404 H138 Z M237 284 H275 L256 226 Z" />
+              <rect x="208" y="284" width="96" height="32" rx="16" />
+            </g>
+          </svg>
+        </span>
         AIRAUTOMATICA Dashboard
-        <span v-if="appVersion" class="text-slate-500 font-normal text-sm ml-2">v{{ appVersion }}</span>
+        <span v-if="appVersion" class="text-slate-500 font-normal text-sm">v{{ appVersion }}</span>
       </h1>
       <div class="flex items-center gap-2">
         <span
