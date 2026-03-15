@@ -152,6 +152,38 @@ def test_get_recording_ai_overlay_enabled_explicit_off(
     assert get_recording_ai_overlay_enabled() is False
 
 
+def test_get_detection_config_resolves_dependency_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_detection_config resolves overlay and persist from ai_hat chain."""
+    monkeypatch.setenv("AI_HAT_ENABLED", "1")
+    monkeypatch.delenv("RECORDING_AI_OVERLAY_ENABLED", raising=False)
+    monkeypatch.delenv("RECORDING_AI_PERSIST_ENABLED", raising=False)
+    from airautomatica.config import DetectionConfig, get_detection_config
+
+    cfg = get_detection_config()
+    assert isinstance(cfg, DetectionConfig)
+    assert cfg.ai_hat_enabled is True
+    assert cfg.recording_overlay_enabled is True
+    assert cfg.recording_persist_enabled is True
+    assert cfg.inference_threshold == 0.25
+    assert cfg.persist_threshold == 0.5
+
+
+def test_get_detection_config_overlay_off_disables_persist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When overlay disabled, persist is disabled regardless of RECORDING_AI_PERSIST."""
+    monkeypatch.setenv("AI_HAT_ENABLED", "1")
+    monkeypatch.setenv("RECORDING_AI_OVERLAY_ENABLED", "0")
+    monkeypatch.setenv("RECORDING_AI_PERSIST_ENABLED", "1")
+    from airautomatica.config import get_detection_config
+
+    cfg = get_detection_config()
+    assert cfg.recording_overlay_enabled is False
+    assert cfg.recording_persist_enabled is False
+
+
 def test_get_recording_ai_persist_threshold_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

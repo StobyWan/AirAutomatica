@@ -421,12 +421,21 @@ class CameraRecordingService:
             self._last_error = None
             basename = self._output_path.name
             logger.info("Recording started (%s): %s", cmd, basename)
+            session_id = self._session_ref[0] if self._session_ref else None
+            persist_enabled = get_recording_ai_persist_enabled()
+            if persist_enabled and session_id is None:
+                logger.info(
+                    "Recording AI persist skipped: no active session. Start session before recording for detections."
+                )
             if (
-                get_recording_ai_persist_enabled()
+                persist_enabled
                 and self._output_path is not None
                 and self._session_ref is not None
                 and self._persistence is not None
+                and session_id is not None
             ):
+                # Fail fast: only create ingest when session is active. Avoids spinning
+                # a thread that will always skip persist.
 
                 def _get_sid() -> Optional[int]:
                     return self._session_ref[0] if self._session_ref else None

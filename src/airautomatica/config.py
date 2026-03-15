@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -59,15 +60,90 @@ def get_local_llm_provider() -> str:
     return "ollama"
 
 
-def get_ai_hat_enabled() -> bool:
-    """True if AI HAT layer should be enabled alongside local LLM provider.
-    Env: AI_HAT_ENABLED (1/true/yes) or legacy AI_MODE=aihat."""
+def _parse_float_env(
+    key: str, default: float, min_val: float | None = None, max_val: float | None = None
+) -> float:
+    """Parse float from env. Returns default on parse error."""
+    try:
+        v = float(os.environ.get(key, str(default)))
+        if min_val is not None:
+            v = max(min_val, v)
+        if max_val is not None:
+            v = min(max_val, v)
+        return v
+    except ValueError:
+        return default
+
+
+def _parse_positive_env(key: str, default: str = "1") -> bool:
+    """Parse 1/true/yes from env. Returns True if value is positive."""
+    raw = os.environ.get(key, default).lower().strip()
+    return raw in ("1", "true", "yes")
+
+
+@dataclass(frozen=True)
+class DetectionConfig:
+    """All detection-related settings in one place. Resolved by get_detection_config()."""
+
+    ai_hat_enabled: bool
+    ai_hat_camera_pipeline_enabled: bool
+    ai_hat_object_detection_enabled: bool
+    inference_threshold: float  # AI_HAT_DETECTION_THRESHOLD; filters at inference time
+    recording_overlay_enabled: bool
+    recording_persist_enabled: bool
+    recording_persist_interval_sec: float
+    recording_persist_startup_delay_sec: float
+    persist_threshold: (
+        float  # RECORDING_AI_PERSIST_THRESHOLD; filters before persist (stricter)
+    )
+
+
+def get_detection_config() -> DetectionConfig:
+    """Single resolution for all detection config. No cascading conditionals across callers."""
+    ai_hat = _resolve_ai_hat_enabled()
+    overlay = ai_hat and _parse_positive_env("RECORDING_AI_OVERLAY_ENABLED", "1")
+    persist = overlay and _parse_positive_env("RECORDING_AI_PERSIST_ENABLED", "1")
+    camera_pipeline = ai_hat and _parse_positive_env(
+        "AI_HAT_CAMERA_PIPELINE_ENABLED", "1"
+    )
+    object_detection = ai_hat and _parse_positive_env(
+        "AI_HAT_OBJECT_DETECTION_ENABLED", "1"
+    )
+    return DetectionConfig(
+        ai_hat_enabled=ai_hat,
+        ai_hat_camera_pipeline_enabled=camera_pipeline,
+        ai_hat_object_detection_enabled=object_detection,
+        inference_threshold=_parse_float_env(
+            "AI_HAT_DETECTION_THRESHOLD", 0.25, 0.0, 1.0
+        ),
+        recording_overlay_enabled=overlay,
+        recording_persist_enabled=persist,
+        recording_persist_interval_sec=_parse_float_env(
+            "RECORDING_AI_PERSIST_INTERVAL_SEC", 5.0, 1.0
+        ),
+        recording_persist_startup_delay_sec=_parse_float_env(
+            "RECORDING_AI_PERSIST_STARTUP_DELAY_SEC", 3.0, 0.0
+        ),
+        persist_threshold=_parse_float_env(
+            "RECORDING_AI_PERSIST_THRESHOLD", 0.5, 0.0, 1.0
+        ),
+    )
+
+
+def _resolve_ai_hat_enabled() -> bool:
+    """Resolve AI_HAT_ENABLED from env or legacy AI_MODE=aihat."""
     explicit = os.environ.get("AI_HAT_ENABLED", "").lower()
     if explicit in ("1", "true", "yes"):
         return True
     if explicit in ("0", "false", "no"):
         return False
     return get_ai_mode() == "aihat"
+
+
+def get_ai_hat_enabled() -> bool:
+    """True if AI HAT layer should be enabled alongside local LLM provider.
+    Env: AI_HAT_ENABLED (1/true/yes) or legacy AI_MODE=aihat."""
+    return get_detection_config().ai_hat_enabled
 
 
 def get_effective_ai_backend() -> str:
@@ -147,29 +223,19 @@ def get_ai_hat_require_hardware() -> bool:
 
 def get_ai_hat_camera_pipeline_enabled() -> bool:
     """True if AI HAT camera pipeline is enabled. Default: True when AI HAT enabled."""
-    if not get_ai_hat_enabled():
-        return False
-    raw = os.environ.get("AI_HAT_CAMERA_PIPELINE_ENABLED", "1").lower().strip()
-    return raw in ("1", "true", "yes")
+    return get_detection_config().ai_hat_camera_pipeline_enabled
 
 
 def get_ai_hat_object_detection_enabled() -> bool:
     """True if AI HAT object detection is enabled. Default: True when AI HAT enabled."""
-    if not get_ai_hat_enabled():
-        return False
-    raw = os.environ.get("AI_HAT_OBJECT_DETECTION_ENABLED", "1").lower().strip()
-    return raw in ("1", "true", "yes")
+    return get_detection_config().ai_hat_object_detection_enabled
 
 
 def get_ai_hat_detection_threshold() -> float:
     """Min confidence for AI HAT detections. 0.0-1.0. Default: 0.25.
     Suppresses weak detections below this threshold. Separate from AI_MIN_CONFIDENCE (mission logic).
     """
-    try:
-        v = float(os.environ.get("AI_HAT_DETECTION_THRESHOLD", "0.25"))
-        return max(0.0, min(1.0, v))
-    except ValueError:
-        return 0.25
+    return get_detection_config().inference_threshold
 
 
 def get_ai_min_confidence() -> float:
@@ -275,41 +341,27 @@ def get_recording_ai_overlay_enabled() -> bool:
     Default: True when AI HAT enabled, else False.
     Only applies when rpicam-vid is used (not libcamera-vid).
     Env: RECORDING_AI_OVERLAY_ENABLED (1/true/yes)."""
-    if not get_ai_hat_enabled():
-        return False
-    raw = os.environ.get("RECORDING_AI_OVERLAY_ENABLED", "1").lower().strip()
-    return raw in ("1", "true", "yes")
+    return get_detection_config().recording_overlay_enabled
 
 
 def get_recording_ai_persist_enabled() -> bool:
     """True if recording-time detections should be persisted to Recent Detections.
     Default: True when AI HAT + overlay enabled, else False.
     Env: RECORDING_AI_PERSIST_ENABLED (1/true/yes)."""
-    if not get_ai_hat_enabled() or not get_recording_ai_overlay_enabled():
-        return False
-    raw = os.environ.get("RECORDING_AI_PERSIST_ENABLED", "1").lower().strip()
-    return raw in ("1", "true", "yes")
+    return get_detection_config().recording_persist_enabled
 
 
 def get_recording_ai_persist_interval_sec() -> float:
     """Seconds between frame extractions for recording-time persistence. Default: 5.
     Env: RECORDING_AI_PERSIST_INTERVAL_SEC."""
-    try:
-        return max(1.0, float(os.environ.get("RECORDING_AI_PERSIST_INTERVAL_SEC", "5")))
-    except ValueError:
-        return 5.0
+    return get_detection_config().recording_persist_interval_sec
 
 
 def get_recording_ai_persist_startup_delay_sec() -> float:
     """Grace period before first frame extraction. Default: 3.
     Avoids pounding the file before the first useful fragment exists.
     Env: RECORDING_AI_PERSIST_STARTUP_DELAY_SEC."""
-    try:
-        return max(
-            0.0, float(os.environ.get("RECORDING_AI_PERSIST_STARTUP_DELAY_SEC", "3"))
-        )
-    except ValueError:
-        return 3.0
+    return get_detection_config().recording_persist_startup_delay_sec
 
 
 def get_recording_ai_persist_threshold() -> float:
@@ -317,11 +369,7 @@ def get_recording_ai_persist_threshold() -> float:
     Persist when confidence >= threshold (inclusive). Stricter than inference threshold
     (AI_HAT_DETECTION_THRESHOLD). Aligns with AI_MIN_CONFIDENCE (mission logic).
     """
-    try:
-        v = float(os.environ.get("RECORDING_AI_PERSIST_THRESHOLD", "0.5"))
-        return max(0.0, min(1.0, v))
-    except ValueError:
-        return 0.5
+    return get_detection_config().persist_threshold
 
 
 def get_camera_recording_mode() -> str:

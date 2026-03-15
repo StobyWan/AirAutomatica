@@ -15,13 +15,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
 from airautomatica.ai.detection_models import DetectionResult
-from airautomatica.ai.hailo_detection_impl import run_inference_on_image_bytes
-from airautomatica.ai.models import AiResult
-from airautomatica.config import (
-    get_recording_ai_persist_interval_sec,
-    get_recording_ai_persist_startup_delay_sec,
-    get_recording_ai_persist_threshold,
+from airautomatica.ai.hailo_detection_impl import (
+    DetectionMode,
+    run_detection_pipeline,
 )
+from airautomatica.ai.models import AiResult
+from airautomatica.config import get_detection_config
 from airautomatica.models.state import nan_to_none
 
 if TYPE_CHECKING:
@@ -36,35 +35,92 @@ _FAILURE_THRESHOLD_BEFORE_WARN = 5
 
 
 def _extract_latest_frame(output_path: Path) -> bytes | None:
-    """Extract one frame from video file via ffmpeg. Returns None if file not ready or extraction fails."""
+    """Extract one frame from video file via ffmpeg. Prefers latest frame (near EOF);
+    falls back to first frame if seeking fails (e.g. fragmented MP4 being written).
+    Returns None if file not ready or extraction fails."""
     ffmpeg = shutil.which(_FFMPEG_COMMAND)
     if not ffmpeg:
+        logger.debug("Recording AI ingest: ffmpeg not found")
         return None
     if not output_path.exists():
+        logger.debug("Recording AI ingest: file not found path=%s", output_path)
         return None
+    # Try latest frame first (seek 1s before EOF). For in-progress recordings,
+    # this yields a representative frame; first frame is often dark/empty.
+    latest_args = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-sseof",
+        "-1",
+        "-i",
+        str(output_path),
+        "-vframes",
+        "1",
+        "-f",
+        "image2",
+        "pipe:1",
+    ]
     try:
         result = subprocess.run(
-            [
-                ffmpeg,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                str(output_path),
-                "-vframes",
-                "1",
-                "-f",
-                "image2",
-                "pipe:1",
-            ],
+            latest_args,
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout:
+            logger.debug(
+                "Recording AI ingest: extracted latest frame path=%s len=%s",
+                output_path,
+                len(result.stdout),
+            )
+            return result.stdout
+        # Fallback: first decodable frame (original behavior). Works when -sseof
+        # fails (e.g. fragmented MP4, very short file, or read-while-write).
+        if result.returncode != 0 or not result.stdout:
+            logger.debug(
+                "Recording AI ingest: latest-frame failed rc=%s stderr=%r, trying first frame",
+                result.returncode,
+                (result.stderr or b"").decode("utf-8", errors="replace")[:200],
+            )
+        first_args = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(output_path),
+            "-vframes",
+            "1",
+            "-f",
+            "image2",
+            "pipe:1",
+        ]
+        result = subprocess.run(
+            first_args,
             capture_output=True,
             timeout=5,
         )
         if result.returncode != 0 or not result.stdout:
+            logger.debug(
+                "Recording AI ingest: first-frame also failed rc=%s stderr=%r path=%s",
+                result.returncode,
+                (result.stderr or b"").decode("utf-8", errors="replace")[:200],
+                output_path,
+            )
             return None
+        logger.debug(
+            "Recording AI ingest: extracted first frame (fallback) path=%s len=%s",
+            output_path,
+            len(result.stdout),
+        )
         return result.stdout
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as e:
+        logger.debug(
+            "Recording AI ingest: ffmpeg exception path=%s err=%s", output_path, e
+        )
         return None
 
 
@@ -85,9 +141,10 @@ class RecordingAiIngest:
         self._get_session_id = get_session_id
         self._persistence = persistence
         self._get_state = get_state
-        self._interval_sec = interval_sec or get_recording_ai_persist_interval_sec()
+        cfg = get_detection_config()
+        self._interval_sec = interval_sec or cfg.recording_persist_interval_sec
         self._startup_delay_sec = (
-            startup_delay_sec or get_recording_ai_persist_startup_delay_sec()
+            startup_delay_sec or cfg.recording_persist_startup_delay_sec
         )
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -105,7 +162,7 @@ class RecordingAiIngest:
             "Recording AI persist enabled: interval=%.0fs startup_delay=%.0fs persist_threshold=%.2f",
             self._interval_sec,
             self._startup_delay_sec,
-            get_recording_ai_persist_threshold(),
+            get_detection_config().persist_threshold,
         )
 
     def stop(self) -> None:
@@ -134,24 +191,36 @@ class RecordingAiIngest:
                 self._output_path,
             )
             return
-        result, success = run_inference_on_image_bytes(frame_bytes)
+        logger.debug(
+            "Recording AI ingest: frame extracted path=%s len=%s",
+            self._output_path,
+            len(frame_bytes),
+        )
+        result, success = run_detection_pipeline(
+            frame_bytes, DetectionMode.RECORDING_TIME
+        )
+        logger.debug(
+            "Recording AI ingest: inference state=%s success=%s detections=%s",
+            result.state,
+            success,
+            len(result.detections),
+        )
         if not success or result.state != "ready":
-            logger.debug(
-                "Recording AI ingest: inference failed or no detections, state=%s",
-                result.state,
-            )
             self._failure_count += 1
             if self._failure_count >= _FAILURE_THRESHOLD_BEFORE_WARN:
                 logger.warning(
-                    "Recording AI ingest: repeated inference failures (count=%s)",
+                    "Recording AI ingest: repeated inference failures (count=%s) state=%s",
                     self._failure_count,
+                    result.state,
                 )
             return
         self._failure_count = 0
         session_id = self._get_session_id()
         if session_id is None or self._persistence is None:
-            logger.debug(
-                "Recording AI ingest: no session or persistence, skipping persist"
+            logger.info(
+                "Recording AI ingest: skipping persist session_id=%s persistence=%s (start session before recording for detections)",
+                session_id,
+                "none" if self._persistence is None else "ok",
             )
             return
         self._persist_detections(session_id, result)
@@ -160,7 +229,7 @@ class RecordingAiIngest:
         """Persist each detection with confidence >= threshold (inclusive), with deduplication."""
         if self._persistence is None:
             return
-        persist_threshold = get_recording_ai_persist_threshold()
+        persist_threshold = get_detection_config().persist_threshold
         now = time.monotonic()
         for det in result.detections:
             label = det.label
