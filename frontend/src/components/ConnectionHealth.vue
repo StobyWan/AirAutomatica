@@ -48,7 +48,7 @@
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
         <div
           v-for="([label, value]) in healthFields"
-          :key="label"
+          :key="String(label)"
           class="field"
         >
           <label class="text-xs text-slate-500">{{ label }}</label>
@@ -58,7 +58,7 @@
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
         <div
           v-for="([label, value]) in sessionFields"
-          :key="label"
+          :key="String(label)"
           class="field"
         >
           <label class="text-xs text-slate-500">{{ label }}</label>

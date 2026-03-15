@@ -111,8 +111,8 @@ export function fmtTsTime(ts: unknown): string {
 }
 
 export function labelAutopilot(s: {
-  autopilot?: string
-  connection_mode?: string
+  autopilot?: string | null
+  connection_mode?: string | null
 }): string {
   const a = s?.autopilot
   if (a === 'mock' || (s?.connection_mode === 'mock' && !a)) {
@@ -126,7 +126,7 @@ export function labelAutopilot(s: {
 
 export function labelMode(s: {
   connection_mode?: string | null
-  telemetry_backend?: string
+  telemetry_backend?: string | null
 }): string {
   const m =
     s?.connection_mode ??

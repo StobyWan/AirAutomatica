@@ -2,7 +2,7 @@
   <div class="flex flex-wrap items-center gap-2 py-2 px-3 rounded-lg border border-slate-700 bg-slate-800/50 mb-4">
     <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">Telemetry</span>
     <span class="chip" :class="chipClass(altNa)">Alt {{ altText }}</span>
-    <span class="chip" :class="chipClass(altNa)">Spd {{ spdText }}</span>
+    <span class="chip" :class="chipClass(spdNa)">Spd {{ spdText }}</span>
     <span class="chip" :class="chipClass(voltageNa)">V {{ voltageText }}</span>
     <span class="chip" :class="chipClass(gpsNa)">GPS {{ gpsText }}</span>
     <span class="chip" :class="chipClass(hdgNa)">Hdg {{ hdgText }}</span>

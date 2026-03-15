@@ -115,8 +115,9 @@ function clearFilters() {
   sessionsStore.fetchSessions()
 }
 
-function getDetectionCount(s: { detection_count?: number }): number | null {
-  return s.detection_count ?? null
+function getDetectionCount(s: Record<string, unknown>): number | null {
+  const v = s.detection_count
+  return typeof v === 'number' ? v : null
 }
 
 onMounted(() => {

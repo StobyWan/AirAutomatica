@@ -11,19 +11,23 @@ export class ApiError extends Error {
   }
 }
 
+type RequestOptions = Omit<RequestInit, 'body'> & { body?: Record<string, unknown> }
+
 async function request<T>(
   path: string,
-  options?: RequestInit & { body?: object }
+  options?: RequestOptions
 ): Promise<T> {
   const url = API_BASE ? API_BASE + path : path
   const { body, ...init } = options ?? {}
+  const fetchBody: BodyInit | null | undefined =
+    body != null ? JSON.stringify(body) : undefined
   const res = await fetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...init.headers,
     },
-    body: body ? JSON.stringify(body) : init.body,
+    body: fetchBody,
   })
   const text = await res.text()
   if (!res.ok) {
@@ -41,11 +45,17 @@ export async function get<T>(path: string): Promise<T> {
   return request<T>(path, { method: 'GET' })
 }
 
-export async function post<T>(path: string, body?: object): Promise<T> {
+export async function post<T>(
+  path: string,
+  body?: Record<string, unknown>
+): Promise<T> {
   return request<T>(path, { method: 'POST', body })
 }
 
-export async function patch<T>(path: string, body?: object): Promise<T> {
+export async function patch<T>(
+  path: string,
+  body?: Record<string, unknown>
+): Promise<T> {
   return request<T>(path, { method: 'PATCH', body })
 }
 
