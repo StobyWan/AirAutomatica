@@ -536,7 +536,7 @@
         </div>
       </div>
 
-      <div class="settings-section" data-keys="CAMERA_RECORDING_MODE,RECORDING_AI_OVERLAY_ENABLED">
+      <div class="settings-section" data-keys="CAMERA_RECORDING_MODE,RECORDING_AI_OVERLAY_ENABLED,RECORDING_AI_PERSIST_ENABLED">
         <h3>Camera Recording <span class="apply-hint text-xs font-normal text-slate-500"></span></h3>
         <div class="settings-field">
           <label for="CAMERA_RECORDING_MODE">Recording mode</label>
@@ -553,6 +553,13 @@
             <span>Recording AI overlay</span>
           </label>
           <span class="text-xs text-slate-500 mt-1 block">When AI HAT enabled: draw detection bounding boxes on recorded video. Requires rpicam-vid and postprocess assets. Takes effect on next recording.</span>
+        </div>
+        <div class="settings-field mt-3">
+          <label class="flex items-center gap-2 cursor-pointer" title="Persist detections to Recent Detections during recording.">
+            <input type="checkbox" id="RECORDING_AI_PERSIST_ENABLED" name="RECORDING_AI_PERSIST_ENABLED" value="1" />
+            <span>Recording AI persist</span>
+          </label>
+          <span class="text-xs text-slate-500 mt-1 block">When overlay enabled: extract frames and run Hailo inference; save to Recent Detections. Off: overlay-only, no persist. Takes effect on next recording.</span>
         </div>
       </div>
 
@@ -622,7 +629,7 @@
   </div>
 
   <script>
-    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','AIRAUTOMATICA_PREPROCESSING_ENABLED','CAMERA_RECORDING_MODE','RECORDING_AI_OVERLAY_ENABLED','SESSION_AUTO_START_ON_ARM','AI_HAT_DETECTION_THRESHOLD','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
+    const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','AIRAUTOMATICA_PREPROCESSING_ENABLED','CAMERA_RECORDING_MODE','RECORDING_AI_OVERLAY_ENABLED','RECORDING_AI_PERSIST_ENABLED','SESSION_AUTO_START_ON_ARM','AI_HAT_DETECTION_THRESHOLD','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
 
     function showView(viewId) {
       document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));

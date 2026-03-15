@@ -49,6 +49,8 @@ from airautomatica.config import (
     get_local_llm_timeout,
     get_ollama_required,
     get_preprocessing_enabled,
+    get_recording_ai_overlay_enabled,
+    get_recording_ai_persist_enabled,
     get_serial_baud,
     get_serial_port,
     get_session_auto_start_on_arm,
@@ -366,6 +368,11 @@ def main() -> None:
         return
 
     setup_logging()
+    logger.info(
+        "Recording AI: overlay=%s persist=%s",
+        get_recording_ai_overlay_enabled(),
+        get_recording_ai_persist_enabled(),
+    )
     store = StateStore()
     provider = get_local_llm_provider()
     ollama_transport: OllamaAiService | None = None
