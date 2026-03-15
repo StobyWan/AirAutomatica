@@ -90,6 +90,8 @@ chmod 755 "$STAGING/DEBIAN/postinst" "$STAGING/DEBIAN/prerm" "$STAGING/DEBIAN/po
 
 # Free disk space before dpkg-deb (avoids "tar: stdout: write error")
 python3 -m pip cache purge 2>/dev/null || true
+rm -rf "$REPO_ROOT/frontend" "$REPO_ROOT/wheel" "$REPO_ROOT/src" "$REPO_ROOT/tests" "$REPO_ROOT/docs" 2>/dev/null || true
+echo "==> Removed frontend, wheel, src, tests, docs to free disk space"
 
 # Build .deb
 echo "==> Building .deb"
