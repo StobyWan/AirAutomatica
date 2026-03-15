@@ -120,6 +120,15 @@ export function getSessionDetections(
   return get<SessionDetectionsResponse>(`/sessions/${sid}/detections`)
 }
 
+export function getRecentDetections(): Promise<{
+  detections: Detection[]
+  session_id: number | null
+}> {
+  return get<{ detections: Detection[]; session_id: number | null }>(
+    '/recent-detections'
+  )
+}
+
 export function getSessionFlightEvents(sid: number): Promise<{ events: Event[]; session_id: number }> {
   return get<{ events: Event[]; session_id: number }>(`/sessions/${sid}/flight-events`)
 }
