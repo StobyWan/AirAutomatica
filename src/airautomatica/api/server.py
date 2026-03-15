@@ -45,6 +45,7 @@ from airautomatica.config import (
     get_local_llm_provider,
     get_serial_baud,
     get_serial_port,
+    get_spa_index_path,
     get_sqlite_db_path,
     get_telemetry_backend,
     get_use_spa_dashboard,
@@ -211,23 +212,26 @@ def create_app(
     app.include_router(dashboard_router_mod.create_dashboard_router())
 
     # Mount SPA static assets when serving Vue dashboard
-    if get_use_spa_dashboard():
-        _project_root = Path(__file__).resolve().parent.parent.parent.parent
-        _spa_dist = _project_root / "frontend" / "dist"
+    _spa_index = get_spa_index_path()
+    if get_use_spa_dashboard() and _spa_index is not None:
+        _spa_dist = _spa_index.parent
         _spa_assets = _spa_dist / "assets"
-        if _spa_dist.is_dir():
-            # index.html references /assets/* when built with base '/'
-            if _spa_assets.is_dir():
-                app.mount(
-                    "/assets",
-                    StaticFiles(directory=str(_spa_assets)),
-                    name="dashboard-spa-assets",
-                )
+        if _spa_assets.is_dir():
             app.mount(
-                "/dashboard",
-                StaticFiles(directory=str(_spa_dist), html=True),
-                name="dashboard-spa",
+                "/assets",
+                StaticFiles(directory=str(_spa_assets)),
+                name="dashboard-spa-assets",
             )
+        app.mount(
+            "/dashboard",
+            StaticFiles(directory=str(_spa_dist), html=True),
+            name="dashboard-spa",
+        )
+
+    if get_use_spa_dashboard() and _spa_index is not None:
+        logger.info("Dashboard: serving Vue SPA from %s", _spa_index.parent)
+    else:
+        logger.info("Dashboard: serving legacy HTML templates")
 
     @app.get("/health")
     def health() -> dict:
