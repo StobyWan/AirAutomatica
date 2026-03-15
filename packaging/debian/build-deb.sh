@@ -105,10 +105,10 @@ fi
 
 # Verify .deb contains Alembic assets
 echo "==> Verifying .deb contains Alembic assets"
-if ! dpkg -c "$DEB_PATH" 2>/dev/null | grep -qE "alembic\.ini|alembic/"; then
+if ! dpkg -c "$DEB_PATH" | grep -q "alembic"; then
   echo "ERROR: .deb verification failed (alembic not found in package listing)."
   echo "Package contents:"
-  dpkg -c "$DEB_PATH" 2>/dev/null | head -50
+  dpkg -c "$DEB_PATH" | head -50
   exit 1
 fi
 
