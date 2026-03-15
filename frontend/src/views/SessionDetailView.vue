@@ -171,6 +171,12 @@
         </BaseModal>
       </section>
 
+      <!-- Replay tab -->
+      <ReplayTab
+        v-if="activeTab === 'replay'"
+        :session-id="sid"
+      />
+
       <!-- Debrief tab -->
       <section
         v-show="activeTab === 'debrief'"
@@ -223,6 +229,13 @@
           <div v-if="debrief.generated_summary" class="rounded-lg bg-slate-800/50 border border-slate-700/50 p-3 text-sm text-slate-200 mb-2">
             <div class="whitespace-pre-wrap">{{ debrief.generated_summary }}</div>
             <p v-if="debrief.generated_debrief_at" class="text-xs text-slate-500 mt-2">{{ fmtDate(debrief.generated_debrief_at) }}</p>
+            <button
+              type="button"
+              class="mt-2 px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-cyan-300 text-sm font-medium"
+              @click="goToReplay"
+            >
+              View in replay
+            </button>
           </div>
           <div v-else class="py-2">
             <span class="text-slate-500 text-sm">AI summary not generated yet.</span>
@@ -233,6 +246,13 @@
               @click="generateDebriefSummary"
             >
               {{ generatingSummary ? 'Generating…' : 'Generate AI Summary' }}
+            </button>
+            <button
+              type="button"
+              class="ml-2 px-3 py-1 rounded-lg bg-slate-600/80 hover:bg-slate-600 text-cyan-300 text-sm font-medium"
+              @click="goToReplay"
+            >
+              View in replay
             </button>
           </div>
         </div>
@@ -413,6 +433,7 @@ import { useRoute, useRouter } from 'vue-router'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import ReplayTab from '@/components/replay/ReplayTab.vue'
 import {
   getSession,
   getSessionPath,
@@ -480,6 +501,7 @@ const pathLoadTriggered = ref(false)
 
 const tabs = [
   { id: 'path' as const, label: 'Path' },
+  { id: 'replay' as const, label: 'Replay' },
   { id: 'debrief' as const, label: 'Debrief' },
   { id: 'detections' as const, label: 'Detections' },
   { id: 'ai' as const, label: 'AI' },
@@ -756,6 +778,10 @@ watch(session, () => {
 watch(activeTab, (tab) => {
   if (tab === 'path') maybeLoadPath()
 })
+
+function goToReplay() {
+  activeTab.value = 'replay'
+}
 
 onUnmounted(() => {
   if (pathFallbackTimer) clearTimeout(pathFallbackTimer)

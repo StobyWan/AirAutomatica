@@ -48,7 +48,6 @@ from airautomatica.config import (
     get_spa_index_path,
     get_sqlite_db_path,
     get_telemetry_backend,
-    get_use_spa_dashboard,
     validate_serial_config,
 )
 from airautomatica.db.base import get_engine, get_last_init_error
@@ -94,7 +93,6 @@ from airautomatica.settings import (
 )
 from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
-from airautomatica.ui.dashboard import get_dashboard_html, get_session_detail_html
 
 logger = logging.getLogger(__name__)
 
@@ -211,9 +209,9 @@ def create_app(
     )
     app.include_router(dashboard_router_mod.create_dashboard_router())
 
-    # Mount SPA static assets when serving Vue dashboard
+    # Mount SPA static assets when Vue frontend is built
     _spa_index = get_spa_index_path()
-    if get_use_spa_dashboard() and _spa_index is not None:
+    if _spa_index is not None:
         _spa_dist = _spa_index.parent
         _spa_assets = _spa_dist / "assets"
         if _spa_assets.is_dir():
@@ -227,11 +225,9 @@ def create_app(
             StaticFiles(directory=str(_spa_dist), html=True),
             name="dashboard-spa",
         )
-
-    if get_use_spa_dashboard() and _spa_index is not None:
-        logger.info("Dashboard: serving Vue SPA from %s", _spa_index.parent)
+        logger.info("Dashboard: serving Vue SPA from %s", _spa_dist)
     else:
-        logger.info("Dashboard: serving legacy HTML templates")
+        logger.info("Dashboard: SPA not built; /dashboard will show build instructions")
 
     @app.get("/health")
     def health() -> dict:
