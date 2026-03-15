@@ -4,7 +4,7 @@
       <h2 class="text-base font-semibold text-slate-200 m-0">Connection & Health</h2>
       <router-link
         v-if="sessionId"
-        :to="sessionDetailPath"
+        :to="{ name: 'SessionDetail', params: { id: String(sessionId) } }"
         class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm transition-colors"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,14 +106,7 @@ const aiDetectLoading = ref(false)
 const aiDetectResult = ref('')
 const lastDetection = ref('')
 
-const basePath = (import.meta.env.VITE_BASE_PATH || '').replace(/\/$/, '')
 const sessionId = computed(() => healthStore.lastHealth?.session_id ?? null)
-
-const sessionDetailPath = computed(() => {
-  const sid = sessionId.value
-  if (sid == null) return ''
-  return basePath ? `${basePath}/sessions/${sid}` : `/dashboard/sessions/${sid}`
-})
 
 const capabilities = computed(() => {
   const caps = healthStore.lastHealth?.capabilities as Record<string, unknown> | undefined

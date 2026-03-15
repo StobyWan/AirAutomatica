@@ -42,10 +42,7 @@
     </div>
 
     <div v-if="sessionsStore.loading" class="flex items-center gap-2 py-6">
-      <svg class="animate-spin h-5 w-5 text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-      </svg>
+      <BaseSpinner />
       <span class="text-sm text-slate-400">Loading…</span>
     </div>
 
@@ -75,7 +72,7 @@
       </router-link>
     </div>
 
-    <div v-else class="py-8 text-center">
+    <div v-else class="py-6 text-center">
       <p class="text-slate-500 text-sm">No sessions</p>
       <router-link
         :to="{ name: 'Dashboard' }"
@@ -90,6 +87,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useSessionsStore } from '@/stores/sessions'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { fmtTs, labelAutopilot, labelMode } from '@/utils/formatters'
 
 const sessionsStore = useSessionsStore()

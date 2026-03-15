@@ -103,6 +103,20 @@
     </div>
 
     <div
+      v-if="opsError"
+      class="mt-3 px-4 py-3 rounded-lg border border-red-800/50 bg-red-950/30 text-red-200 text-sm"
+    >
+      {{ opsError }}
+      <button
+        type="button"
+        class="ml-2 text-xs text-red-300 hover:text-red-100 underline"
+        @click="opsError = ''"
+      >
+        Dismiss
+      </button>
+    </div>
+
+    <div
       v-if="latestRecordingFilename"
       class="mt-3 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/30"
     >
@@ -139,6 +153,7 @@ const startingSession = ref(false)
 const stoppingSession = ref(false)
 const stoppingRecording = ref(false)
 const timerTick = ref(0)
+const opsError = ref('')
 
 let recordingTimerInterval: ReturnType<typeof setInterval> | null = null
 
@@ -241,20 +256,24 @@ const operationsSourceText = computed(() => {
 
 async function toggleCameraReady() {
   const next = !cameraReady.value
+  opsError.value = ''
   try {
     await cameraApi.postCameraReady(next)
     healthStore.patchHealth({ camera_ready: next })
-  } catch {
-    // ignore
+  } catch (e) {
+    opsError.value = e instanceof Error ? e.message : 'Failed to set camera ready'
   }
 }
 
 async function handleStartSession() {
   startingSession.value = true
   opsLoading.value = true
+  opsError.value = ''
   try {
     await sessionApi.startSession()
     await connectionStore.fetchState()
+  } catch (e) {
+    opsError.value = e instanceof Error ? e.message : 'Failed to start session'
   } finally {
     startingSession.value = false
     opsLoading.value = false
@@ -264,9 +283,12 @@ async function handleStartSession() {
 async function handleStopSession() {
   stoppingSession.value = true
   opsLoading.value = true
+  opsError.value = ''
   try {
     await sessionApi.stopSession()
     await connectionStore.fetchState()
+  } catch (e) {
+    opsError.value = e instanceof Error ? e.message : 'Failed to stop session'
   } finally {
     stoppingSession.value = false
     opsLoading.value = false
@@ -275,8 +297,11 @@ async function handleStopSession() {
 
 async function handleStartRecording() {
   opsLoading.value = true
+  opsError.value = ''
   try {
     await cameraApi.startRecording()
+  } catch (e) {
+    opsError.value = e instanceof Error ? e.message : 'Failed to start recording'
   } finally {
     opsLoading.value = false
   }
@@ -285,8 +310,11 @@ async function handleStartRecording() {
 async function handleStopRecording() {
   stoppingRecording.value = true
   opsLoading.value = true
+  opsError.value = ''
   try {
     await cameraApi.stopRecording()
+  } catch (e) {
+    opsError.value = e instanceof Error ? e.message : 'Failed to stop recording'
   } finally {
     stoppingRecording.value = false
     opsLoading.value = false

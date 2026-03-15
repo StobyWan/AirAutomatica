@@ -4,10 +4,7 @@
     <p class="text-xs text-slate-500 mb-3">Recordings for the active flight session</p>
 
     <div v-if="loading" class="py-6 text-center">
-      <svg class="animate-spin h-5 w-5 mx-auto text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-      </svg>
+      <BaseSpinner color="slate" center />
       <p class="text-sm text-slate-400 mt-2">Loading recordings…</p>
     </div>
 
@@ -67,44 +64,28 @@
     </div>
 
     <!-- Delete modal -->
-    <div
-      v-if="deleteFilename"
-      class="fixed inset-0 z-50 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div class="flex min-h-screen items-center justify-center p-4">
-        <div class="fixed inset-0 bg-black/60" @click="deleteFilename = null" />
-        <div class="relative rounded-xl bg-slate-800 border border-slate-700 p-6 shadow-xl max-w-md w-full">
-          <h3 class="text-lg font-semibold text-white">Delete recording?</h3>
-          <p class="mt-2 text-sm text-slate-400 font-mono">{{ deleteFilename }}</p>
-          <p class="mt-2 text-sm text-slate-500">This cannot be undone.</p>
-          <div class="mt-6 flex gap-3 justify-end">
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
-              @click="deleteFilename = null"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium"
-              :disabled="deleting"
-              @click="confirmDelete"
-            >
-              {{ deleting ? 'Deleting…' : 'Delete' }}
-            </button>
-          </div>
-        </div>
+    <BaseModal v-model="showDeleteModal">
+      <h3 class="text-lg font-semibold text-white">Delete recording?</h3>
+      <p class="mt-2 text-sm text-slate-400 font-mono">{{ deleteFilename }}</p>
+      <p class="mt-2 text-sm text-slate-500">This cannot be undone.</p>
+      <div class="mt-6 flex gap-3 justify-end">
+        <BaseButton variant="secondary" @click="showDeleteModal = false">
+          Cancel
+        </BaseButton>
+        <BaseButton variant="danger" :disabled="deleting" @click="confirmDelete">
+          {{ deleting ? 'Deleting…' : 'Delete' }}
+        </BaseButton>
       </div>
-    </div>
+    </BaseModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useConnectionStore } from '@/stores/connection'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import { getRecordings, deleteRecording } from '@/api/session'
 import { recordingsUrl } from '@/config'
 import { fmtTsTime } from '@/utils/formatters'
@@ -116,6 +97,13 @@ const playingFilename = ref<string | null>(null)
 const videoEl = ref<HTMLVideoElement | null>(null)
 const deleteFilename = ref<string | null>(null)
 const deleting = ref(false)
+
+const showDeleteModal = computed({
+  get: () => !!deleteFilename.value,
+  set: (v) => {
+    if (!v) deleteFilename.value = null
+  },
+})
 
 const emptyMessage = ref('No active session or no recordings yet')
 
