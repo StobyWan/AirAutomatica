@@ -20,8 +20,11 @@ export interface HealthUpdatePayload {
   [key: string]: unknown
 }
 
+export type AppHomeSource = 'manual_live' | 'autopilot' | 'fallback'
+
 export interface StateUpdatePayload {
   state: AircraftState
+  app_home_source?: AppHomeSource
 }
 
 export interface DetectionsUpdatePayload {

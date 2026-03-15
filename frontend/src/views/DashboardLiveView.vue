@@ -8,6 +8,7 @@
     <div class="aspect-video rounded-lg overflow-hidden bg-slate-900/50">
       <LiveMap />
     </div>
+    <LiveHomeControls />
     <ConnectionHealth />
     <QuickTelemetry />
     <RecentDetectionsStrip />
@@ -20,6 +21,7 @@ import FlightStatusStrip from '@/components/FlightStatusStrip.vue'
 import OperationsHud from '@/components/OperationsHud.vue'
 import LiveCameraFeed from '@/components/LiveCameraFeed.vue'
 import LiveMap from '@/components/LiveMap.vue'
+import LiveHomeControls from '@/components/LiveHomeControls.vue'
 import ConnectionHealth from '@/components/ConnectionHealth.vue'
 import QuickTelemetry from '@/components/QuickTelemetry.vue'
 import RecentDetectionsStrip from '@/components/RecentDetectionsStrip.vue'
