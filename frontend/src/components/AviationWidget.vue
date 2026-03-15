@@ -1,9 +1,9 @@
 <template>
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+  <div class="flex flex-wrap gap-3">
     <!-- Attitude -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 w-[152px] min-w-[152px] max-w-[152px]">
       <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Attitude</h3>
-      <div class="relative w-32 h-32 mx-auto rounded-full overflow-hidden border border-slate-600 bg-slate-900/80">
+      <div class="relative w-32 h-32 mx-auto rounded-full overflow-hidden border border-slate-600 bg-slate-900/80 shrink-0">
         <div
           v-if="!hasAttitude"
           class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs"
@@ -35,20 +35,20 @@
     </div>
 
     <!-- Home -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 w-[136px] min-w-[136px] max-w-[136px]">
       <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Home</h3>
       <div v-if="!hasHome" class="text-center text-slate-500 text-xs py-4">
         Position or home unavailable
       </div>
       <div v-else class="flex flex-col items-center gap-2">
-        <div class="relative w-20 h-20 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center">
+        <div class="relative w-20 h-20 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center shrink-0">
           <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-slate-500">N</span>
           <div
             class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150"
             :style="{ transform: `rotate(${homeBearing}deg)` }"
           >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
-              <polygon points="12,4 20,20 4,20" fill="#22c55e" stroke="#166534" stroke-width="1" />
+            <svg class="w-8 h-8 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L4 22h4l4-8 4 8h4L12 2z" />
             </svg>
           </div>
         </div>
@@ -60,7 +60,7 @@
     </div>
 
     <!-- Altitude -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 min-w-[120px]">
       <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Altitude</h3>
       <div v-if="!hasAltitude" class="text-center text-slate-500 text-xs py-4">Unavailable</div>
       <div v-else class="space-y-1.5 text-sm">
@@ -76,7 +76,7 @@
     </div>
 
     <!-- Speed -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 min-w-[100px]">
       <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Speed</h3>
       <div class="text-center">
         <div class="font-mono text-lg text-slate-300">{{ speedValue }}</div>
@@ -85,7 +85,7 @@
     </div>
 
     <!-- Power -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 min-w-[100px]">
       <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Power</h3>
       <div class="space-y-1.5 text-sm">
         <div class="flex justify-between">

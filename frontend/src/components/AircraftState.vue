@@ -1,12 +1,12 @@
 <template>
-  <div class="space-y-4">
+  <div class="flex flex-col sm:flex-row gap-4">
     <!-- Compass -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 w-[136px] min-w-[136px] max-w-[136px]">
       <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Compass</h3>
-      <div class="relative w-24 h-24 mx-auto rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center">
+      <div class="relative w-20 h-20 mx-auto rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center shrink-0">
         <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-slate-500">N</span>
         <div
-          class="absolute inset-0 flex items-center justify-center transition-transform duration-150"
+          class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150"
           :style="{ transform: `rotate(${headingDeg}deg)` }"
         >
           <svg class="w-8 h-8 text-cyan-400" viewBox="0 0 24 24" fill="currentColor">
@@ -20,9 +20,9 @@
     </div>
 
     <!-- State fields -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 flex-1 min-w-0">
       <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">State</h3>
-      <div class="grid grid-cols-2 gap-2 text-sm">
+      <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <div class="flex justify-between">
           <span class="text-slate-500">Mode</span>
           <span class="font-mono text-slate-300">{{ stateStore.lastState?.mode ?? '—' }}</span>
