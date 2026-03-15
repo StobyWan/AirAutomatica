@@ -54,6 +54,8 @@ python3 -m pip wheel --wheel-dir "$BUILD_DIR/wheels" "$REPO_ROOT"
 # Package wheel (venv created on target during postinst)
 mkdir -p "$OPT_DIR/wheels"
 cp "$BUILD_DIR/wheels"/airautomatica-*.whl "$OPT_DIR/wheels/"
+rm -rf "$BUILD_DIR/wheels"
+echo "==> Removed wheel cache to free disk space"
 
 # Copy systemd unit and env example
 cp "$LINUX_DIR/airautomatica.service" "$ETC_SYSTEMD/"
@@ -76,6 +78,9 @@ cp "$SCRIPT_DIR/postinst" "$STAGING/DEBIAN/"
 cp "$SCRIPT_DIR/prerm" "$STAGING/DEBIAN/"
 cp "$SCRIPT_DIR/postrm" "$STAGING/DEBIAN/"
 chmod 755 "$STAGING/DEBIAN/postinst" "$STAGING/DEBIAN/prerm" "$STAGING/DEBIAN/postrm"
+
+# Free disk space before dpkg-deb (avoids "tar: stdout: write error")
+python3 -m pip cache purge 2>/dev/null || true
 
 # Build .deb
 echo "==> Building .deb"
