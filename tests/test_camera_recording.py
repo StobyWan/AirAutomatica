@@ -1118,6 +1118,44 @@ def test_ingest_not_created_when_session_none(
     assert svc._ingest is None
 
 
+def test_ingest_not_created_when_overlay_enabled(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When overlay and persist both enabled, ingest is not created (Hailo device contention)."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.read.return_value = b""
+    mock_persistence = MagicMock()
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(
+                    recordings_dir=recordings_dir,
+                    session_ref=[42],
+                    persistence=mock_persistence,
+                )
+                with patch(
+                    "airautomatica.services.camera_recording.get_recording_ai_persist_enabled",
+                    return_value=True,
+                ):
+                    with patch(
+                        "airautomatica.services.camera_recording.get_recording_ai_overlay_enabled",
+                        return_value=True,
+                    ):
+                        state, err = svc.start_recording()
+    assert err is None
+    assert state.recording is True
+    assert svc._ingest is None
+
+
 def test_stop_after_failed_or_partial_start_does_not_explode(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:

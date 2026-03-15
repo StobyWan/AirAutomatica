@@ -11,7 +11,7 @@ Single reference for all AI HAT detection-related settings. Resolved by `get_det
 | `ai_hat_object_detection_enabled` | AI_HAT_OBJECT_DETECTION_ENABLED | 1 when AI HAT enabled | Object detection capability |
 | `inference_threshold` | AI_HAT_DETECTION_THRESHOLD | 0.25 | Min confidence at inference time; filters raw model output |
 | `recording_overlay_enabled` | RECORDING_AI_OVERLAY_ENABLED | 1 when AI HAT enabled | Bounding-box overlay on recorded video |
-| `recording_persist_enabled` | RECORDING_AI_PERSIST_ENABLED | 1 when overlay enabled | Persist recording-time detections to DB |
+| `recording_persist_enabled` | RECORDING_AI_PERSIST_ENABLED | 1 when AI HAT enabled | Persist recording-time detections to DB |
 | `recording_persist_interval_sec` | RECORDING_AI_PERSIST_INTERVAL_SEC | 5 | Seconds between frame extractions |
 | `recording_persist_startup_delay_sec` | RECORDING_AI_PERSIST_STARTUP_DELAY_SEC | 3 | Grace period before first extraction |
 | `persist_threshold` | RECORDING_AI_PERSIST_THRESHOLD | 0.5 | Min confidence to persist; must be >= inference_threshold for detections to reach DB |
@@ -22,11 +22,11 @@ Single reference for all AI HAT detection-related settings. Resolved by `get_det
 ai_hat_enabled
   ├── ai_hat_camera_pipeline_enabled
   ├── ai_hat_object_detection_enabled
-  └── recording_overlay_enabled
-        └── recording_persist_enabled
+  ├── recording_overlay_enabled
+  └── recording_persist_enabled
 ```
 
-Overlay and persist default to enabled only when their parent is enabled. Disabling AI_HAT disables everything downstream.
+Overlay and persist are independent of each other. Both default to enabled when AI HAT is enabled. **Mutual exclusion at runtime:** overlay and persist both use the Hailo device; only one can run. When overlay is enabled, RecordingAiIngest is not created (device in use). Use overlay=0 for persist detections.
 
 ## Threshold Semantics
 

@@ -170,10 +170,10 @@ def test_get_detection_config_resolves_dependency_chain(
     assert cfg.persist_threshold == 0.5
 
 
-def test_get_detection_config_overlay_off_disables_persist(
+def test_get_detection_config_persist_independent_of_overlay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When overlay disabled, persist is disabled regardless of RECORDING_AI_PERSIST."""
+    """Persist is independent of overlay; overlay=0 + persist=1 yields persist=True."""
     monkeypatch.setenv("AI_HAT_ENABLED", "1")
     monkeypatch.setenv("RECORDING_AI_OVERLAY_ENABLED", "0")
     monkeypatch.setenv("RECORDING_AI_PERSIST_ENABLED", "1")
@@ -181,7 +181,21 @@ def test_get_detection_config_overlay_off_disables_persist(
 
     cfg = get_detection_config()
     assert cfg.recording_overlay_enabled is False
-    assert cfg.recording_persist_enabled is False
+    assert cfg.recording_persist_enabled is True
+
+
+def test_get_detection_config_overlay_and_persist_both_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When overlay=1 and persist=1, config returns both True; runtime skip is in camera_recording."""
+    monkeypatch.setenv("AI_HAT_ENABLED", "1")
+    monkeypatch.setenv("RECORDING_AI_OVERLAY_ENABLED", "1")
+    monkeypatch.setenv("RECORDING_AI_PERSIST_ENABLED", "1")
+    from airautomatica.config import get_detection_config
+
+    cfg = get_detection_config()
+    assert cfg.recording_overlay_enabled is True
+    assert cfg.recording_persist_enabled is True
 
 
 def test_get_recording_ai_persist_threshold_default(
