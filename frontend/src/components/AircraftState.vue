@@ -1,51 +1,51 @@
 <template>
   <div class="flex flex-col sm:flex-row gap-4">
     <!-- Compass -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 w-[136px] min-w-[136px] max-w-[136px]">
-      <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Compass</h3>
-      <div class="relative w-20 h-20 mx-auto rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center shrink-0">
-        <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-slate-500">N</span>
+    <div class="rounded-lg border border-slate-600/80 bg-slate-800/60 p-4 flex-1 min-w-[136px]">
+      <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Compass</h3>
+      <div class="relative w-20 h-20 mx-auto rounded-full border-2 border-slate-600/80 bg-slate-900/90 flex items-center justify-center shrink-0 shadow-inner">
+        <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-bold text-slate-500">N</span>
         <div
           class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150"
           :style="{ transform: `rotate(${headingDeg}deg)` }"
         >
-          <svg class="w-8 h-8 text-cyan-400" viewBox="0 0 24 24" fill="currentColor">
+          <svg class="w-8 h-8 text-cyan-400 drop-shadow-sm" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2L4 22h4l4-8 4 8h4L12 2z" />
           </svg>
         </div>
       </div>
-      <div class="mt-1.5 text-center text-sm font-mono text-slate-300">
+      <div class="mt-2 text-center text-sm font-mono font-medium text-slate-200 tabular-nums">
         {{ headingText }}
       </div>
     </div>
 
     <!-- State fields -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 flex-1 min-w-0">
-      <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">State</h3>
-      <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <div class="flex justify-between">
-          <span class="text-slate-500">Mode</span>
-          <span class="font-mono text-slate-300">{{ stateStore.lastState?.mode ?? '—' }}</span>
+    <div class="rounded-lg border border-slate-600/80 bg-slate-800/60 p-4 flex-1 min-w-0">
+      <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">State</h3>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Mode</span>
+          <span class="font-mono text-slate-200 font-medium truncate">{{ stateStore.lastState?.mode ?? '—' }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-slate-500">Armed</span>
-          <span class="font-mono text-slate-300">{{ stateStore.lastState?.armed ? 'Yes' : 'No' }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Armed</span>
+          <span class="font-mono font-medium" :class="armedClass">{{ stateStore.lastState?.armed ? 'Yes' : 'No' }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-slate-500">Connected</span>
-          <span class="font-mono text-slate-300">{{ stateStore.lastState?.connected ? 'Yes' : 'No' }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Connected</span>
+          <span class="font-mono font-medium" :class="connectedClass">{{ stateStore.lastState?.connected ? 'Yes' : 'No' }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-slate-500">GPS fix</span>
-          <span class="font-mono text-slate-300">{{ gpsFixText }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">GPS fix</span>
+          <span class="font-mono font-medium" :class="gpsFixClass">{{ gpsFixText }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-slate-500">Sats</span>
-          <span class="font-mono text-slate-300">{{ stateStore.lastState?.satellites_visible ?? '—' }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Sats</span>
+          <span class="font-mono font-medium tabular-nums" :class="satsClass">{{ stateStore.lastState?.satellites_visible ?? '—' }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-slate-500">Heartbeat</span>
-          <span class="font-mono text-slate-300">{{ heartbeatText }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Heartbeat</span>
+          <span class="font-mono font-medium tabular-nums" :class="heartbeatClass">{{ heartbeatText }}</span>
         </div>
       </div>
     </div>
@@ -83,5 +83,37 @@ const heartbeatText = computed(() => {
   const age = stateStore.lastState?.heartbeat_age_s
   if (age == null || !Number.isFinite(age)) return '—'
   return age.toFixed(1) + ' s'
+})
+
+const armedClass = computed(() =>
+  stateStore.lastState?.armed ? 'text-emerald-400' : 'text-amber-500/90'
+)
+
+const connectedClass = computed(() =>
+  stateStore.lastState?.connected ? 'text-emerald-400' : 'text-red-400/90'
+)
+
+const gpsFixClass = computed(() => {
+  const fix = stateStore.lastState?.gps_fix_type
+  if (fix == null) return 'text-slate-400'
+  if (fix >= 3) return 'text-emerald-400'
+  if (fix >= 2) return 'text-amber-500/90'
+  return 'text-red-400/90'
+})
+
+const satsClass = computed(() => {
+  const s = stateStore.lastState?.satellites_visible
+  if (s == null || typeof s !== 'number') return 'text-slate-400'
+  if (s >= 8) return 'text-emerald-400'
+  if (s >= 4) return 'text-amber-500/90'
+  return 'text-red-400/90'
+})
+
+const heartbeatClass = computed(() => {
+  const age = stateStore.lastState?.heartbeat_age_s
+  if (age == null || !Number.isFinite(age)) return 'text-slate-400'
+  if (age < 1) return 'text-emerald-400'
+  if (age < 2) return 'text-amber-500/90'
+  return 'text-red-400/90'
 })
 </script>
