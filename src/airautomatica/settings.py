@@ -148,7 +148,7 @@ def load_settings() -> None:
             with open(_SETTINGS_FILE) as f:
                 data = json.load(f)
             for k, v in data.items():
-                if k in _LOAD_ACCEPTED_KEYS and v is not None:
+                if k in _LOAD_ACCEPTED_KEYS and v is not None and not os.environ.get(k):
                     os.environ[k] = str(v)
             if any(k in data for k in _LEGACY_KEYS):
                 logger.debug(
