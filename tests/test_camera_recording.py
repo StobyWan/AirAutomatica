@@ -1,5 +1,6 @@
 """Tests for camera recording service and auto controller."""
 
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,6 +10,10 @@ from airautomatica.models.state import AircraftState
 from airautomatica.services.camera_recording import (
     CameraRecordingService,
     RecordingAutoController,
+)
+
+_FILENAME_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})_(\d{6})_cam\.(mp4|h264)$", re.IGNORECASE
 )
 
 
@@ -798,3 +803,427 @@ def test_auto_mode_startup_while_armed(
                 )
                 ctrl.maybe_auto_record(state_armed)
     assert svc.get_recording_state().recording is True
+
+
+# --- Phase 2 regression tests ---
+
+
+def test_pipe_mode_start_succeeds_and_sets_both_processes(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Pipe mode (rpicam-vid + ffmpeg) leaves both _process and _muxer_process set."""
+    mock_cam = MagicMock()
+    mock_cam.poll.return_value = None
+    mock_cam.stdout = MagicMock()
+    mock_muxer = MagicMock()
+    mock_muxer.poll.return_value = None
+
+    def fake_popen(args, **kwargs):
+        if "mpegts" in str(args) or "-i" in str(args):
+            return mock_muxer
+        return mock_cam
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.get_ffmpeg_command",
+            return_value="/usr/bin/ffmpeg",
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                side_effect=fake_popen,
+            ):
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    state, err = svc.start_recording()
+    assert err is None
+    assert state.recording is True
+    assert svc._process is not None
+    assert svc._muxer_process is not None
+
+
+def test_direct_mode_start_succeeds_and_leaves_muxer_unset(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Direct mode (libcamera-vid or rpicam-vid without ffmpeg) leaves _muxer_process None."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                state, err = svc.start_recording()
+    assert err is None
+    assert state.recording is True
+    assert svc._process is not None
+    assert svc._muxer_process is None
+
+
+def test_muxer_exits_immediately_after_launch(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When muxer exits immediately after launch, return failure and clean up both handles."""
+    mock_cam = MagicMock()
+    mock_cam.poll.return_value = None
+    mock_cam.stdout = MagicMock()
+    mock_muxer = MagicMock()
+    mock_muxer.poll.return_value = 1
+    mock_muxer.returncode = 1
+    mock_muxer.stderr = MagicMock()
+    mock_muxer.stderr.read.return_value = b"muxer failed"
+
+    def fake_popen(args, **kwargs):
+        if "mpegts" in str(args) or "-i" in str(args):
+            return mock_muxer
+        return mock_cam
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.get_ffmpeg_command",
+            return_value="/usr/bin/ffmpeg",
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                side_effect=fake_popen,
+            ):
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    state, err = svc.start_recording()
+    assert err is not None
+    assert "muxer" in err.lower() or "exit" in err.lower()
+    assert state.recording is False
+    assert svc._process is None
+    assert svc._muxer_process is None
+
+
+def test_partial_startup_failure_popen_raises_on_second_call(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Partial startup (a): second Popen raises after first process launched; both refs cleared."""
+    call_count = 0
+
+    def failing_popen(args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise OSError("ffmpeg not found")
+        return MagicMock(poll=lambda: None, stdout=MagicMock(), stderr=MagicMock())
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.get_ffmpeg_command",
+            return_value="/usr/bin/ffmpeg",
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                side_effect=failing_popen,
+            ):
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    state, err = svc.start_recording()
+    assert err is not None
+    assert state.recording is False
+    assert svc._process is None
+    assert svc._muxer_process is None
+
+
+def test_partial_startup_failure_muxer_unhealthy_immediately(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Partial startup (b): first launched, second exists but unhealthy immediately; both refs cleared."""
+    mock_cam = MagicMock()
+    mock_cam.poll.return_value = None
+    mock_cam.stdout = MagicMock()
+    mock_muxer = MagicMock()
+    mock_muxer.poll.return_value = 1
+    mock_muxer.returncode = 1
+    mock_muxer.stderr = MagicMock()
+    mock_muxer.stderr.read.return_value = b"muxer failed"
+
+    def fake_popen(args, **kwargs):
+        if "mpegts" in str(args) or "-i" in str(args):
+            return mock_muxer
+        return mock_cam
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.get_ffmpeg_command",
+            return_value="/usr/bin/ffmpeg",
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                side_effect=fake_popen,
+            ):
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    state, err = svc.start_recording()
+    assert err is not None
+    assert "muxer" in err.lower() or "exit" in err.lower()
+    assert state.recording is False
+    assert svc._process is None
+    assert svc._muxer_process is None
+
+
+def test_output_path_filename_creation_unchanged(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Output path uses YYYY-MM-DD_HHMMSS_cam.ext format."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                state, err = svc.start_recording()
+    assert err is None
+    assert state.output_file is not None
+    assert _FILENAME_PATTERN.match(
+        state.output_file
+    ), f"Bad filename: {state.output_file}"
+    assert state.output_file.endswith("_cam.h264")
+    assert svc._output_path is not None
+    assert str(svc._output_path).endswith("_cam.h264")
+
+
+def test_overlay_enabled_affects_command_construction(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When overlay enabled and assets exist, command includes overlay args."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    monkeypatch.setenv("AI_HAT_ENABLED", "1")
+    monkeypatch.setenv("RECORDING_AI_OVERLAY_ENABLED", "1")
+    from airautomatica.settings import load_settings
+
+    load_settings()
+
+    class FakeAssetsPath:
+        def exists(self) -> bool:
+            return True
+
+        def __str__(self) -> str:
+            return "/nonexistent/hailo_yolov6.json"
+
+    fake_assets = FakeAssetsPath()
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.RPCAM_ASSETS_PATH",
+            fake_assets,
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                return_value=mock_proc,
+            ) as mock_popen:
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc.start_recording()
+    cam_args = mock_popen.call_args_list[0][0][0]
+    assert "--post-process-file" in cam_args
+    assert "--width" in cam_args and "1280" in cam_args
+
+
+def test_ingest_startup_only_on_successful_recording(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Ingest is not started when recording start fails."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 1
+    mock_proc.returncode = 1
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.read.return_value = b"camera error"
+    mock_persistence = MagicMock()
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(
+                    recordings_dir=recordings_dir,
+                    session_ref=[1],
+                    persistence=mock_persistence,
+                )
+                with patch(
+                    "airautomatica.services.camera_recording.get_recording_ai_persist_enabled",
+                    return_value=True,
+                ):
+                    state, err = svc.start_recording()
+    assert err is not None
+    assert state.recording is False
+    assert svc._ingest is None
+
+
+def test_stop_after_failed_or_partial_start_does_not_explode(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """Stop when start failed or partial is idempotent and does not raise."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 1
+    mock_proc.returncode = 1
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.read.return_value = b"died"
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                svc.start_recording()
+    state, err = svc.stop_recording()
+    assert err is None
+    assert state.recording is False
+
+
+def test_reconcile_dead_process_stable_once_updated(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When process is already dead, get_recording_state updates internal state once; subsequent calls are stable."""
+    mock_proc = MagicMock()
+    mock_proc.poll.side_effect = [None, 1, 1]
+    mock_proc.returncode = 1
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.read.return_value = b"camera disconnected"
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc = CameraRecordingService(recordings_dir=recordings_dir)
+                svc.start_recording()
+    state1 = svc.get_recording_state()
+    state2 = svc.get_recording_state()
+    assert state1.recording is False
+    assert state2.recording is False
+    assert svc._process is None
+    assert svc._last_error is not None
+
+
+def test_started_at_not_set_on_any_failure_path(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """_started_at remains None across all failure paths."""
+    # Precondition failure: cmd missing
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: None,
+    )
+    svc = CameraRecordingService(recordings_dir=recordings_dir)
+    svc.start_recording()
+    assert svc._started_at is None
+
+    # Popen raises on second call (pipe mode)
+    call_count = 0
+
+    def failing_popen(args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise OSError("ffmpeg not found")
+        return MagicMock(poll=lambda: None, stdout=MagicMock(), stderr=MagicMock())
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.get_ffmpeg_command",
+            return_value="/usr/bin/ffmpeg",
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                side_effect=failing_popen,
+            ):
+                with patch("time.sleep"):
+                    svc2 = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc2.start_recording()
+    assert svc2._started_at is None
+
+    # Camera exits immediately
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 1
+    mock_proc.returncode = 1
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.read.return_value = b"camera not found"
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with patch("time.sleep"):
+                svc3 = CameraRecordingService(recordings_dir=recordings_dir)
+                svc3.start_recording()
+    assert svc3._started_at is None
+
+    # Muxer exits immediately
+    mock_cam = MagicMock()
+    mock_cam.poll.return_value = None
+    mock_cam.stdout = MagicMock()
+    mock_muxer = MagicMock()
+    mock_muxer.poll.return_value = 1
+    mock_muxer.returncode = 1
+    mock_muxer.stderr = MagicMock()
+    mock_muxer.stderr.read.return_value = b"muxer failed"
+
+    def fake_popen(args, **kwargs):
+        if "mpegts" in str(args) or "-i" in str(args):
+            return mock_muxer
+        return mock_cam
+
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.get_ffmpeg_command",
+            return_value="/usr/bin/ffmpeg",
+        ):
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                side_effect=fake_popen,
+            ):
+                with patch("time.sleep"):
+                    svc4 = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc4.start_recording()
+    assert svc4._started_at is None
