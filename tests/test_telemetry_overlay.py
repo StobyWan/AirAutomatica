@@ -44,7 +44,7 @@ def _make_state(
 
 
 def test_format_telemetry_valid_state() -> None:
-    """format_telemetry(state) returns expected string for valid state."""
+    """format_telemetry(state) returns expected string for valid state (two lines)."""
     state = _make_state()
     result = format_telemetry(state)
     assert "Mode: STABILIZE" in result
@@ -53,16 +53,19 @@ def test_format_telemetry_valid_state() -> None:
     assert "Batt: 12.4V" in result
     assert "Armed: YES" in result
     assert "Sats: 12" in result
+    assert "\n" in result
+    lines = result.strip().split("\n")
+    assert len(lines) == 2
 
 
 def test_format_telemetry_none_returns_placeholder() -> None:
-    """format_telemetry(None) returns placeholder string."""
+    """format_telemetry(None) returns placeholder string (two lines)."""
     result = format_telemetry(None)
-    assert result == "Mode: — | Alt: — | Spd: — | Batt: — | Armed: — | Sats: —"
+    assert result == "Mode: — | Alt: — | Spd: —\nBatt: — | Armed: — | Sats: —"
 
 
 def test_format_telemetry_nan_values_show_dash() -> None:
-    """format_telemetry with NaN floats shows dash for those fields."""
+    """format_telemetry with NaN floats shows dash for those fields (two lines)."""
     state = AircraftState(
         connected=True,
         heartbeat=1,
@@ -88,6 +91,7 @@ def test_format_telemetry_nan_values_show_dash() -> None:
     assert "Batt: —" in result
     assert "Sats: —" in result
     assert "Armed: NO" in result
+    assert "\n" in result
 
 
 def test_telemetry_writer_only_writes_when_content_changes() -> None:
