@@ -1,4 +1,35 @@
 <!DOCTYPE html>
+<!--
+  SPA REFACTOR GUIDE — For AI/developers migrating to React, Vue, Svelte, etc.
+
+  PAGE: Session detail view. Route: /dashboard/sessions/:id
+  - Single session: path, telemetry samples, detections, recordings, flight events, phase intervals
+  - Replay timeline with scrubber; debrief with optional LLM summary
+
+  REST API ENDPOINTS (sessionId from URL):
+  - GET  /sessions/{id}                    → session metadata
+  - GET  /sessions/{id}/path                → { path: [{lat,lon,alt,...}], home }
+  - GET  /sessions/{id}/telemetry-samples   → { samples } (query: limit, order)
+  - GET  /sessions/{id}/detections          → { detections }
+  - GET  /sessions/{id}/recordings          → { recordings }
+  - GET  /sessions/{id}/flight-events       → { events }
+  - GET  /sessions/{id}/phase-intervals    → { intervals }
+  - GET  /sessions/{id}/debrief             → debrief (query: generate_summary=true for LLM)
+  - POST /sessions/{id}                     → body: { app_home_lat, app_home_lon } | { app_home_use_current: true } | { app_home_clear: true }
+  - DELETE /sessions/{id}                   → delete session
+  - DELETE /recordings/{filename}           → delete recording file
+
+  SOCKET.IO EVENTS (optional live updates when session is current):
+  - telemetry_path_update, detections_update, trends_update, sessions_update
+
+  SHARED DEPENDENCIES:
+  - /static/js/formatters.js, path-plot.js, sparklines.js (same as dashboard)
+  - window.AIRAUTOMATICA_BASE_PATH, recordingsUrl(filename)
+
+  KEY DOM IDs:
+  session-id, session-metadata, path-svg, path-container, path-empty, path-home-*,
+  replay-*, delete-session-btn, evidence-summary, stats, detection-cards, trends-container
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
