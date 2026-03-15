@@ -51,16 +51,20 @@ else
   echo "WARNING: frontend/dist not found and npm not available; SPA will not be available in .deb"
 fi
 
-# Build wheel
-echo "==> Building wheel"
-mkdir -p "$BUILD_DIR/wheels"
-python3 -m pip wheel --wheel-dir "$BUILD_DIR/wheels" "$REPO_ROOT"
-
-# Package wheel (venv created on target during postinst)
+# Build or use pre-built wheel
+WHEEL_DIR="$REPO_ROOT/wheel"
 mkdir -p "$OPT_DIR/wheels"
-cp "$BUILD_DIR/wheels"/airautomatica-*.whl "$OPT_DIR/wheels/"
-rm -rf "$BUILD_DIR/wheels"
-echo "==> Removed wheel cache to free disk space"
+if ls "$WHEEL_DIR"/airautomatica-*.whl 1>/dev/null 2>&1; then
+  echo "==> Using pre-built wheel"
+  cp "$WHEEL_DIR"/airautomatica-*.whl "$OPT_DIR/wheels/"
+else
+  echo "==> Building wheel"
+  mkdir -p "$BUILD_DIR/wheels"
+  python3 -m pip wheel --no-cache-dir --wheel-dir "$BUILD_DIR/wheels" "$REPO_ROOT"
+  cp "$BUILD_DIR/wheels"/airautomatica-*.whl "$OPT_DIR/wheels/"
+  rm -rf "$BUILD_DIR/wheels"
+  echo "==> Removed wheel cache to free disk space"
+fi
 
 # Copy systemd unit and env example
 cp "$LINUX_DIR/airautomatica.service" "$ETC_SYSTEMD/"
