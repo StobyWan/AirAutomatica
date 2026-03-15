@@ -102,7 +102,7 @@ def get_detection_config() -> DetectionConfig:
     """Single resolution for all detection config. No cascading conditionals across callers."""
     ai_hat = _resolve_ai_hat_enabled()
     overlay = ai_hat and _parse_positive_env("RECORDING_AI_OVERLAY_ENABLED", "1")
-    persist = overlay and _parse_positive_env("RECORDING_AI_PERSIST_ENABLED", "1")
+    persist = ai_hat and _parse_positive_env("RECORDING_AI_PERSIST_ENABLED", "1")
     camera_pipeline = ai_hat and _parse_positive_env(
         "AI_HAT_CAMERA_PIPELINE_ENABLED", "1"
     )

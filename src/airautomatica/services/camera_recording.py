@@ -423,6 +423,13 @@ class CameraRecordingService:
             logger.info("Recording started (%s): %s", cmd, basename)
             session_id = self._session_ref[0] if self._session_ref else None
             persist_enabled = get_recording_ai_persist_enabled()
+            # Overlay and persist both use Hailo; only one can run. Skip ingest when overlay on.
+            if persist_enabled and get_recording_ai_overlay_enabled():
+                logger.info(
+                    "Recording AI persist skipped: overlay enabled (Hailo device in use). "
+                    "Disable overlay for persist detections."
+                )
+                persist_enabled = False
             if persist_enabled and session_id is None:
                 logger.info(
                     "Recording AI persist skipped: no active session. Start session before recording for detections."

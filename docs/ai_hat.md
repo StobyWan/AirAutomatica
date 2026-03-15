@@ -146,7 +146,7 @@ Bbox coordinates are normalized 0..1 (x, y = top-left; width, height = size).
 | `AI_HAT_CAMERA_PIPELINE_ENABLED` | Must be 1 (default when AI HAT enabled) |
 | `AI_HAT_DETECTION_THRESHOLD` | Min confidence 0–1; default 0.25. Suppresses weak detections. |
 | `RECORDING_AI_OVERLAY_ENABLED` | When 1 (default when AI HAT enabled), recording uses Hailo postprocess; video shows bounding boxes. Requires rpicam-vid and postprocess assets. |
-| `RECORDING_AI_PERSIST_ENABLED` | When 1 (default when overlay enabled), recording-time detections are persisted to Recent Detections. |
+| `RECORDING_AI_PERSIST_ENABLED` | When 1 (default when AI HAT enabled), recording-time detections are persisted to Recent Detections. Overlay and persist cannot both run (Hailo device contention); use overlay=0 for persist. |
 | `RECORDING_AI_PERSIST_INTERVAL_SEC` | Seconds between frame extractions (default 5). |
 | `RECORDING_AI_PERSIST_STARTUP_DELAY_SEC` | Grace period before first extraction (default 3). |
 | `RECORDING_AI_PERSIST_THRESHOLD` | Min confidence to persist recording-time detections (0–1). Default 0.5. Persist when confidence >= threshold (inclusive). Stricter than inference threshold. |
@@ -157,7 +157,7 @@ When AI HAT is enabled and `RECORDING_AI_OVERLAY_ENABLED=1`, session recording r
 
 **Requirements:** rpicam-vid (not libcamera-vid), postprocess assets at `/usr/share/rpi-camera-assets/hailo_yolov6_inference.json`, AI HAT enabled.
 
-**Recording-time persistence:** When `RECORDING_AI_PERSIST_ENABLED=1` (default when overlay enabled), a background task extracts frames from the in-progress recording and runs Hailo inference via hailo-apps. Detections are persisted to the database with source `ai_hat_recording` and appear in Recent Detections. Distinct from one-shot (on-demand) and overlay-only (no persist). One-shot detection remains blocked when recording (camera busy).
+**Recording-time persistence:** When `RECORDING_AI_PERSIST_ENABLED=1` (default when AI HAT enabled) and overlay is off, a background task extracts frames from the in-progress recording and runs Hailo inference via hailo-apps. Detections are persisted to the database with source `ai_hat_recording` and appear in Recent Detections. Overlay and persist cannot both run (Hailo device contention). Distinct from one-shot (on-demand) and overlay-only (no persist). One-shot detection remains blocked when recording (camera busy).
 
 ## Cached vs Persisted
 

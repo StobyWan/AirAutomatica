@@ -559,7 +559,7 @@
             <input type="checkbox" id="RECORDING_AI_PERSIST_ENABLED" name="RECORDING_AI_PERSIST_ENABLED" value="1" />
             <span>Recording AI persist</span>
           </label>
-          <span class="text-xs text-slate-500 mt-1 block">When overlay enabled: extract frames and run Hailo inference; save to Recent Detections. Off: overlay-only, no persist. Takes effect on next recording.</span>
+          <span class="text-xs text-slate-500 mt-1 block">Extract frames and run Hailo inference; save to Recent Detections. Overlay and persist cannot both run (Hailo device contention). Use overlay=0 for persist. Takes effect on next recording.</span>
         </div>
       </div>
 
