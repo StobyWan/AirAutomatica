@@ -127,7 +127,11 @@
           <button type="button" id="clear-home" class="hidden px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-xs" title="Clear replay home override">Clear override</button>
         </div>
         <div id="path-container">
-          <svg id="path-svg" class="path-svg" viewBox="0 0 200 220" preserveAspectRatio="xMidYMid meet"></svg>
+          <div id="path-loading" class="flex items-center justify-center h-[220px] text-slate-500 text-sm">
+            <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            Loading path…
+          </div>
+          <svg id="path-svg" class="path-svg hidden" viewBox="0 0 200 220" preserveAspectRatio="xMidYMid meet"></svg>
           <div id="path-empty" class="hidden text-center py-8 text-slate-500 text-sm">No path data</div>
         </div>
         <div id="home-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -481,8 +485,10 @@
     function renderPathPlot(path, detections, opts) {
       const currentSample = (opts && opts.currentSample) || null;
       const home = (opts && opts.home) || null;
+      const loadingEl = document.getElementById('path-loading');
       const svgEl = document.getElementById('path-svg');
       const emptyEl = document.getElementById('path-empty');
+      if (loadingEl) loadingEl.classList.add('hidden');
       const svg = AiraPathPlot.renderPathPlot(path, currentSample, detections, home, { width: 200, height: 220 });
       if (!svg) {
         svgEl.classList.add('hidden');
@@ -517,6 +523,18 @@
       if (!r.ok) throw new Error(r.status === 404 ? 'Session not found' : 'Failed to load session');
       return r.json();
     });
+
+    function fetchPathAndRest() {
+      return Promise.all([
+        fetch(`/sessions/${sessionId}/path`).then(r => r.json()),
+        fetch(`/sessions/${sessionId}/telemetry-samples`).then(r => r.json()),
+        fetch(`/sessions/${sessionId}/detections`).then(r => r.json()),
+        fetch(`/sessions/${sessionId}/recordings`).then(r => r.json()),
+        fetch(`/sessions/${sessionId}/flight-events`).then(r => r.json()).catch(() => ({ events: [] })),
+        fetch(`/sessions/${sessionId}/phase-intervals`).then(r => r.json()).catch(() => ({ intervals: [] })),
+        fetch(`/sessions/${sessionId}/telemetry-samples?limit=5000&order=asc`).then(r => r.json()).catch(() => ({ samples: [] })),
+      ]);
+    }
     const PHASE_COLORS = { disarmed: '#475569', takeoff: '#d97706', climb: '#0891b2', cruise: '#2563eb', loiter: '#7c3aed', descent: '#4f46e5', rtl: '#ea580c', landing: '#dc2626', unknown: '#64748b' };
     const SEVERITY_COLORS = { info: '#94a3b8', warn: '#f59e0b', error: '#ef4444', critical: '#b91c1c' };
 
@@ -605,17 +623,49 @@
       container.classList.remove('hidden');
     }
 
-    Promise.all([
-      sessionMetaPromise,
-      fetch(`/sessions/${sessionId}/path`).then(r => r.json()),
-      fetch(`/sessions/${sessionId}/telemetry-samples`).then(r => r.json()),
-      fetch(`/sessions/${sessionId}/detections`).then(r => r.json()),
-      fetch(`/sessions/${sessionId}/recordings`).then(r => r.json()),
-      fetch(`/sessions/${sessionId}/flight-events`).then(r => r.json()).catch(() => ({ events: [] })),
-      fetch(`/sessions/${sessionId}/phase-intervals`).then(r => r.json()).catch(() => ({ intervals: [] })),
-      fetch(`/sessions/${sessionId}/telemetry-samples?limit=5000&order=asc`).then(r => r.json()).catch(() => ({ samples: [] })),
-    ]).then(([sessionMeta, pathData, samplesData, detData, recordingsData, eventsData, intervalsData, replaySamplesData]) => {
+    sessionMetaPromise.then((sessionMeta) => {
       document.getElementById('loading').classList.add('hidden');
+      const contentEl = document.getElementById('content');
+      contentEl.classList.remove('hidden');
+      const metaEl = document.getElementById('session-metadata');
+      const duration = fmtDuration(sessionMeta.started_at, sessionMeta.ended_at);
+      metaEl.innerHTML = [
+        '<span>Mode: ' + labelMode(sessionMeta) + '</span>',
+        '<span>Autopilot: ' + labelAutopilot(sessionMeta) + '</span>',
+        '<span>Source: ' + labelSource(sessionMeta) + '</span>',
+        '<span>' + fmtDate(sessionMeta.started_at) + ' → ' + (sessionMeta.ended_at ? fmtDate(sessionMeta.ended_at) : 'active') + '</span>',
+        duration !== '—' ? '<span>' + duration + '</span>' : '',
+        sessionMeta.notes ? '<span class="w-full mt-1">' + fmt(sessionMeta.notes) + '</span>' : '',
+      ].filter(Boolean).join(' · ');
+      const deleteSessionBtn = document.getElementById('delete-session-btn');
+      const deleteSessionModal = document.getElementById('delete-session-modal');
+      const currentSessionId = sessionMeta.current_session_id;
+      if (deleteSessionBtn && (currentSessionId == null || currentSessionId !== sessionId)) {
+        deleteSessionBtn.classList.remove('hidden');
+      }
+      deleteSessionBtn?.addEventListener('click', () => {
+        deleteSessionModal?.classList.remove('hidden');
+      });
+      document.getElementById('delete-session-cancel')?.addEventListener('click', () => {
+        deleteSessionModal?.classList.add('hidden');
+      });
+      document.getElementById('delete-session-confirm')?.addEventListener('click', async () => {
+        try {
+          const r = await fetch(`/sessions/${sessionId}`, { method: 'DELETE' });
+          if (r.ok) {
+            window.location.href = '/dashboard';
+          } else {
+            const j = await r.json().catch(() => ({}));
+            alert(j.detail || 'Failed to delete session');
+            deleteSessionModal?.classList.add('hidden');
+          }
+        } catch (e) {
+          alert('Failed to delete session');
+          deleteSessionModal?.classList.add('hidden');
+        }
+      });
+      return fetchPathAndRest().then(arr => [sessionMeta, ...arr]);
+    }).then(([sessionMeta, pathData, samplesData, detData, recordingsData, eventsData, intervalsData, replaySamplesData]) => {
       const path = pathData.path || [];
       const pathHome = (pathData.home_lat != null && pathData.home_lon != null)
         ? { lat: pathData.home_lat, lon: pathData.home_lon, home_source: pathData.home_source }
@@ -658,37 +708,6 @@
         }
       }
 
-      const contentEl = document.getElementById('content');
-      contentEl.classList.remove('hidden');
-
-      const deleteSessionBtn = document.getElementById('delete-session-btn');
-      const deleteSessionModal = document.getElementById('delete-session-modal');
-      const currentSessionId = sessionMeta.current_session_id;
-      if (deleteSessionBtn && (currentSessionId == null || currentSessionId !== sessionId)) {
-        deleteSessionBtn.classList.remove('hidden');
-      }
-      deleteSessionBtn?.addEventListener('click', () => {
-        deleteSessionModal?.classList.remove('hidden');
-      });
-      document.getElementById('delete-session-cancel')?.addEventListener('click', () => {
-        deleteSessionModal?.classList.add('hidden');
-      });
-      document.getElementById('delete-session-confirm')?.addEventListener('click', async () => {
-        try {
-          const r = await fetch(`/sessions/${sessionId}`, { method: 'DELETE' });
-          if (r.ok) {
-            window.location.href = '/dashboard';
-          } else {
-            const j = await r.json().catch(() => ({}));
-            alert(j.detail || 'Failed to delete session');
-            deleteSessionModal?.classList.add('hidden');
-          }
-        } catch (e) {
-          alert('Failed to delete session');
-          deleteSessionModal?.classList.add('hidden');
-        }
-      });
-
       const recPlayerEl = document.getElementById('session-video-player');
       const recPlayerContainer = document.getElementById('session-player-container');
 
@@ -711,17 +730,6 @@
         else recPlayerEl.addEventListener('loadedmetadata', doSeek, { once: true });
         recPlayerContainer?.scrollIntoView({ behavior: 'smooth' });
       }
-
-      const metaEl = document.getElementById('session-metadata');
-      const duration = fmtDuration(sessionMeta.started_at, sessionMeta.ended_at);
-      metaEl.innerHTML = [
-        '<span>Mode: ' + labelMode(sessionMeta) + '</span>',
-        '<span>Autopilot: ' + labelAutopilot(sessionMeta) + '</span>',
-        '<span>Source: ' + labelSource(sessionMeta) + '</span>',
-        '<span>' + fmtDate(sessionMeta.started_at) + ' → ' + (sessionMeta.ended_at ? fmtDate(sessionMeta.ended_at) : 'active') + '</span>',
-        duration !== '—' ? '<span>' + duration + '</span>' : '',
-        sessionMeta.notes ? '<span class="w-full mt-1">' + fmt(sessionMeta.notes) + '</span>' : '',
-      ].filter(Boolean).join(' · ');
 
       const statsEl = document.getElementById('stats');
       const evidenceSummaryEl = document.getElementById('evidence-summary');
