@@ -59,12 +59,12 @@ const routes =
               name: 'Settings',
               component: () => import('@/views/SettingsView.vue'),
             },
+            {
+              path: 'sessions/:id',
+              name: 'SessionDetail',
+              component: () => import('@/views/SessionDetailView.vue'),
+            },
           ],
-        },
-        {
-          path: 'sessions/:id',
-          name: 'SessionDetail',
-          component: () => import('@/views/SessionDetailView.vue'),
         },
       ]
 
