@@ -37,6 +37,8 @@ if command -v npm >/dev/null 2>&1; then
     mkdir -p "$OPT_DIR/frontend"
     cp -r "$REPO_ROOT/frontend/dist" "$OPT_DIR/frontend/"
     echo "==> Frontend dist included in package"
+    rm -rf "$REPO_ROOT/frontend/node_modules"
+    echo "==> Removed node_modules to free disk space"
   else
     echo "WARNING: frontend/dist not found after build; SPA will not be available in .deb"
   fi
