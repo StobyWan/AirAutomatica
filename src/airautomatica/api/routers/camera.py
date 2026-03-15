@@ -1,13 +1,18 @@
-"""Camera routes: ready, recording start/stop."""
+"""Camera routes: ready, recording start/stop, preview stream."""
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Body
+from fastapi.responses import StreamingResponse
 
 from airautomatica.config import get_camera_recording_mode
+from airautomatica.services.camera_preview import stream_preview_frames
 from airautomatica.services.camera_ready_state import get as get_camera_ready
 from airautomatica.services.camera_ready_state import set_ready as set_camera_ready
 from airautomatica.services.camera_recording import CameraRecordingService
+
+logger = logging.getLogger(__name__)
 
 
 def create_camera_router(
@@ -55,5 +60,40 @@ def create_camera_router(
             "last_recorded_file": state.last_recorded_file,
             "started_at": state.started_at.isoformat() if state.started_at else None,
         }
+
+    @router.get("/preview/stream")
+    def get_camera_preview_stream():
+        """Stream live camera preview as MJPEG. Returns 503 when recording."""
+        if camera_recording_service is None:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Camera not available"},
+            )
+        state = camera_recording_service.get_recording_state()
+        if state.recording:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Camera busy (recording)"},
+            )
+        if not camera_recording_service.is_available():
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Camera not available"},
+            )
+
+        def is_recording() -> bool:
+            s = camera_recording_service.get_recording_state()
+            return s.recording
+
+        return StreamingResponse(
+            stream_preview_frames(is_recording),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
 
     return router

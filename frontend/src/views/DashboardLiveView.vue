@@ -1,7 +1,10 @@
 <template>
   <div class="space-y-4">
     <FlightStatusStrip />
-    <OperationsHud />
+    <div class="flex gap-4 flex-wrap">
+      <OperationsHud class="flex-1 min-w-[280px]" />
+      <LiveCameraFeed class="flex-1 min-w-[280px]" />
+    </div>
     <ConnectionHealth />
     <QuickTelemetry />
     <RecentDetectionsStrip />
@@ -12,6 +15,7 @@
 <script setup lang="ts">
 import FlightStatusStrip from '@/components/FlightStatusStrip.vue'
 import OperationsHud from '@/components/OperationsHud.vue'
+import LiveCameraFeed from '@/components/LiveCameraFeed.vue'
 import ConnectionHealth from '@/components/ConnectionHealth.vue'
 import QuickTelemetry from '@/components/QuickTelemetry.vue'
 import RecentDetectionsStrip from '@/components/RecentDetectionsStrip.vue'
