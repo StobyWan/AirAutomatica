@@ -1,6 +1,6 @@
-const basePath = (import.meta.env.VITE_BASE_PATH || '').replace(/\/$/, '')
-export const API_BASE = basePath || ''
-export const RECORDINGS_BASE = basePath ? basePath + '/recordings' : '/recordings'
+// API and recordings are served at root; VITE_BASE_PATH is only for SPA routing and assets
+export const API_BASE = ''
+export const RECORDINGS_BASE = '/recordings'
 
 export function recordingsUrl(filename: string): string {
   if (!filename || typeof filename !== 'string') {
