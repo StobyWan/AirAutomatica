@@ -56,6 +56,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            packaging
+            alembic
+            pyproject.toml
+            README.md
 
       - name: Download frontend dist
         uses: actions/download-artifact@v4
@@ -83,7 +89,7 @@ jobs:
           sudo apt-get install -y dpkg-dev
 
       - name: Build .deb
-        run: ./packaging/debian/build-deb.sh
+        run: VERSION="${GITHUB_REF#refs/tags/v}" ./packaging/debian/build-deb.sh
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4

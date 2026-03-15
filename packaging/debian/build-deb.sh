@@ -11,7 +11,7 @@ LINUX_DIR="$(cd "$SCRIPT_DIR/../linux" && pwd)"
 
 # Version from env, or git tag, or pyproject.toml
 if [[ -n "${VERSION:-}" ]]; then
-  VERSION="$VERSION"
+  VERSION="${VERSION#v}"
 elif git describe --tags --match 'v*' --abbrev=0 2>/dev/null; then
   VERSION="$(git describe --tags --match 'v*' --abbrev=0 | sed 's/^v//')"
 else
