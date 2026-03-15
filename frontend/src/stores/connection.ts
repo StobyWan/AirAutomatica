@@ -13,6 +13,30 @@ import { useSocket } from '@/composables/useSocket'
 import { useHealthStore } from '@/stores/health'
 import { ApiError } from '@/api/client'
 
+const LAST_PORT_KEY = 'airautomatica_last_port'
+
+function loadLastPort(): { port: string; baud: number } | null {
+  try {
+    const raw = localStorage.getItem(LAST_PORT_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as { port?: string; baud?: number }
+    if (typeof data?.port === 'string' && data.port && typeof data?.baud === 'number') {
+      return { port: data.port, baud: data.baud }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function saveLastPort(port: string, baud: number): void {
+  localStorage.setItem(LAST_PORT_KEY, JSON.stringify({ port, baud }))
+}
+
+function clearLastPort(): void {
+  localStorage.removeItem(LAST_PORT_KEY)
+}
+
 export type ConnectionStatus =
   | 'Connecting'
   | 'Connected'
@@ -33,6 +57,11 @@ export const useConnectionStore = defineStore('connection', () => {
   const ports = ref<PortInfo[]>([])
   const portsLoading = ref(false)
   const portsError = ref<string | null>(null)
+
+  const lastPort = loadLastPort()
+  const lastConnectedPort = ref<string | null>(lastPort?.port ?? null)
+  const lastConnectedBaud = ref<number | null>(lastPort?.baud ?? null)
+  const connectingToLast = ref(false)
 
   const { socket } = useSocket()
 
@@ -74,12 +103,17 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
-  async function detect() {
+  async function detect(opts?: { port?: string; baud?: number }) {
     loading.value = true
     error.value = null
     try {
-      const res = await detectConnection()
+      const res = await detectConnection(opts)
       await fetchState()
+      if (res.detected && res.port && res.baud != null) {
+        lastConnectedPort.value = res.port
+        lastConnectedBaud.value = res.baud
+        saveLastPort(res.port, res.baud)
+      }
       return res
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e)
@@ -90,12 +124,33 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
-  async function setMode(m: 'mock' | 'ardupilot' | 'inav') {
+  async function connectToLastPort() {
+    const port = lastConnectedPort.value
+    const baud = lastConnectedBaud.value
+    if (!port || baud == null) return
+    connectingToLast.value = true
+    try {
+      return await detect({ port, baud })
+    } finally {
+      connectingToLast.value = false
+    }
+  }
+
+  async function setMode(
+    m: 'mock' | 'ardupilot' | 'inav',
+    port?: string,
+    baud?: number
+  ) {
     loading.value = true
     error.value = null
     try {
-      await setConnectionMode(m)
+      await setConnectionMode(m, port, baud)
       await fetchState()
+      if (m !== 'mock' && port && baud != null) {
+        lastConnectedPort.value = port
+        lastConnectedBaud.value = baud
+        saveLastPort(port, baud)
+      }
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e)
       error.value = msg
@@ -111,6 +166,9 @@ export const useConnectionStore = defineStore('connection', () => {
     try {
       await disconnect()
       await fetchState()
+      lastConnectedPort.value = null
+      lastConnectedBaud.value = null
+      clearLastPort()
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e)
       error.value = msg
@@ -162,11 +220,15 @@ export const useConnectionStore = defineStore('connection', () => {
     ports,
     portsLoading,
     portsError,
+    lastConnectedPort,
+    lastConnectedBaud,
+    connectingToLast,
     fetchState,
     fetchPorts,
     updatePortsFromSocket,
     detect,
     setMode,
+    connectToLastPort,
     disconnect: doDisconnect,
     clearError,
   }

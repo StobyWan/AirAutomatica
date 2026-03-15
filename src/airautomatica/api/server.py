@@ -151,7 +151,9 @@ def create_app(
         return RedirectResponse(url="/dashboard", status_code=302)
 
     app.include_router(
-        connection_router_mod.create_connection_router(_session_ref, _connection_store)
+        connection_router_mod.create_connection_router(
+            _session_ref, _connection_store, reload_telemetry_fn=_reload_telemetry_fn
+        )
     )
     app.include_router(
         session_router_mod.create_session_router(

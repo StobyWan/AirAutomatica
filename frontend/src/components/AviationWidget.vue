@@ -1,9 +1,9 @@
 <template>
-  <div class="flex flex-wrap gap-3">
+  <div class="flex flex-wrap gap-4">
     <!-- Attitude -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 w-[152px] min-w-[152px] max-w-[152px]">
-      <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Attitude</h3>
-      <div class="relative w-32 h-32 mx-auto rounded-full overflow-hidden border border-slate-600 bg-slate-900/80 shrink-0">
+    <div class="rounded-lg border border-slate-600/80 bg-slate-800/60 p-4 flex-1 min-w-[152px]">
+      <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Attitude</h3>
+      <div class="relative w-32 h-32 mx-auto rounded-full overflow-hidden border-2 border-slate-600/80 bg-slate-900/90 shrink-0 shadow-inner">
         <div
           v-if="!hasAttitude"
           class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs"
@@ -29,72 +29,71 @@
           />
         </template>
       </div>
-      <div class="mt-1.5 text-center text-xs text-slate-500 font-mono">
+      <div class="mt-2 text-center text-sm font-mono font-medium text-slate-300 tabular-nums">
         {{ attitudeValues }}
       </div>
     </div>
 
     <!-- Home -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 w-[136px] min-w-[136px] max-w-[136px]">
-      <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Home</h3>
-      <div v-if="!hasHome" class="text-center text-slate-500 text-xs py-4">
+    <div class="rounded-lg border border-slate-600/80 bg-slate-800/60 p-4 flex-1 min-w-[152px]">
+      <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Home</h3>
+      <div v-if="!hasHome" class="text-center text-slate-500 text-xs py-6">
         Position or home unavailable
       </div>
       <div v-else class="flex flex-col items-center gap-2">
-        <div class="relative w-20 h-20 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center shrink-0">
+        <div class="relative w-32 h-32 mx-auto rounded-full border-2 border-slate-600/80 bg-slate-900/90 flex items-center justify-center shrink-0 shadow-inner">
           <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-slate-500">N</span>
           <div
             class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150"
             :style="{ transform: `rotate(${homeBearing}deg)` }"
           >
-            <svg class="w-8 h-8 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+            <svg class="w-10 h-10 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2L4 22h4l4-8 4 8h4L12 2z" />
             </svg>
           </div>
         </div>
-        <div class="text-center text-sm">
-          <div class="font-mono text-slate-300">{{ formatDistance(homeDistanceM) }}</div>
-          <div class="text-xs text-slate-500">{{ homeBearing.toFixed(0) }}°</div>
+        <div class="text-center text-sm font-mono font-medium text-slate-200 tabular-nums">
+          {{ homeBearing.toFixed(0) }}° {{ formatDistance(homeDistanceM) }}
         </div>
       </div>
     </div>
 
     <!-- Altitude -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 min-w-[120px]">
-      <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Altitude</h3>
-      <div v-if="!hasAltitude" class="text-center text-slate-500 text-xs py-4">Unavailable</div>
-      <div v-else class="space-y-1.5 text-sm">
-        <div class="flex justify-between">
-          <span class="text-slate-500">Above home</span>
-          <span class="font-mono text-slate-300">{{ formatMeters(relAlt) }}</span>
+    <div class="rounded-lg border border-slate-600/80 bg-slate-800/60 p-4 flex-1 min-w-[120px]">
+      <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Altitude</h3>
+      <div v-if="!hasAltitude" class="text-center text-slate-500 text-xs py-6">Unavailable</div>
+      <div v-else class="space-y-2 text-sm">
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Above home</span>
+          <span class="font-mono font-medium text-slate-200 tabular-nums">{{ formatMeters(relAlt) }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-slate-500">Climb</span>
-          <span class="font-mono text-slate-300">{{ formatClimb(climbRate) }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Climb</span>
+          <span class="font-mono font-medium text-slate-200 tabular-nums">{{ formatClimb(climbRate) }}</span>
         </div>
       </div>
     </div>
 
     <!-- Speed -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 min-w-[100px]">
-      <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Speed</h3>
+    <div class="rounded-lg border border-slate-600/80 bg-slate-800/60 p-4 flex-1 min-w-[100px]">
+      <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Speed</h3>
       <div class="text-center">
-        <div class="font-mono text-lg text-slate-300">{{ speedValue }}</div>
-        <div class="text-xs text-slate-500">{{ speedLabel }}</div>
+        <div class="font-mono text-lg font-medium text-slate-200 tabular-nums">{{ speedValue }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ speedLabel }}</div>
       </div>
     </div>
 
     <!-- Power -->
-    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-3 min-w-[100px]">
-      <h3 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Power</h3>
-      <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between">
-          <span class="text-slate-500">Voltage</span>
-          <span class="font-mono text-slate-300">{{ formatVolts(voltage) }}</span>
+    <div class="rounded-lg border border-slate-600/80 bg-slate-800/60 p-4 flex-1 min-w-[100px]">
+      <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Power</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Voltage</span>
+          <span class="font-mono font-medium text-slate-200 tabular-nums">{{ formatVolts(voltage) }}</span>
         </div>
-        <div class="flex justify-between">
-          <span class="text-slate-500">Current</span>
-          <span class="font-mono text-slate-300">{{ formatAmps(current) }}</span>
+        <div class="flex justify-between items-center gap-2">
+          <span class="text-slate-500 text-xs">Current</span>
+          <span class="font-mono font-medium text-slate-200 tabular-nums">{{ formatAmps(current) }}</span>
         </div>
       </div>
     </div>

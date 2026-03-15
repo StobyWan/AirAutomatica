@@ -598,9 +598,36 @@ class PersistenceService:
             logger.exception("clear_session_home failed: %s", e)
             return False
 
+    def get_sessions_count(
+        self,
+        autopilot_filter: str | None = None,
+        connection_mode_filter: str | None = None,
+    ) -> int:
+        """Return total count of sessions matching filters. Returns 0 when DB disabled or on error."""
+        if get_engine() is None:
+            return 0
+        try:
+            with get_session() as session:
+                if session is None:
+                    return 0
+                stmt = select(func.count(FlightSession.id))
+                if autopilot_filter:
+                    stmt = stmt.where(FlightSession.autopilot == autopilot_filter)
+                if connection_mode_filter:
+                    stmt = stmt.where(
+                        FlightSession.connection_mode == connection_mode_filter
+                    )
+                result = session.execute(stmt)
+                return result.scalar() or 0
+        except Exception as e:
+            self._record_error(str(e))
+            logger.exception("get_sessions_count failed: %s", e)
+            return 0
+
     def get_recent_sessions(
         self,
         limit: int = 10,
+        offset: int = 0,
         include_detection_count: bool = True,
         autopilot_filter: str | None = None,
         connection_mode_filter: str | None = None,
@@ -632,7 +659,7 @@ class PersistenceService:
                         stmt = stmt.where(
                             FlightSession.connection_mode == connection_mode_filter
                         )
-                    stmt = stmt.limit(limit)
+                    stmt = stmt.limit(limit).offset(offset)
                     result = session.execute(stmt)
                     rows = result.all()
                     out: list[dict] = []
@@ -659,6 +686,7 @@ class PersistenceService:
                     select(FlightSession)
                     .order_by(FlightSession.started_at.desc())
                     .limit(limit)
+                    .offset(offset)
                 )
                 if autopilot_filter:
                     stmt_simple = stmt_simple.where(

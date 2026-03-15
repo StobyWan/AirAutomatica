@@ -79,15 +79,20 @@ export function stopSession(): Promise<{ ok: boolean }> {
 export interface SessionsResponse {
   sessions: SessionSummary[]
   current_session_id?: number | null
+  total: number
 }
 
 export function getSessions(params?: {
   autopilot?: string
   connection_mode?: string
+  limit?: number
+  offset?: number
 }): Promise<SessionsResponse> {
   const q = new URLSearchParams()
   if (params?.autopilot) q.set('autopilot', params.autopilot)
   if (params?.connection_mode) q.set('connection_mode', params.connection_mode)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.offset != null) q.set('offset', String(params.offset))
   const suffix = q.toString() ? '?' + q.toString() : ''
   return get<SessionsResponse>('/sessions' + suffix)
 }

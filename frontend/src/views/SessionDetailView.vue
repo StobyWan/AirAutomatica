@@ -109,17 +109,16 @@
             Clear override
           </button>
         </div>
-        <div class="path-svg rounded-lg overflow-hidden bg-black/20">
-          <!-- eslint-disable vue/no-v-html -- SVG from internal pathPlot utility, not user input -->
-          <svg
-            v-if="pathSvg"
-            width="100%"
-            height="220"
-            :viewBox="`0 0 200 220`"
-            class="block"
-            v-html="pathSvg"
+        <div class="path-map-container rounded-lg overflow-hidden bg-black/20">
+          <PathMap
+            v-if="pathData.path.length > 0"
+            :path="pathData.path"
+            :home-lat="pathData.home_lat ?? null"
+            :home-lon="pathData.home_lon ?? null"
+            :detections="detectionPoints"
+            :show-position-marker="false"
+            class="h-[220px] w-full"
           />
-          <!-- eslint-enable vue/no-v-html -->
           <div
             v-else-if="pathLoading"
             class="flex items-center justify-center h-[220px] text-slate-500 text-sm"
@@ -433,6 +432,7 @@ import { useRoute, useRouter } from 'vue-router'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import PathMap from '@/components/PathMap.vue'
 import ReplayTab from '@/components/replay/ReplayTab.vue'
 import {
   getSession,
@@ -446,7 +446,6 @@ import {
 } from '@/api/session'
 import { getTelemetrySummary, getEventClassification } from '@/api/ai'
 import { recordingsUrl } from '@/config'
-import { renderPathPlot } from '@/utils/pathPlot'
 import {
   fmtDate,
   fmtTsTime,
@@ -526,14 +525,6 @@ const homeLabel = computed(() => {
   return '—'
 })
 
-const homePoint = computed((): PathPoint | null => {
-  const h = pathData.value
-  if (h.home_lat != null && h.home_lon != null) {
-    return { lat: h.home_lat, lon: h.home_lon }
-  }
-  return null
-})
-
 const detectionPoints = computed((): PathPoint[] => {
   return detections.value
     .filter((d) => d.lat != null && d.lon != null)
@@ -550,12 +541,6 @@ const filteredDetections = computed(() => {
     if (f === 'aihat') return s === 'aihat'
     return true
   })
-})
-
-const pathSvg = computed(() => {
-  const path = pathData.value.path
-  const home = homePoint.value
-  return renderPathPlot(path, null, detectionPoints.value, home, { width: 200, height: 220 })
 })
 
 async function loadSession() {
@@ -790,7 +775,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.path-svg {
+.path-map-container {
   height: 220px;
 }
 </style>

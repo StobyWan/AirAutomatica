@@ -82,6 +82,26 @@ def scan_and_detect() -> DetectionResult:
     )
 
 
+def detect_on_port(port: str, baud: int) -> DetectionResult:
+    """Probe a single port for MAVLink HEARTBEAT. Returns detection result."""
+    found, autopilot = _probe_port_quick(port, baud, HEARTBEAT_TIMEOUT)
+    if found and autopilot:
+        return DetectionResult(
+            detected=True,
+            port=port,
+            baud=baud,
+            autopilot=autopilot,
+            message=f"Found {autopilot} on {port} @ {baud}",
+        )
+    return DetectionResult(
+        detected=False,
+        port=port,
+        baud=baud,
+        autopilot=None,
+        message=f"No MAVLink HEARTBEAT found on {port} @ {baud}",
+    )
+
+
 def _probe_port_quick(port: str, baud: int, timeout: float) -> tuple[bool, str | None]:
     """Probe a port for MAVLink HEARTBEAT. Returns (found, autopilot)."""
     try:

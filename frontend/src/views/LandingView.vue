@@ -47,7 +47,13 @@
           :disabled="connectionStore.loading"
           @click="onAutoDetect"
         >
-          {{ connectionStore.loading ? 'Detecting…' : 'Auto Detect' }}
+          {{
+            connectionStore.loading
+              ? connectionStore.lastConnectedPort && connectionStore.connectingToLast
+                ? `Connecting to ${connectionStore.lastConnectedPort}…`
+                : 'Detecting…'
+              : 'Auto Detect'
+          }}
         </button>
         <button
           type="button"
@@ -93,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useConnectionStore } from '@/stores/connection'
 import { useSocket } from '@/composables/useSocket'
@@ -103,6 +109,7 @@ import type { PortInfo } from '@/types'
 const router = useRouter()
 const connectionStore = useConnectionStore()
 const { socket } = useSocket()
+const autoConnectAttempted = ref(false)
 
 const dashboardPath = (import.meta.env.VITE_BASE_PATH || '').replace(/\/$/, '')
   ? ''
@@ -118,6 +125,22 @@ onMounted(async () => {
   await connectionStore.fetchState()
   if (connectionStore.connectionState !== 'setup') {
     router.replace(dashboardPath || '/')
+    return
+  }
+  if (
+    !autoConnectAttempted.value &&
+    connectionStore.lastConnectedPort &&
+    connectionStore.lastConnectedBaud != null
+  ) {
+    autoConnectAttempted.value = true
+    try {
+      await connectionStore.connectToLastPort()
+      if (connectionStore.connectionState !== 'setup') {
+        router.replace(dashboardPath || '/')
+      }
+    } catch {
+      // Error shown in store
+    }
   }
 })
 
@@ -136,7 +159,10 @@ async function onAutoDetect() {
 
 async function onSetMode(mode: 'mock' | 'ardupilot' | 'inav') {
   try {
-    await connectionStore.setMode(mode)
+    const det = connectionStore.detectionResult
+    const port = det?.port
+    const baud = det?.baud
+    await connectionStore.setMode(mode, port, baud)
     router.push(dashboardPath || '/')
   } catch {
     // Error shown in store

@@ -1,6 +1,7 @@
 """Connection routes: state, detect, mode, disconnect."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, Body
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 def create_connection_router(
     session_ref: list[int | None],
     connection_store: Optional[ConnectionStateStore],
+    reload_telemetry_fn: Optional[Callable[[], Awaitable[object]]] = None,
 ) -> APIRouter:
     """Create connection router with injected dependencies."""
     router = APIRouter(prefix="/connection", tags=["connection"])
@@ -90,16 +92,28 @@ def create_connection_router(
             return {"ports": [], "error": str(e)}
 
     @router.post("/detect")
-    def post_connection_detect() -> dict:
-        """Scan serial ports for MAVLink HEARTBEAT. Updates connection_store state."""
+    async def post_connection_detect(body: dict = Body(default_factory=dict)) -> dict:
+        """Scan serial ports for MAVLink HEARTBEAT. Updates connection_store state.
+        Optional body: { port?, baud? } to probe a single port only."""
         # Lazy import: telemetry.detector pulls in pymavlink/pyserial, which can cause
         # SIGBUS on some Raspberry Pi setups when loaded at process startup.
-        from airautomatica.telemetry.detector import scan_and_detect
+        from airautomatica.telemetry.detector import detect_on_port, scan_and_detect
+
+        port = body.get("port")
+        baud = body.get("baud")
+        if port and baud is not None:
+            baud = int(baud)
+        else:
+            port = None
+            baud = None
 
         if connection_store is not None:
             connection_store.set_connection_state(ConnectionState.DETECTING)
         try:
-            r = scan_and_detect()
+            if port and baud is not None:
+                r = detect_on_port(str(port), baud)
+            else:
+                r = scan_and_detect()
             if connection_store is not None:
                 store_result = StoreDetectionResult(
                     detected=r.detected,
@@ -121,6 +135,16 @@ def create_connection_router(
                         )
                 else:
                     connection_store.set_connection_state(ConnectionState.NOT_DETECTED)
+            if r.detected and r.port and r.baud is not None:
+                save_settings(
+                    {
+                        "TELEMETRY_BACKEND": "serial",
+                        "SERIAL_PORT": str(r.port),
+                        "SERIAL_BAUD": str(r.baud),
+                    }
+                )
+                if reload_telemetry_fn is not None:
+                    await reload_telemetry_fn()
             mode = r.autopilot if r.autopilot else "inav"
             if r.autopilot == "generic":
                 mode = "inav"
@@ -169,8 +193,8 @@ def create_connection_router(
             }
 
     @router.post("/mode")
-    def post_connection_mode(body: dict = Body(...)) -> dict:
-        """Set connection mode. Persists to settings. Serial modes require restart."""
+    async def post_connection_mode(body: dict = Body(...)) -> dict:
+        """Set connection mode. Persists to settings. Serial modes trigger telemetry reconnect."""
         mode = (body.get("mode") or "").lower()
         port = body.get("port") or get_serial_port()
         baud = body.get("baud") or get_serial_baud()
@@ -195,14 +219,19 @@ def create_connection_router(
             else:
                 connection_store.set_connection_state(ConnectionState.CONNECTED_INAV)
                 connection_store.set_mode(ConnectionMode.INAV)
+        if mode in ("ardupilot", "inav") and reload_telemetry_fn is not None:
+            await reload_telemetry_fn()
         return {"ok": True, "restart_required": restart_required}
 
     @router.post("/disconnect")
-    def post_connection_disconnect() -> dict:
-        """Return to setup. Clear mode. Preserve detection_result for diagnostics."""
+    async def post_connection_disconnect() -> dict:
+        """Return to setup. Clear mode. Switch to mock telemetry. Preserve detection_result for diagnostics."""
+        save_settings({"TELEMETRY_BACKEND": "mock"})
         if connection_store is not None:
             connection_store.set_connection_state(ConnectionState.SETUP)
             connection_store.set_mode(None)
+        if reload_telemetry_fn is not None:
+            await reload_telemetry_fn()
         return {"ok": True}
 
     return router
