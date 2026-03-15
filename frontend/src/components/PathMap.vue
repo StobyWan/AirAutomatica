@@ -21,7 +21,13 @@ const props = withDefaults(
     detections?: PathPoint[]
     showPositionMarker?: boolean
   }>(),
-  { showPositionMarker: true }
+  {
+    path: undefined,
+    homeLat: undefined,
+    homeLon: undefined,
+    detections: undefined,
+    showPositionMarker: true,
+  }
 )
 
 const pathStore = useTelemetryPathStore()

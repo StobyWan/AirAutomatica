@@ -61,24 +61,28 @@
       </div>
     </div>
 
-    <!-- ALTITUDE, SPEED, POWER – bottom left, width fits content only -->
+    <!-- ALTITUDE, SPEED, POWER – bottom left; two rows on mobile (<978px), fixed left -->
     <div
-      class="absolute bottom-3 left-4 w-fit max-w-[calc(100%-7rem)] rounded-lg border border-slate-600/80 bg-slate-900/85 backdrop-blur-sm px-3 py-2 shadow-lg"
+      class="absolute bottom-3 left-4 w-fit max-w-[calc(100%-7rem)] max-[978px]:max-w-[calc(100%-6rem)] rounded-lg border border-slate-600/80 bg-slate-900/85 backdrop-blur-sm px-3 py-2 shadow-lg"
     >
-      <div class="flex items-center gap-x-3 text-[10px]">
+      <div
+        class="flex flex-col max-[978px]:items-start max-[978px]:gap-y-1.5 min-[979px]:flex-row min-[979px]:items-center min-[979px]:gap-x-3 text-[10px]"
+      >
         <div class="flex items-baseline gap-x-1.5 shrink-0">
           <span class="text-slate-500 uppercase tracking-wider">ALT</span>
           <span class="font-mono text-slate-200 tabular-nums">{{ altitudeText }}</span>
         </div>
-        <span class="text-slate-600 shrink-0">·</span>
-        <div class="flex items-baseline gap-x-1.5 shrink-0">
-          <span class="text-slate-500 uppercase tracking-wider">SPD</span>
-          <span class="font-mono text-slate-200 tabular-nums">{{ speedText }}</span>
-        </div>
-        <span class="text-slate-600 shrink-0">·</span>
-        <div class="flex items-baseline gap-x-1.5 shrink-0">
-          <span class="text-slate-500 uppercase tracking-wider">PWR</span>
-          <span class="font-mono text-slate-200 tabular-nums">{{ powerText }}</span>
+        <span class="text-slate-600 shrink-0 max-[978px]:hidden">·</span>
+        <div class="flex items-center gap-x-3 shrink-0">
+          <div class="flex items-baseline gap-x-1.5 shrink-0">
+            <span class="text-slate-500 uppercase tracking-wider">SPD</span>
+            <span class="font-mono text-slate-200 tabular-nums">{{ speedText }}</span>
+          </div>
+          <span class="text-slate-600 shrink-0">·</span>
+          <div class="flex items-baseline gap-x-1.5 shrink-0">
+            <span class="text-slate-500 uppercase tracking-wider">PWR</span>
+            <span class="font-mono text-slate-200 tabular-nums">{{ powerText }}</span>
+          </div>
         </div>
       </div>
     </div>
