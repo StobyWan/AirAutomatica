@@ -19,7 +19,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend
-        run: cd frontend && npm ci && VITE_BASE_PATH=/dashboard npm run build
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          cd frontend && npm ci && VITE_APP_VERSION="$VERSION" VITE_BASE_PATH=/dashboard npm run build
 
       - name: Upload frontend dist
         uses: actions/upload-artifact@v4

@@ -37,7 +37,7 @@ if [[ -d "$REPO_ROOT/frontend/dist" ]]; then
   echo "==> Frontend dist included in package"
 elif command -v npm >/dev/null 2>&1; then
   echo "==> Building frontend"
-  (cd "$REPO_ROOT/frontend" && npm ci && VITE_BASE_PATH=/dashboard npm run build)
+  (cd "$REPO_ROOT/frontend" && npm ci && VITE_APP_VERSION="$VERSION" VITE_BASE_PATH=/dashboard npm run build)
   if [[ -d "$REPO_ROOT/frontend/dist" ]]; then
     mkdir -p "$OPT_DIR/frontend"
     cp -r "$REPO_ROOT/frontend/dist" "$OPT_DIR/frontend/"

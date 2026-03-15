@@ -8,7 +8,10 @@
       Reconnecting…
     </div>
     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-      <h1 class="text-xl font-bold text-slate-100 tracking-tight">AIRAUTOMATICA Dashboard</h1>
+      <h1 class="text-xl font-bold text-slate-100 tracking-tight">
+        AIRAUTOMATICA Dashboard
+        <span v-if="appVersion" class="text-slate-500 font-normal text-sm ml-2">v{{ appVersion }}</span>
+      </h1>
       <div class="flex items-center gap-2">
         <span
           class="status-badge px-2 py-1 rounded text-sm font-semibold"
@@ -48,6 +51,7 @@ import { useSocket } from '@/composables/useSocket'
 
 const connectionStore = useConnectionStore()
 const { connected } = useSocket()
+const appVersion = import.meta.env.VITE_APP_VERSION ?? ''
 
 const statusClass = computed(() => {
   const s = connectionStore.connectionStatus
