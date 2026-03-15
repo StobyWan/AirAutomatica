@@ -110,13 +110,18 @@
     .landing-btn-secondary:hover { background: rgba(255,255,255,0.12); }
     .operations-subsection { border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 1rem; margin-bottom: 1rem; }
     .operations-subsection:last-of-type { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .operations-hud-strip { margin-bottom: 1rem; }
+    .operations-hud-block { min-height: 3.5rem; }
     .operations-chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
     .operations-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; }
     .operations-chip-ok { background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
     .operations-chip-muted { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
     .operations-chip-warn { background: rgba(234,179,8,0.2); color: #facc15; border: 1px solid rgba(234,179,8,0.4); }
     .operations-chip-recording { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+    .operations-rec-pill { background: rgba(239,68,68,0.9); color: white; padding: 0.2rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; }
     .operations-source { font-size: 0.8125rem; font-weight: 500; color: var(--text); padding: 0.5rem 0.75rem; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); margin-top: 1rem; }
+    .operations-transition-row { margin-top: 1rem; padding: 0.75rem 1rem; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); }
+    .operations-transition-row.timeout { border-color: rgba(234,179,8,0.4); background: rgba(234,179,8,0.08); }
     .btn-stop-session { background: rgba(234,179,8,0.15); color: #facc15; border: 1.5px solid rgba(234,179,8,0.5); }
     .btn-stop-session:hover { background: rgba(234,179,8,0.25); border-color: rgba(234,179,8,0.7); }
     .btn-stop-recording { background: rgba(239,68,68,0.12); color: #f87171; border: 1.5px solid rgba(239,68,68,0.4); }
@@ -210,12 +215,28 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2 class="m-0 mb-3">Operations</h2>
-    <div id="operations-chip-row" class="operations-chip-row">
-      <span id="ops-chip-connection" class="operations-chip operations-chip-muted">Disconnected</span>
-      <span id="ops-chip-session" class="operations-chip operations-chip-muted">Idle</span>
-      <span id="ops-chip-camera" class="operations-chip operations-chip-muted">Not ready</span>
+  <div class="card border border-slate-700/60">
+    <h2 class="m-0 mb-3 text-slate-200 font-semibold tracking-tight">Operations</h2>
+    <div id="operations-hud-strip" class="operations-hud-strip grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Connection</div>
+        <span id="ops-chip-connection" class="operations-chip operations-chip-muted">Disconnected</span>
+      </div>
+      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Session</div>
+        <span id="ops-chip-session" class="operations-chip operations-chip-muted">Idle</span>
+      </div>
+      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Camera</div>
+        <span id="ops-chip-camera" class="operations-chip operations-chip-muted">Not ready</span>
+      </div>
+      <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Recording</div>
+        <div id="ops-recording-block" class="flex items-center gap-2 flex-wrap">
+          <span id="ops-chip-recording" class="operations-chip operations-chip-muted">Idle</span>
+          <span id="ops-recording-timer" class="text-xs font-mono text-slate-400 hidden"></span>
+        </div>
+      </div>
     </div>
     <div class="operations-subsection">
       <h3 class="text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Session</h3>
@@ -247,6 +268,17 @@
           Stop Recording
         </button>
       </div>
+    </div>
+    <div id="operations-transition-row" class="operations-transition-row hidden">
+      <p id="operations-transition-msg" class="operations-transition-msg text-sm font-medium text-slate-300"></p>
+      <p id="operations-transition-subtext" class="operations-transition-subtext text-xs text-slate-500 mt-0.5"></p>
+      <div id="operations-transition-refresh-wrap" class="hidden mt-2">
+        <button type="button" id="operations-refresh-status-btn" class="px-3 py-1.5 rounded-lg bg-amber-800/60 hover:bg-amber-700/60 text-amber-200 text-xs font-medium transition-colors">Refresh status</button>
+      </div>
+    </div>
+    <div id="operations-latest-recording" class="operations-latest-recording hidden mt-3 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/30">
+      <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Latest recording</div>
+      <a id="operations-latest-recording-link" href="#" class="font-mono text-sm text-cyan-400 hover:text-cyan-300 truncate block"></a>
     </div>
     <p id="operations-source" class="operations-source">Source: —</p>
   </div>
@@ -630,6 +662,151 @@
 
   <script>
     const SETTINGS_KEYS = ['TELEMETRY_BACKEND','SERIAL_PORT','SERIAL_BAUD','LOCAL_LLM_PROVIDER','LOCAL_LLM_BASE_URL','LOCAL_LLM_MODEL','LOCAL_LLM_TIMEOUT','OLLAMA_NUM_THREAD','AI_HAT_ENABLED','AIRAUTOMATICA_PREPROCESSING_ENABLED','CAMERA_RECORDING_MODE','RECORDING_AI_OVERLAY_ENABLED','RECORDING_AI_PERSIST_ENABLED','SESSION_AUTO_START_ON_ARM','AI_HAT_DETECTION_THRESHOLD','AI_MIN_CONFIDENCE','AI_DUPLICATE_WINDOW_SEC','AI_SCHEDULER_COOLDOWN_SEC'];
+
+    const TRANSIENT_TIMEOUT_MS = 15000;
+    const SPINNER_SVG = '<svg class="animate-spin h-4 w-4 inline-block mr-1.5 align-middle" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+    let recordingTimerInterval = null;
+    const transientState = {
+      stoppingSession: false,
+      stoppingSessionSince: null,
+      stoppingRecording: false,
+      stoppingRecordingSince: null,
+      startingSession: false,
+      startingSessionSince: null,
+      startingRecording: false,
+      startingRecordingSince: null,
+      timeout: false,
+    };
+
+    function reconcileTransientState(d) {
+      if (transientState.stoppingSession && (d.session_id == null || d.session_id === '')) {
+        transientState.stoppingSession = false;
+        transientState.stoppingSessionSince = null;
+      }
+      if (transientState.stoppingRecording && d.camera_recording !== true) {
+        transientState.stoppingRecording = false;
+        transientState.stoppingRecordingSince = null;
+      }
+      if (transientState.startingSession && d.session_id != null && d.session_id !== '') {
+        transientState.startingSession = false;
+        transientState.startingSessionSince = null;
+      }
+      if (transientState.startingRecording && d.camera_recording === true) {
+        transientState.startingRecording = false;
+        transientState.startingRecordingSince = null;
+      }
+      const now = Date.now();
+      if (transientState.stoppingSessionSince != null && (now - transientState.stoppingSessionSince) > TRANSIENT_TIMEOUT_MS) {
+        transientState.timeout = true;
+      } else if (transientState.stoppingRecordingSince != null && (now - transientState.stoppingRecordingSince) > TRANSIENT_TIMEOUT_MS) {
+        transientState.timeout = true;
+      } else {
+        transientState.timeout = false;
+      }
+    }
+
+    function renderOperationsButtons(state) {
+      const sid = state.session_id;
+      const sessionActive = sid != null && sid !== '';
+      const recording = state.camera_recording === true;
+      const available = state.camera_recording_available === true;
+      const mode = state.camera_recording_mode || 'manual';
+      const cameraReady = state.camera_ready === true;
+      const backend = state.telemetry_backend || 'mock';
+      const useMock = backend === 'mock';
+
+      const anyTransient = transientState.stoppingSession || transientState.stoppingRecording || transientState.startingSession || transientState.startingRecording || transientState.timeout;
+      const sessionStartBtn = document.getElementById('session-start-btn');
+      const sessionStartMockBtn = document.getElementById('session-start-mock-btn');
+      const sessionStopBtn = document.getElementById('session-stop-btn');
+      const cameraStartBtn = document.getElementById('camera-start-btn');
+      const cameraStopBtn = document.getElementById('camera-stop-btn');
+
+      const cameraCanStart = available && mode !== 'off' && !recording && cameraReady;
+      const cameraCanStop = available && mode !== 'off' && recording;
+
+      if (sessionStopBtn) {
+        const isStopping = transientState.stoppingSession;
+        sessionStopBtn.disabled = anyTransient || !sessionActive;
+        sessionStopBtn.innerHTML = isStopping ? SPINNER_SVG + 'Stopping…' : 'Stop Session';
+        sessionStopBtn.classList.toggle('hidden', !sessionActive && !isStopping);
+      }
+      if (sessionStartBtn) {
+        const isStarting = transientState.startingSession;
+        sessionStartBtn.disabled = anyTransient || sessionActive;
+        sessionStartBtn.innerHTML = isStarting ? SPINNER_SVG + 'Starting…' : 'Start Session';
+        sessionStartBtn.classList.toggle('hidden', useMock || sessionActive || isStarting);
+      }
+      if (sessionStartMockBtn) {
+        const isStarting = transientState.startingSession;
+        sessionStartMockBtn.disabled = anyTransient || sessionActive;
+        sessionStartMockBtn.innerHTML = isStarting ? SPINNER_SVG + 'Starting…' : 'Start Mock Session';
+        sessionStartMockBtn.classList.toggle('hidden', !useMock || sessionActive || isStarting);
+      }
+      if (cameraStartBtn) {
+        const isStarting = transientState.startingRecording;
+        cameraStartBtn.disabled = anyTransient || !cameraCanStart;
+        cameraStartBtn.innerHTML = isStarting ? SPINNER_SVG + 'Starting…' : 'Start Recording';
+      }
+      if (cameraStopBtn) {
+        const isStopping = transientState.stoppingRecording;
+        cameraStopBtn.disabled = anyTransient || !cameraCanStop;
+        cameraStopBtn.innerHTML = isStopping ? SPINNER_SVG + 'Stopping…' : 'Stop Recording';
+      }
+    }
+
+    function renderOperationsTransitionRow() {
+      const row = document.getElementById('operations-transition-row');
+      const msg = document.getElementById('operations-transition-msg');
+      const subtext = document.getElementById('operations-transition-subtext');
+      const refreshWrap = document.getElementById('operations-transition-refresh-wrap');
+      if (!row || !msg || !subtext || !refreshWrap) return;
+
+      if (transientState.timeout) {
+        row.classList.remove('hidden');
+        row.classList.add('timeout');
+        msg.textContent = 'Stop may have failed';
+        subtext.textContent = 'Check connection and retry.';
+        refreshWrap.classList.remove('hidden');
+        return;
+      }
+      if (transientState.stoppingSession) {
+        row.classList.remove('hidden');
+        row.classList.remove('timeout');
+        msg.textContent = 'Stopping session…';
+        subtext.textContent = 'Finalizing recording and ending telemetry capture';
+        refreshWrap.classList.add('hidden');
+        return;
+      }
+      if (transientState.stoppingRecording) {
+        row.classList.remove('hidden');
+        row.classList.remove('timeout');
+        msg.textContent = 'Finalizing MP4 and stopping camera process…';
+        subtext.textContent = '';
+        refreshWrap.classList.add('hidden');
+        return;
+      }
+      if (transientState.startingSession) {
+        row.classList.remove('hidden');
+        row.classList.remove('timeout');
+        msg.textContent = 'Starting session…';
+        subtext.textContent = '';
+        refreshWrap.classList.add('hidden');
+        return;
+      }
+      if (transientState.startingRecording) {
+        row.classList.remove('hidden');
+        row.classList.remove('timeout');
+        msg.textContent = 'Starting recording…';
+        subtext.textContent = '';
+        refreshWrap.classList.add('hidden');
+        return;
+      }
+      row.classList.add('hidden');
+      msg.textContent = '';
+      subtext.textContent = '';
+      refreshWrap.classList.add('hidden');
+    }
 
     function showView(viewId) {
       document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
@@ -1281,32 +1458,19 @@
 
     function updateSessionUI(sid, telemetryBackend) {
       const sessionStatusText = document.getElementById('session-status-text');
-      const sessionStartBtn = document.getElementById('session-start-btn');
-      const sessionStartMockBtn = document.getElementById('session-start-mock-btn');
-      const sessionStopBtn = document.getElementById('session-stop-btn');
-      if (!sessionStatusText || !sessionStartBtn || !sessionStartMockBtn || !sessionStopBtn) return;
-      const backend = telemetryBackend ?? currentTelemetryBackend;
+      if (!sessionStatusText) return;
       if (sid != null && sid !== '') {
         sessionStatusText.textContent = 'Session active #' + sid;
-        sessionStartBtn.classList.add('hidden');
-        sessionStartMockBtn.classList.add('hidden');
-        sessionStopBtn.classList.remove('hidden');
       } else {
         sessionStatusText.textContent = 'No active session. Click Start Session to begin recording telemetry and detections.';
-        sessionStopBtn.classList.add('hidden');
-        if (backend === 'mock') {
-          sessionStartBtn.classList.add('hidden');
-          sessionStartMockBtn.classList.remove('hidden');
-        } else {
-          sessionStartBtn.classList.remove('hidden');
-          sessionStartMockBtn.classList.add('hidden');
-        }
       }
     }
 
     document.getElementById('session-start-btn')?.addEventListener('click', async () => {
-      const btn = document.getElementById('session-start-btn');
-      if (btn) btn.disabled = true;
+      transientState.startingSession = true;
+      transientState.startingSessionSince = Date.now();
+      renderOperationsButtons(lastHealth || {});
+      renderOperationsTransitionRow();
       try {
         const r = await fetch('/session/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         const d = await r.json();
@@ -1314,14 +1478,24 @@
           currentSessionId = d.session_id;
           updateSessionUI(d.session_id);
           refreshRecordingsUI();
+        } else {
+          transientState.startingSession = false;
+          transientState.startingSessionSince = null;
+          renderOperationsButtons(lastHealth || {});
+          renderOperationsTransitionRow();
         }
-      } finally {
-        if (btn) btn.disabled = false;
+      } catch (e) {
+        transientState.startingSession = false;
+        transientState.startingSessionSince = null;
+        renderOperationsButtons(lastHealth || {});
+        renderOperationsTransitionRow();
       }
     });
     document.getElementById('session-start-mock-btn')?.addEventListener('click', async () => {
-      const btn = document.getElementById('session-start-mock-btn');
-      if (btn) btn.disabled = true;
+      transientState.startingSession = true;
+      transientState.startingSessionSince = Date.now();
+      renderOperationsButtons(lastHealth || {});
+      renderOperationsTransitionRow();
       try {
         const r = await fetch('/session/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mock: true }) });
         const d = await r.json();
@@ -1329,9 +1503,17 @@
           currentSessionId = d.session_id;
           updateSessionUI(d.session_id);
           refreshRecordingsUI();
+        } else {
+          transientState.startingSession = false;
+          transientState.startingSessionSince = null;
+          renderOperationsButtons(lastHealth || {});
+          renderOperationsTransitionRow();
         }
-      } finally {
-        if (btn) btn.disabled = false;
+      } catch (e) {
+        transientState.startingSession = false;
+        transientState.startingSessionSince = null;
+        renderOperationsButtons(lastHealth || {});
+        renderOperationsTransitionRow();
       }
     });
     document.getElementById('idle-retry-detect')?.addEventListener('click', () => {
@@ -1346,15 +1528,20 @@
     });
 
     document.getElementById('session-stop-btn')?.addEventListener('click', async () => {
-      const btn = document.getElementById('session-stop-btn');
-      if (btn) btn.disabled = true;
+      transientState.stoppingSession = true;
+      transientState.stoppingSessionSince = Date.now();
+      renderOperationsButtons(lastHealth || {});
+      renderOperationsTransitionRow();
       try {
         await fetch('/session/stop', { method: 'POST' });
         currentSessionId = null;
         updateSessionUI(null);
         refreshRecordingsUI();
-      } finally {
-        if (btn) btn.disabled = false;
+      } catch (e) {
+        transientState.stoppingSession = false;
+        transientState.stoppingSessionSince = null;
+        renderOperationsButtons(lastHealth || {});
+        renderOperationsTransitionRow();
       }
     });
 
@@ -1472,6 +1659,7 @@
     });
     socket.on('health_update', (d) => {
       lastHealth = d;
+      reconcileTransientState(d);
       const tel = d.telemetry || {};
       const status = tel.telemetry_status || 'disconnected';
       document.getElementById('telemetry-status').innerHTML =
@@ -1493,14 +1681,53 @@
       }
       if (sessChip) {
         const active = d.session_id != null && d.session_id !== '';
-        sessChip.textContent = active ? 'Session Active' : 'Idle';
-        sessChip.className = 'operations-chip ' + (active ? 'operations-chip-warn' : 'operations-chip-muted');
+        const stopping = transientState.stoppingSession;
+        sessChip.textContent = stopping ? 'Stopping…' : (active ? 'Session Active' : 'Idle');
+        sessChip.className = 'operations-chip ' + (stopping ? 'operations-chip-warn' : (active ? 'operations-chip-warn' : 'operations-chip-muted'));
       }
       if (camChip) {
         const recording = d.camera_recording === true;
         const ready = d.camera_ready === true;
-        camChip.textContent = recording ? 'Recording' : (ready ? 'Camera Ready' : 'Not ready');
-        camChip.className = 'operations-chip ' + (recording ? 'operations-chip-recording' : (ready ? 'operations-chip-ok' : 'operations-chip-muted'));
+        const stoppingRec = transientState.stoppingRecording;
+        camChip.textContent = stoppingRec ? 'Stopping…' : (recording ? 'Recording' : (ready ? 'Camera Ready' : 'Not ready'));
+        camChip.className = 'operations-chip ' + (stoppingRec ? 'operations-chip-recording' : (recording ? 'operations-chip-recording' : (ready ? 'operations-chip-ok' : 'operations-chip-muted')));
+      }
+      const recChip = document.getElementById('ops-chip-recording');
+      const recTimer = document.getElementById('ops-recording-timer');
+      if (recChip && recTimer) {
+        const recording = d.camera_recording === true;
+        const stoppingRec = transientState.stoppingRecording;
+        const showTimer = recording || stoppingRec;
+        const startedAt = d.camera_recording_started_at;
+        function updateRecTimer() {
+          if (!startedAt) return;
+          const elapsedMs = Date.now() - new Date(startedAt).getTime();
+          const sec = Math.max(0, Math.floor(elapsedMs / 1000));
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          recTimer.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        }
+        if (recordingTimerInterval) {
+          clearInterval(recordingTimerInterval);
+          recordingTimerInterval = null;
+        }
+        if (showTimer && startedAt) {
+          updateRecTimer();
+          recTimer.classList.remove('hidden');
+          recordingTimerInterval = setInterval(updateRecTimer, 1000);
+        } else {
+          recTimer.classList.add('hidden');
+        }
+        if (stoppingRec) {
+          recChip.className = 'operations-chip operations-chip-recording';
+          recChip.textContent = 'Stopping…';
+        } else if (recording) {
+          recChip.className = 'operations-rec-pill animate-pulse';
+          recChip.textContent = 'REC';
+        } else {
+          recChip.className = 'operations-chip operations-chip-muted';
+          recChip.textContent = 'Idle';
+        }
       }
       const caps = d.capabilities;
       const bannerEl = document.getElementById('capability-banner');
@@ -1562,35 +1789,28 @@
       }
       const modeBadge = document.getElementById('video-mode-badge');
       const stateBadge = document.getElementById('video-state-badge');
-      const startBtn = document.getElementById('camera-start-btn');
-      const stopBtn = document.getElementById('camera-stop-btn');
       const readyToggle = document.getElementById('camera-ready-toggle');
       const readyLabel = document.getElementById('camera-ready-label');
-      if (modeBadge && stateBadge && startBtn && stopBtn) {
+      if (modeBadge && stateBadge) {
         const mode = d.camera_recording_mode || 'manual';
         const available = d.camera_recording_available === true;
         const recording = d.camera_recording === true;
         const cameraReady = d.camera_ready === true;
+        const stoppingRec = transientState.stoppingRecording;
         modeBadge.textContent = mode;
         modeBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ' +
           (mode === 'off' ? 'bg-red-900/50 text-red-300' : mode === 'auto' ? 'bg-amber-900/50 text-amber-300' : 'bg-cyan-900/50 text-cyan-300');
         if (!available || mode === 'off') {
           stateBadge.textContent = available ? 'Disabled' : 'Unavailable';
           stateBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-400';
-          startBtn.disabled = true;
-          stopBtn.disabled = !recording;
-        } else if (recording) {
-          stateBadge.textContent = mode === 'auto' ? 'Auto-record' : 'Recording';
+        } else if (recording || stoppingRec) {
+          stateBadge.textContent = stoppingRec ? 'Stopping…' : (mode === 'auto' ? 'Auto-record' : 'Recording');
           stateBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ' +
             (mode === 'auto' ? 'bg-amber-600/80 text-amber-100 animate-pulse' : 'bg-red-600/80 text-red-100 animate-pulse');
-          startBtn.disabled = true;
-          stopBtn.disabled = false;
         } else {
           stateBadge.textContent = cameraReady ? 'Ready' : 'Standby';
           stateBadge.className = 'inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ' +
             (cameraReady ? 'bg-emerald-600/80 text-white' : 'bg-slate-600 text-slate-300');
-          startBtn.disabled = false;
-          stopBtn.disabled = true;
         }
         if (readyToggle) {
           readyToggle.classList.toggle('bg-cyan-600', cameraReady);
@@ -1601,6 +1821,8 @@
         }
         if (readyLabel) readyLabel.textContent = cameraReady ? 'Ready' : 'Not ready';
       }
+      renderOperationsButtons(d);
+      renderOperationsTransitionRow();
     });
 
     document.getElementById('camera-ready-toggle').addEventListener('click', async () => {
@@ -1625,25 +1847,53 @@
     });
 
     document.getElementById('camera-start-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('camera-start-btn');
-      btn.disabled = true;
+      transientState.startingRecording = true;
+      transientState.startingRecordingSince = Date.now();
+      renderOperationsButtons(lastHealth || {});
+      renderOperationsTransitionRow();
       try {
         const r = await fetch('/camera/recording/start', { method: 'POST' });
         const d = await r.json();
-        if (!d.ok) btn.disabled = false;
+        if (!d.ok) {
+          transientState.startingRecording = false;
+          transientState.startingRecordingSince = null;
+          renderOperationsButtons(lastHealth || {});
+          renderOperationsTransitionRow();
+        }
       } catch (e) {
-        btn.disabled = false;
+        transientState.startingRecording = false;
+        transientState.startingRecordingSince = null;
+        renderOperationsButtons(lastHealth || {});
+        renderOperationsTransitionRow();
       }
     });
 
     document.getElementById('camera-stop-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('camera-stop-btn');
-      btn.disabled = true;
+      transientState.stoppingRecording = true;
+      transientState.stoppingRecordingSince = Date.now();
+      renderOperationsButtons(lastHealth || {});
+      renderOperationsTransitionRow();
       try {
         const r = await fetch('/camera/recording/stop', { method: 'POST' });
         const d = await r.json();
         if (d.ok) refreshRecordingsUI();
-      } catch (e) {}
+      } catch (e) {
+        transientState.stoppingRecording = false;
+        transientState.stoppingRecordingSince = null;
+        renderOperationsButtons(lastHealth || {});
+        renderOperationsTransitionRow();
+      }
+    });
+
+    document.getElementById('operations-refresh-status-btn')?.addEventListener('click', () => {
+      transientState.stoppingSession = false;
+      transientState.stoppingSessionSince = null;
+      transientState.stoppingRecording = false;
+      transientState.stoppingRecordingSince = null;
+      transientState.timeout = false;
+      renderOperationsButtons(lastHealth || {});
+      renderOperationsTransitionRow();
+      refreshRecordingsUI();
     });
 
     let liveSelectedFilename = null;
@@ -1673,6 +1923,8 @@
         sessionHistoryLink.href = '/dashboard';
         sessionHistoryLink.onclick = (e) => { e.preventDefault(); document.querySelector('[data-tab="sessions"]').click(); };
         emptyEl.classList.remove('hidden');
+        const latestTile = document.getElementById('operations-latest-recording');
+        if (latestTile) latestTile.classList.add('hidden');
         return;
       }
 
@@ -1701,6 +1953,19 @@
           emptyMsgEl.textContent = 'No recordings for this session yet';
         }
 
+        const latestTile = document.getElementById('operations-latest-recording');
+        const latestLink = document.getElementById('operations-latest-recording-link');
+        if (latestTile && latestLink) {
+          if (recordings.length > 0) {
+            const r = recordings[0];
+            latestLink.textContent = r.filename;
+            latestLink.href = recordingsUrl(r.filename);
+            latestLink.download = r.filename;
+            latestTile.classList.remove('hidden');
+          } else {
+            latestTile.classList.add('hidden');
+          }
+        }
         if (recordings.length === 0) {
           emptyEl.classList.remove('hidden');
         } else {
@@ -1737,6 +2002,8 @@
         sessionHistoryLink.classList.remove('hidden');
         sessionHistoryLink.href = '/dashboard';
         sessionHistoryLink.onclick = (e) => { e.preventDefault(); document.querySelector('[data-tab="sessions"]').click(); };
+        const latestTile = document.getElementById('operations-latest-recording');
+        if (latestTile) latestTile.classList.add('hidden');
       });
     }
 

@@ -43,7 +43,10 @@ def _extract_latest_frame(output_path: Path) -> bytes | None:
         logger.debug("Recording AI ingest: ffmpeg not found")
         return None
     if not output_path.exists():
-        logger.debug("Recording AI ingest: file not found path=%s", output_path)
+        logger.debug(
+            "Recording AI ingest: file not yet available path=%s (will retry)",
+            output_path,
+        )
         return None
     # Try latest frame first (seek 1s before EOF). For in-progress recordings,
     # this yields a representative frame; first frame is often dark/empty.
@@ -80,9 +83,7 @@ def _extract_latest_frame(output_path: Path) -> bytes | None:
         # fails (e.g. fragmented MP4, very short file, or read-while-write).
         if result.returncode != 0 or not result.stdout:
             logger.debug(
-                "Recording AI ingest: latest-frame failed rc=%s stderr=%r, trying first frame",
-                result.returncode,
-                (result.stderr or b"").decode("utf-8", errors="replace")[:200],
+                "Recording AI ingest: using first-frame fallback (latest unavailable for fragmented MP4)"
             )
         first_args = [
             ffmpeg,
@@ -187,7 +188,7 @@ class RecordingAiIngest:
         frame_bytes = _extract_latest_frame(self._output_path)
         if frame_bytes is None:
             logger.debug(
-                "Recording AI ingest: file not ready or ffmpeg returned nothing, path=%s",
+                "Recording AI ingest: frame not yet available path=%s (will retry)",
                 self._output_path,
             )
             return
@@ -205,7 +206,8 @@ class RecordingAiIngest:
             success,
             len(result.detections),
         )
-        if not success or result.state != "ready":
+        is_success = success and result.state in ("ready", "no_detections")
+        if not is_success:
             self._failure_count += 1
             if self._failure_count >= _FAILURE_THRESHOLD_BEFORE_WARN:
                 logger.warning(
@@ -215,6 +217,8 @@ class RecordingAiIngest:
                 )
             return
         self._failure_count = 0
+        if result.state != "ready":
+            return  # no_detections: nothing to persist
         session_id = self._get_session_id()
         if session_id is None or self._persistence is None:
             logger.info(
