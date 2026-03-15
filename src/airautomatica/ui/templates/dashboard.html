@@ -1,4 +1,55 @@
 <!DOCTYPE html>
+<!--
+  SPA REFACTOR GUIDE — For AI/developers migrating to React, Vue, Svelte, etc.
+
+  PAGE STRUCTURE:
+  - Two view panels: view-landing (connection setup), view-idle (main dashboard)
+  - view-idle contains: top nav (Live|Session History|Settings), tab-main with sub-tabs (Flight|AI|Events|Recordings)
+  - Layout order: Flight strip → Operations HUD → Connection & Health → Quick telemetry → Sub-tabs content
+
+  SOCKET.IO EVENTS (subscribe to these for real-time updates):
+  - health_update: { session_id, camera_recording, camera_ready, telemetry_backend, ... }
+  - state_update: { state: AircraftState }
+  - detections_update: { detections: [] }
+  - events_update: { events: [] }
+  - sessions_update: { sessions: [], current_session_id }
+  - telemetry_path_update: { path, current_position, detections, session_id }
+  - trends_update: { voltage, rel_alt, groundspeed, heartbeat arrays }
+
+  REST API ENDPOINTS:
+  - GET  /connection/state          → connection_state, mode, session_id, detection_result
+  - POST /connection/detect          → detected, connection_state, message
+  - POST /connection/mode            → body: { mode: 'mock'|'ardupilot'|'inav' }
+  - POST /connection/disconnect
+  - POST /session/start              → { ok, session_id }
+  - POST /session/stop               → { ok }
+  - POST /camera/recording/start     → { ok }
+  - POST /camera/recording/stop       → { ok }
+  - GET  /sessions                   → { sessions, current_session_id } (query: autopilot, connection_mode)
+  - GET  /recent-events               → { events }
+  - GET  /recordings?session_id=X     → { recordings, session_resolved }
+  - GET  /settings                   → key-value map
+  - POST /settings                   → body: key-value map
+  - POST /api/ai/detect              → { state, detections, errors }
+  - GET  /api/ai/status              → AI HAT status
+  - GET  /api/ai/last-detection      → last one-shot result
+  - POST /ai/telemetry-summary       → { summary }
+  - POST /ai/event-classification    → { classification }
+  - POST /live/home                  → body: { lat, lon } | { use_current: true } | { clear: true }
+
+  SHARED DEPENDENCIES (migrate or reimplement):
+  - /static/js/formatters.js  → AiraFormatters (fmt, fmtDate, fmtDuration, fmtTs, fmtTsTime, formatDistance, fmtHeading, fmtSourceBackend, labelAutopilot, labelMode)
+  - /static/js/path-plot.js   → AiraPathPlot.renderPathPlot(path, current, detections, home, opts)
+  - /static/js/sparklines.js  → AiraSparklines.renderTrends(voltage, relAlt, groundspeed, heartbeat)
+  - window.AIRAUTOMATICA_BASE_PATH (injected), recordingsUrl(filename) helper
+
+  KEY DOM IDs (used by inline JS — replace with SPA state):
+  connection-status, flight-status-*, operations-hud-strip, ops-chip-*, session-status-text,
+  session-start-btn, session-stop-btn, camera-start-btn, camera-stop-btn, camera-ready-toggle,
+  health-fields, session-fields, telemetry-status, ai-hat-content, detections-list, events-list,
+  live-recordings-list, path-svg, trends-container, artificial-horizon, compass-arrow, state-fields,
+  qt-alt, qt-speed, qt-voltage, qt-gps, qt-heading, qt-link
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -74,9 +125,9 @@
     }
     .session-item:hover { background: rgba(255,255,255,0.04); }
     .na { color: var(--muted); }
-    .tab-panel { display: none; }
+    .tab-panel { display: none; min-height: 10rem; }
     .tab-panel.active { display: block; }
-    .sub-tab-panel { display: none; }
+    .sub-tab-panel { display: none; min-height: 12rem; }
     .sub-tab-panel.active { display: block; }
     .tab-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
     .tab-btn:hover { color: var(--text); }
@@ -416,6 +467,7 @@
     <h2>Trends</h2>
     <div id="trends-container" class="trends-grid"></div>
     <div id="trends-empty" class="hidden text-center py-4 text-slate-500 text-sm">No trend data</div>
+  </div>
   </div>
   </div>
   </div>
@@ -1079,7 +1131,11 @@
           document.querySelectorAll('.tab-btn[data-tab]').forEach(b => b.classList.remove('active'));
           document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
           btn.classList.add('active');
-          document.getElementById('tab-' + tab).classList.add('active');
+          const panel = document.getElementById('tab-' + tab);
+          if (panel) {
+            panel.classList.add('active');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
           if (tab === 'settings') loadSettingsForm();
           if (tab === 'sessions') refreshSessionsWithFilter();
         }
@@ -1093,7 +1149,11 @@
         document.querySelectorAll('.tab-btn[data-subtab]').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.sub-tab-panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('subtab-' + subtab).classList.add('active');
+        const panel = document.getElementById('subtab-' + subtab);
+        if (panel) {
+          panel.classList.add('active');
+          panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
       });
     });
 
