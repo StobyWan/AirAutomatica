@@ -311,6 +311,17 @@ def get_base_path() -> str:
     return raw.rstrip("/") if raw else ""
 
 
+def get_spa_index_path() -> Path | None:
+    """Return path to frontend/dist/index.html if it exists.
+    Checks /opt/airautomatica first (installed .deb), then dev layout."""
+    opt_path = Path("/opt/airautomatica/frontend/dist/index.html")
+    if opt_path.is_file():
+        return opt_path
+    project_root = Path(__file__).resolve().parent.parent.parent
+    spa_index = project_root / "frontend" / "dist" / "index.html"
+    return spa_index if spa_index.is_file() else None
+
+
 def get_use_spa_dashboard() -> bool:
     """True to serve Vue SPA from frontend/dist instead of legacy HTML templates.
     Default: True when frontend/dist/index.html exists, else False.
@@ -320,10 +331,8 @@ def get_use_spa_dashboard() -> bool:
         return True
     if raw in ("0", "false", "no"):
         return False
-    # Auto-detect: use SPA when built
-    project_root = Path(__file__).resolve().parent.parent.parent
-    spa_index = project_root / "frontend" / "dist" / "index.html"
-    return spa_index.is_file()
+    # Auto-detect: use SPA when built (check installed path first, then dev)
+    return get_spa_index_path() is not None
 
 
 def get_api_port() -> int:
