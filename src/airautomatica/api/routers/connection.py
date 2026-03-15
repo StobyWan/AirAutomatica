@@ -66,6 +66,29 @@ def create_connection_router(
             ),
         }
 
+    @router.get("/ports")
+    def get_connection_ports() -> dict:
+        """List detected ports with lightweight MAVLink status. Fast summary endpoint."""
+        try:
+            from airautomatica.telemetry.detector import list_ports_with_status
+
+            ports = list_ports_with_status()
+            return {
+                "ports": [
+                    {
+                        "path": p.path,
+                        "mavlink_active": p.mavlink_active,
+                        "autopilot": p.autopilot,
+                        "baud": p.baud,
+                        "status": p.status,
+                    }
+                    for p in ports
+                ]
+            }
+        except Exception as e:
+            logger.exception("Ports list failed: %s", e)
+            return {"ports": [], "error": str(e)}
+
     @router.post("/detect")
     def post_connection_detect() -> dict:
         """Scan serial ports for MAVLink HEARTBEAT. Updates connection_store state."""

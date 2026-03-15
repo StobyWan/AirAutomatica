@@ -1,8 +1,16 @@
 import { get, post } from './client'
-import type { ConnectionStateResponse, DetectionResult } from '@/types'
+import type {
+  ConnectionStateResponse,
+  DetectionResult,
+  PortsResponse,
+} from '@/types'
 
 export function getConnectionState(): Promise<ConnectionStateResponse> {
   return get<ConnectionStateResponse>('/connection/state')
+}
+
+export function getAvailablePorts(): Promise<PortsResponse> {
+  return get<PortsResponse>('/connection/ports')
 }
 
 export interface DetectResponse {

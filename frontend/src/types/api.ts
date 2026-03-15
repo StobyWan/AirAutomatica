@@ -17,6 +17,19 @@ export interface DetectionResult {
   heartbeat_age_ms?: number
 }
 
+export interface PortInfo {
+  path: string
+  mavlink_active: boolean
+  autopilot: string | null
+  baud: number | null
+  status: string
+}
+
+export interface PortsResponse {
+  ports: PortInfo[]
+  error?: string
+}
+
 export interface SessionSummary {
   id: number
   started_at: string
