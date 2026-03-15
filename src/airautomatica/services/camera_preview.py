@@ -4,11 +4,37 @@ import logging
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Optional
 
 logger = logging.getLogger(__name__)
+
+_active_preview_process: Optional[subprocess.Popen[bytes]] = None
+_preview_lock = threading.Lock()
+
+
+def release_camera_for_recording() -> None:
+    """Terminate any active preview stream so recording can acquire the camera.
+    Call before recording.start_recording()."""
+    with _preview_lock:
+        global _active_preview_process
+        if _active_preview_process is None:
+            return
+        try:
+            _active_preview_process.terminate()
+            _active_preview_process.wait(timeout=2)
+        except Exception as e:
+            logger.debug("Preview terminate during release: %s", e)
+            try:
+                _active_preview_process.kill()
+                _active_preview_process.wait(timeout=1)
+            except Exception:
+                pass
+        _active_preview_process = None
+        time.sleep(0.3)  # Allow libcamera to release the device
+
 
 _JPEG_SOI = b"\xff\xd8\xff"
 _JPEG_EOI = b"\xff\xd9"
@@ -114,7 +140,15 @@ def stream_preview_frames(
                 stderr=subprocess.DEVNULL,
             )
             if proc.stdout:
-                yield from _stream_mjpeg_from_vid(proc, is_recording)
+                with _preview_lock:
+                    global _active_preview_process
+                    _active_preview_process = proc
+                try:
+                    yield from _stream_mjpeg_from_vid(proc, is_recording)
+                finally:
+                    with _preview_lock:
+                        if _active_preview_process is proc:
+                            _active_preview_process = None
                 return
         except Exception as e:
             logger.debug("rpicam-vid preview failed, falling back to still: %s", e)
