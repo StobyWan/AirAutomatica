@@ -40,7 +40,7 @@
     </div>
 
     <div class="flex flex-col md:flex-row md:items-start gap-6 mb-6">
-      <div class="flex flex-col gap-2 flex-shrink-0 w-full md:w-auto md:min-w-[12rem]">
+      <div class="flex flex-col gap-2 w-full md:flex-[1.5] md:min-w-0">
         <button
           type="button"
           class="landing-btn landing-btn-primary w-full"
@@ -75,7 +75,7 @@
         </button>
       </div>
 
-      <div class="flex-1 min-w-0 w-full">
+      <div class="w-full md:flex-[1.25] md:min-w-0">
         <DetectedPortsPanel
           :ports="connectionStore.ports"
           :ports-loading="connectionStore.portsLoading"
