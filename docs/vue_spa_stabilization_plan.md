@@ -31,9 +31,9 @@ Execute first. Highest value, lowest risk.
 - **Reconnect refetch** — Validate stores refetch correctly on reconnect
 - **CI** — Lint and typecheck enforcement
 
-### Phase 4 — Legacy Retirement
-- Only after a short period of SPA-only operational confidence
-- Keep legacy templates, `USE_SPA_DASHBOARD`, settings migration logic until then
+### Phase 4 — Legacy Retirement ✅ Done
+- Legacy templates (`dashboard.html`, `session_detail.html`) and `test_dashboard.py` removed
+- Dashboard is Vue SPA–only; see `docs/vue_app_tests.md` for recommended frontend tests
 
 ---
 
@@ -48,14 +48,12 @@ Execute first. Highest value, lowest risk.
 
 ---
 
-## Legacy Retirement Discipline
+## Legacy Retirement Discipline ✅
 
-**Keep temporarily:**
+**Removed:**
 - Legacy templates (`dashboard.html`, `session_detail.html`)
-- `USE_SPA_DASHBOARD` / `get_use_spa_dashboard()`
-- Settings migration logic (`_migrate_legacy_to_canonical`, `_LEGACY_KEYS`, `_LOAD_ONLY_KEYS`)
-
-**Remove only when SPA has operational history and is clearly default.**
+- `get_use_spa_dashboard()` — dashboard is SPA-only
+- `tests/test_dashboard.py` — see `docs/vue_app_tests.md` for Vue test recommendations
 
 ---
 

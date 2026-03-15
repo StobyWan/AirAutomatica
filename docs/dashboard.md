@@ -4,7 +4,7 @@ The AIRAUTOMATICA dashboard is a real-time flight console served at `GET /dashbo
 
 ## Overview
 
-- **Tech:** Plain HTML/CSS/JS with Tailwind CSS and Socket.IO. No React/Vue or heavy frameworks.
+- **Tech:** Vue 3 SPA with Tailwind CSS and Socket.IO. Served from `frontend/dist` when built.
 - **Updates:** Socket.IO pushes health, state, detections, sessions (1s), and events, path, trends (5s).
 - **Initial load:** Fetches `/recent-events` and `/sessions` on connect for faster first paint.
 - **Mobile-friendly:** Responsive layout; works on phones, tablets, and laptops.

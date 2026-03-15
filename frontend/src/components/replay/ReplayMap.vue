@@ -96,7 +96,7 @@ onMounted(() => {
   updateHomeMarker()
 })
 
-watch(path, updatePath, { deep: true })
+watch(path, updatePath)
 watch(currentSample, updateMarker)
 watch([homeLat, homeLon], updateHomeMarker)
 

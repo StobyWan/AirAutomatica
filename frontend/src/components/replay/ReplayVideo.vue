@@ -51,6 +51,9 @@ function syncVideoToStore() {
     if (isPlaying.value) {
       const drift = Math.abs(video.currentTime - targetTime)
       if (drift < DRIFT_RESYNC_THRESHOLD_SEC) return
+    } else {
+      const nearMatch = Math.abs(video.currentTime - targetTime) < 0.05
+      if (nearMatch) return
     }
     programmaticSeekUntil = Date.now() + SEEK_DEBOUNCE_MS
     video.currentTime = targetTime

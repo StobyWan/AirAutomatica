@@ -68,6 +68,33 @@ export function precomputeChartData(
   return { labels, speedKmh, bearingDeg, rollDeg }
 }
 
+/**
+ * Select primary recording for video sync.
+ * Prefers auto-trigger matching session; else closest to session start.
+ */
+export function selectPrimaryRecording(
+  recs: { timestamp: string; trigger?: string | null; session_id?: number | null }[],
+  sessionStartMs: number,
+  sessionId: number | null
+): typeof recs[0] | null {
+  if (recs.length === 0) return null
+  const autoMatch = recs.find(
+    (r) => r.trigger === 'auto' && r.session_id === sessionId
+  )
+  if (autoMatch) return autoMatch
+  let best: (typeof recs)[0] | null = null
+  let bestDist = Infinity
+  for (const r of recs) {
+    const t = new Date(r.timestamp).getTime()
+    const dist = Math.abs(t - sessionStartMs)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = r
+    }
+  }
+  return best ?? recs[0]
+}
+
 /** Format offset ms as M:SS */
 export function formatOffsetMs(ms: number): string {
   const totalSec = Math.floor(ms / 1000)

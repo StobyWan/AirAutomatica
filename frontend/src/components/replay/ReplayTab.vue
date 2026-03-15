@@ -7,12 +7,20 @@
       <span>Loading replay data…</span>
     </div>
 
-    <div v-else-if="storeError" class="py-8 text-center text-red-300 text-sm">
-      {{ storeError }}
+    <div v-else-if="storeError" class="py-8 text-center">
+      <p class="text-red-300 text-sm mb-3">{{ storeError }}</p>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-slate-200 text-sm font-medium"
+        @click="maybeLoad"
+      >
+        Retry
+      </button>
     </div>
 
     <div v-else-if="!hasData" class="py-12 text-center text-slate-500 text-sm">
-      No telemetry data for this session. Replay requires recorded telemetry.
+      <p>No telemetry data for this session.</p>
+      <p class="mt-1 text-slate-600 text-xs">Replay requires recorded telemetry from a connected flight controller.</p>
     </div>
 
     <div v-else class="space-y-4">
@@ -22,9 +30,10 @@
           <ReplayVideo v-if="hasRecording" />
           <div
             v-else
-            class="w-full h-full flex items-center justify-center text-slate-500 text-sm"
+            class="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-500 text-sm"
           >
-            No recording for this session
+            <span>No recording for this session</span>
+            <span class="text-slate-600 text-xs">Map and charts still available</span>
           </div>
         </div>
         <div class="aspect-video rounded-lg overflow-hidden bg-slate-900/50">

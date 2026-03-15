@@ -13,6 +13,7 @@ import type { PathPoint } from '@/api/session'
 import {
   findIndexForTimestamp,
   precomputeChartData,
+  selectPrimaryRecording as selectPrimaryRecordingUtil,
   type ChartData,
   type FlightEvent,
   type PhaseInterval,
@@ -43,6 +44,7 @@ export const useReplayStore = defineStore('replay', () => {
 
   let rafId: number | null = null
   let lastTickTime = 0
+  let loadId = 0
 
   const currentIndex = computed(() => {
     const s = samples.value
@@ -83,26 +85,13 @@ export const useReplayStore = defineStore('replay', () => {
     recs: Recording[],
     sessionStartMs: number
   ): Recording | null {
-    if (recs.length === 0) return null
-    const autoMatch = recs.find(
-      (r) => r.trigger === 'auto' && r.session_id === sessionId.value
-    )
-    if (autoMatch) return autoMatch
-    let best: Recording | null = null
-    let bestDist = Infinity
-    for (const r of recs) {
-      const t = new Date(r.timestamp).getTime()
-      const dist = Math.abs(t - sessionStartMs)
-      if (dist < bestDist) {
-        bestDist = dist
-        best = r
-      }
-    }
-    return best ?? recs[0]
+    return selectPrimaryRecordingUtil(recs, sessionStartMs, sessionId.value)
   }
 
   async function load(sid: number) {
     if (sessionId.value === sid && loaded.value) return
+
+    const thisLoadId = ++loadId
     sessionId.value = sid
     loading.value = true
     error.value = null
@@ -136,6 +125,8 @@ export const useReplayStore = defineStore('replay', () => {
           getSessionPhaseIntervals(sid),
         ])
 
+      if (thisLoadId !== loadId) return
+
       const rawSamples = samplesRes.samples ?? []
       samples.value = rawSamples
 
@@ -167,10 +158,11 @@ export const useReplayStore = defineStore('replay', () => {
 
       loaded.value = true
     } catch (e) {
+      if (thisLoadId !== loadId) return
       error.value = e instanceof Error ? e.message : 'Failed to load replay data'
       throw e
     } finally {
-      loading.value = false
+      if (thisLoadId === loadId) loading.value = false
     }
   }
 
