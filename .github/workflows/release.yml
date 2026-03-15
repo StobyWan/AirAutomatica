@@ -39,9 +39,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist
-
-      - name: Place frontend dist
-        run: mkdir -p frontend && mv frontend-dist frontend/dist
+          path: frontend/dist
 
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
