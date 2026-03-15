@@ -239,7 +239,7 @@ def create_sessions_router(
 
     @router.get("/sessions/{sid:int}/recordings")
     def get_session_recordings(sid: int) -> dict:
-        """Return recordings for a session. Session detail: no fallback when unresolved."""
+        """Return recordings for a session. Uses fallback (recent N) when session time range has no matches."""
         if recordings_service is None:
             return {
                 "session_id": sid,
@@ -249,7 +249,7 @@ def create_sessions_router(
                 "recordings": [],
                 "recordings_dir": None,
             }
-        result = recordings_service.get_recordings(session_id=sid, allow_fallback=False)
+        result = recordings_service.get_recordings(session_id=sid, allow_fallback=True)
         recordings_list = []
         for r in result.recordings:
             d: dict = {

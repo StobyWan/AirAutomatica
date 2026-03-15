@@ -722,7 +722,6 @@
       function updateStats(pathArr, dets, recs) {
         const first = (pathArr || [])[0];
         const last = (pathArr || []).length > 0 ? pathArr[pathArr.length - 1] : null;
-        const recCount = (recs || []).length;
         if (!statsEl) return;
         statsEl.innerHTML = `
           <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
@@ -732,10 +731,6 @@
           <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
             <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Detections</span>
             <p class="text-lg font-semibold text-white mt-0.5 font-mono">${(dets || []).length}</p>
-          </div>
-          <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
-            <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">Recordings</span>
-            <p class="text-lg font-semibold text-white mt-0.5 font-mono">${recCount}</p>
           </div>
           <div class="rounded-lg bg-slate-800/50 px-4 py-3 border border-slate-700/50">
             <span class="text-slate-500 text-xs font-medium uppercase tracking-wider">First</span>

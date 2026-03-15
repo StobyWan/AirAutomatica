@@ -19,6 +19,7 @@ Fast on-device diagnostics for AirAutomatica on Raspberry Pi.
 | `inference_probe.sh` | Run short Ollama inference, capture thermal before/after |
 | `watch_top_processes.sh` | Live top CPU and memory processes (2s refresh) |
 | `quick_diag.sh` | Brief SSH-friendly checks including serial/video devices |
+| `list_recordings.sh` | List recordings (newest first), count, or play latest |
 
 ## Usage
 
@@ -86,6 +87,15 @@ Fast on-device diagnostics for AirAutomatica on Raspberry Pi.
 ./quick_diag.sh
 ```
 
+### List recordings
+
+```bash
+./list_recordings.sh              # List newest 30 recordings
+./list_recordings.sh --count      # Count recordings
+./list_recordings.sh --play       # Play most recent (VLC/mpv/ffplay)
+./list_recordings.sh --min-size 1k  # Exclude tiny files
+```
+
 ## Makefile targets
 
 From the project root:
@@ -96,6 +106,7 @@ make pi-ollama      # Run watch_ollama.sh
 make pi-log-thermal # Run log_thermal_csv.sh
 make pi-snapshot    # Run bench_snapshot.sh
 make pi-diag        # Run quick_diag.sh
+make pi-recordings  # Run list_recordings.sh
 ```
 
 ## Throttled flag reference
