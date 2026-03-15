@@ -29,6 +29,21 @@ echo "==> Building airautomatica_${VERSION}_all.deb"
 rm -rf "$STAGING"
 mkdir -p "$OPT_DIR" "$ETC_SYSTEMD"
 
+# Build frontend (SPA dashboard)
+if command -v npm >/dev/null 2>&1; then
+  echo "==> Building frontend"
+  (cd "$REPO_ROOT/frontend" && npm ci && VITE_BASE_PATH=/dashboard npm run build)
+  if [[ -d "$REPO_ROOT/frontend/dist" ]]; then
+    mkdir -p "$OPT_DIR/frontend"
+    cp -r "$REPO_ROOT/frontend/dist" "$OPT_DIR/frontend/"
+    echo "==> Frontend dist included in package"
+  else
+    echo "WARNING: frontend/dist not found after build; SPA will not be available in .deb"
+  fi
+else
+  echo "WARNING: npm not found; skipping frontend build. SPA will not be available in .deb"
+fi
+
 # Build wheel
 echo "==> Building wheel"
 mkdir -p "$BUILD_DIR/wheels"

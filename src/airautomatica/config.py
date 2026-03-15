@@ -311,6 +311,21 @@ def get_base_path() -> str:
     return raw.rstrip("/") if raw else ""
 
 
+def get_use_spa_dashboard() -> bool:
+    """True to serve Vue SPA from frontend/dist instead of legacy HTML templates.
+    Default: True when frontend/dist/index.html exists, else False.
+    Env: USE_SPA_DASHBOARD (1/true/yes to force, 0/false/no to force legacy)."""
+    raw = os.environ.get("USE_SPA_DASHBOARD", "").lower().strip()
+    if raw in ("1", "true", "yes"):
+        return True
+    if raw in ("0", "false", "no"):
+        return False
+    # Auto-detect: use SPA when built
+    project_root = Path(__file__).resolve().parent.parent.parent
+    spa_index = project_root / "frontend" / "dist" / "index.html"
+    return spa_index.is_file()
+
+
 def get_api_port() -> int:
     """API server port. Default: 8000."""
     try:

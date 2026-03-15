@@ -25,6 +25,10 @@ ENV/
 .coverage
 htmlcov/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
 # Build
 build/
 airautomatica_*_all.deb
