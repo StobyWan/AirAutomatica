@@ -4,6 +4,7 @@
     <OperationsHud />
     <ConnectionHealth />
     <QuickTelemetry />
+    <RecentDetectionsStrip />
     <LiveTabs />
   </div>
 </template>
@@ -13,5 +14,6 @@ import FlightStatusStrip from '@/components/FlightStatusStrip.vue'
 import OperationsHud from '@/components/OperationsHud.vue'
 import ConnectionHealth from '@/components/ConnectionHealth.vue'
 import QuickTelemetry from '@/components/QuickTelemetry.vue'
+import RecentDetectionsStrip from '@/components/RecentDetectionsStrip.vue'
 import LiveTabs from '@/components/LiveTabs.vue'
 </script>
