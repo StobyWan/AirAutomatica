@@ -59,8 +59,8 @@
     </div>
 
     <div v-else class="space-y-6">
-      <!-- Flight path -->
-      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+      <!-- Flight path (lazy-loaded when in view) -->
+      <section ref="pathSectionRef" class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
         <h2 class="text-base font-semibold text-slate-200 mb-3">Flight Path</h2>
         <div v-if="pathData.path.length > 0" class="flex flex-wrap items-center gap-2 mb-2 text-sm">
           <span class="text-slate-400">Replay home: {{ homeLabel }}</span>
@@ -98,6 +98,13 @@
             v-html="pathSvg"
           />
           <!-- eslint-enable vue/no-v-html -->
+          <div
+            v-else-if="pathLoading"
+            class="flex items-center justify-center h-[220px] text-slate-500 text-sm"
+          >
+            <BaseSpinner color="slate" />
+            <span class="ml-2">Loading path…</span>
+          </div>
           <div v-else class="flex items-center justify-center h-[220px] text-slate-500 text-sm">
             No path data
           </div>
@@ -366,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -432,6 +439,9 @@ const telemetrySummaryLoading = ref(false)
 const telemetrySummaryContent = ref('Click Summarize to get AI interpretation')
 const eventClassificationLoading = ref(false)
 const eventClassificationContent = ref('Click Classify to analyze session events')
+const pathSectionRef = ref<HTMLElement | null>(null)
+const pathLoading = ref(false)
+const pathLoadTriggered = ref(false)
 
 const showDeleteRecordingModal = computed({
   get: () => !!deleteRecordingFilename.value,
@@ -497,13 +507,21 @@ async function loadSession() {
 }
 
 async function loadPath() {
-  if (!Number.isFinite(sid.value)) return
+  if (!Number.isFinite(sid.value) || pathLoadTriggered.value) return
+  pathLoadTriggered.value = true
+  pathLoading.value = true
   try {
     const res = await getSessionPath(sid.value)
     pathData.value = { path: res.path, home_lat: res.home_lat, home_lon: res.home_lon }
   } catch {
     pathData.value = { path: [] }
+  } finally {
+    pathLoading.value = false
   }
+}
+
+function maybeLoadPath() {
+  if (session.value && !pathLoadTriggered.value) loadPath()
 }
 
 async function loadDebrief() {
@@ -652,12 +670,49 @@ async function confirmDeleteSession() {
 }
 
 watch(sid, () => {
+  pathLoadTriggered.value = false
   loadSession()
-  loadPath()
   loadDebrief()
   loadDetections()
   loadRecordings()
 }, { immediate: true })
+
+let pathObserver: IntersectionObserver | null = null
+let pathFallbackTimer: ReturnType<typeof setTimeout> | null = null
+
+function setupPathLazyLoad() {
+  if (pathFallbackTimer) clearTimeout(pathFallbackTimer)
+  pathFallbackTimer = null
+  pathObserver?.disconnect()
+  pathObserver = null
+  const el = pathSectionRef.value
+  if (!el || pathLoadTriggered.value) return
+  pathFallbackTimer = setTimeout(maybeLoadPath, 300)
+  pathObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries[0]?.isIntersecting) {
+        if (pathFallbackTimer) {
+          clearTimeout(pathFallbackTimer)
+          pathFallbackTimer = null
+        }
+        maybeLoadPath()
+      }
+    },
+    { rootMargin: '100px', threshold: 0 }
+  )
+  pathObserver.observe(el)
+}
+
+watch(session, () => {
+  if (session.value && !error.value) {
+    nextTick(setupPathLazyLoad)
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (pathFallbackTimer) clearTimeout(pathFallbackTimer)
+  pathObserver?.disconnect()
+})
 </script>
 
 <style scoped>
