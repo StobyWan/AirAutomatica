@@ -69,14 +69,13 @@ jobs:
           name: airautomatica-wheel
           path: wheel
 
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+      # - name: Free disk space
+      #   uses: jlumbroso/free-disk-space@main
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: false
 
       - name: Install build dependencies
         run: |
