@@ -75,6 +75,7 @@
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <button
+          v-if="!cameraRecording"
           type="button"
           class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-slate-200 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="aiDetectLoading"
@@ -109,6 +110,10 @@ const aiDetectResult = ref('')
 const lastDetection = ref('')
 
 const sessionId = computed(() => connectionStore.liveSessionId)
+
+const cameraRecording = computed(
+  () => healthStore.lastHealth?.camera_recording === true
+)
 
 const capabilities = computed(() => {
   const caps = healthStore.lastHealth?.capabilities as Record<string, unknown> | undefined
