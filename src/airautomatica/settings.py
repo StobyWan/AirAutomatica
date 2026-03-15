@@ -14,6 +14,7 @@ from airautomatica.config import (
     get_local_llm_provider,
     get_preprocessing_enabled,
     get_recording_ai_overlay_enabled,
+    get_recording_ai_persist_enabled,
     get_session_auto_start_on_arm,
 )
 
@@ -47,6 +48,7 @@ SETTING_APPLY_MODES: dict[str, ApplyMode] = {
     "AI_SCHEDULER_COOLDOWN_SEC": "live",
     "CAMERA_RECORDING_MODE": "live",
     "RECORDING_AI_OVERLAY_ENABLED": "live",
+    "RECORDING_AI_PERSIST_ENABLED": "live",
     "SESSION_AUTO_START_ON_ARM": "live",
 }
 
@@ -87,6 +89,7 @@ CANONICAL_SETTINGS_KEYS = [
     "AI_SCHEDULER_COOLDOWN_SEC",
     "CAMERA_RECORDING_MODE",
     "RECORDING_AI_OVERLAY_ENABLED",
+    "RECORDING_AI_PERSIST_ENABLED",
     "SESSION_AUTO_START_ON_ARM",
 ]
 
@@ -99,6 +102,20 @@ _LOAD_ONLY_KEYS = frozenset({"LM_STUDIO_BASE_URL", "LM_STUDIO_MODEL"})
 # All keys accepted when loading from file
 _LOAD_ACCEPTED_KEYS = (
     frozenset(CANONICAL_SETTINGS_KEYS) | frozenset(_LEGACY_KEYS) | _LOAD_ONLY_KEYS
+)
+
+# Keys that can be set by env file - prefer getter over file_data when env is set
+_ENV_OVERRIDABLE_KEYS = frozenset(
+    {
+        "AI_HAT_ENABLED",
+        "AI_HAT_REQUIRE_HARDWARE",
+        "AI_HAT_CAMERA_PIPELINE_ENABLED",
+        "AI_HAT_OBJECT_DETECTION_ENABLED",
+        "AIRAUTOMATICA_PREPROCESSING_ENABLED",
+        "RECORDING_AI_OVERLAY_ENABLED",
+        "RECORDING_AI_PERSIST_ENABLED",
+        "SESSION_AUTO_START_ON_ARM",
+    }
 )
 
 # Backward compat: SETTINGS_KEYS used by existing code (e.g. tests that patch)
@@ -202,6 +219,7 @@ def get_raw_settings() -> dict:
         "AI_SCHEDULER_COOLDOWN_SEC": "8",
         "CAMERA_RECORDING_MODE": "manual",
         "RECORDING_AI_OVERLAY_ENABLED": "0",
+        "RECORDING_AI_PERSIST_ENABLED": "0",
         "SESSION_AUTO_START_ON_ARM": "0",
     }
     file_data: dict = {}
@@ -218,7 +236,24 @@ def get_raw_settings() -> dict:
 
     result: dict[str, str] = {}
     for k in CANONICAL_SETTINGS_KEYS:
-        if k in file_data:
+        if k in _ENV_OVERRIDABLE_KEYS and os.environ.get(k, "").strip():
+            if k == "AI_HAT_ENABLED":
+                result[k] = "1" if get_ai_hat_enabled() else "0"
+            elif k == "AI_HAT_REQUIRE_HARDWARE":
+                result[k] = "1" if get_ai_hat_require_hardware() else "0"
+            elif k == "AI_HAT_CAMERA_PIPELINE_ENABLED":
+                result[k] = "1" if get_ai_hat_camera_pipeline_enabled() else "0"
+            elif k == "AI_HAT_OBJECT_DETECTION_ENABLED":
+                result[k] = "1" if get_ai_hat_object_detection_enabled() else "0"
+            elif k == "AIRAUTOMATICA_PREPROCESSING_ENABLED":
+                result[k] = "1" if get_preprocessing_enabled() else "0"
+            elif k == "RECORDING_AI_OVERLAY_ENABLED":
+                result[k] = "1" if get_recording_ai_overlay_enabled() else "0"
+            elif k == "RECORDING_AI_PERSIST_ENABLED":
+                result[k] = "1" if get_recording_ai_persist_enabled() else "0"
+            elif k == "SESSION_AUTO_START_ON_ARM":
+                result[k] = "1" if get_session_auto_start_on_arm() else "0"
+        elif k in file_data:
             result[k] = file_data[k]
         elif k == "LOCAL_LLM_PROVIDER":
             if _provider_explicit:
@@ -237,6 +272,8 @@ def get_raw_settings() -> dict:
             result[k] = "1" if get_preprocessing_enabled() else "0"
         elif k == "RECORDING_AI_OVERLAY_ENABLED":
             result[k] = "1" if get_recording_ai_overlay_enabled() else "0"
+        elif k == "RECORDING_AI_PERSIST_ENABLED":
+            result[k] = "1" if get_recording_ai_persist_enabled() else "0"
         elif k == "SESSION_AUTO_START_ON_ARM":
             result[k] = "1" if get_session_auto_start_on_arm() else "0"
         else:
