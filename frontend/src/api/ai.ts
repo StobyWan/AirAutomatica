@@ -19,15 +19,19 @@ export function getLastDetection(): Promise<Record<string, unknown> | null> {
   return get<Record<string, unknown> | null>('/api/ai/last-detection')
 }
 
-export function getTelemetrySummary(): Promise<{ summary: string }> {
-  return post<{ summary: string }>('/ai/telemetry-summary', {})
+export function getTelemetrySummary(
+  sessionId?: number
+): Promise<{ summary: string }> {
+  return post<{ summary: string }>('/ai/telemetry-summary', {
+    ...(sessionId != null ? { session_id: sessionId } : {}),
+  })
 }
 
-export function getEventClassification(): Promise<{
-  classification?: Record<string, unknown>
-}> {
+export function getEventClassification(
+  sessionId?: number
+): Promise<{ classification?: Record<string, unknown> }> {
   return post<{ classification?: Record<string, unknown> }>(
     '/ai/event-classification',
-    {}
+    { ...(sessionId != null ? { session_id: sessionId } : {}) }
   )
 }
