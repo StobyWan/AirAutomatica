@@ -720,19 +720,24 @@ class PersistenceService:
             self._record_error(str(e))
             logger.exception("insert_system_event failed: %s", e)
 
-    def get_recent_system_events(self, limit: int = 50) -> list[dict]:
-        """Fetch recent system events, newest first. Returns [] when DB disabled or on error."""
+    def get_session_system_events(
+        self, session_id: int | None, limit: int = 50
+    ) -> list[dict]:
+        """Fetch system events for a session, newest first. Returns [] when DB disabled or on error."""
         if get_engine() is None:
             return []
         try:
             with get_session() as session:
                 if session is None:
                     return []
-                result = session.execute(
+                stmt = (
                     select(SystemEvent)
                     .order_by(SystemEvent.timestamp.desc())
                     .limit(limit)
                 )
+                if session_id is not None:
+                    stmt = stmt.where(SystemEvent.session_id == session_id)
+                result = session.execute(stmt)
                 rows = result.scalars().all()
                 out: list[dict] = []
                 for row in rows:
@@ -756,8 +761,12 @@ class PersistenceService:
                 return out
         except Exception as e:
             self._record_error(str(e))
-            logger.exception("get_recent_system_events failed: %s", e)
+            logger.exception("get_session_system_events failed: %s", e)
             return []
+
+    def get_recent_system_events(self, limit: int = 50) -> list[dict]:
+        """Fetch recent system events, newest first. Returns [] when DB disabled or on error."""
+        return self.get_session_system_events(session_id=None, limit=limit)
 
     def _sample_to_api_dict(
         self, row: TelemetrySample, for_debrief: bool = False

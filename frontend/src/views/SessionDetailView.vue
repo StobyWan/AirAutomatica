@@ -13,27 +13,17 @@
     </nav>
 
     <header class="mb-6">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-semibold tracking-tight text-white">
-            Session <span class="text-cyan-400 font-mono">{{ sid }}</span>
-          </h1>
-          <p class="text-slate-500 text-sm mt-1">Flight path, telemetry, detections, and recordings</p>
-          <div v-if="session" class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400">
-            <span>{{ fmtDate(session.started_at) }}</span>
-            <span v-if="session.ended_at">– {{ fmtDate(session.ended_at) }}</span>
-            <span>{{ labelAutopilot(session) }}</span>
-            <span>{{ labelMode(session) }}</span>
-          </div>
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight text-white">
+          Session <span class="text-cyan-400 font-mono">{{ sid }}</span>
+        </h1>
+        <p class="text-slate-500 text-sm mt-1">Flight path, telemetry, detections, and recordings</p>
+        <div v-if="session" class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400">
+          <span>{{ fmtDate(session.started_at) }}</span>
+          <span v-if="session.ended_at">– {{ fmtDate(session.ended_at) }}</span>
+          <span>{{ labelAutopilot(session) }}</span>
+          <span>{{ labelMode(session) }}</span>
         </div>
-        <button
-          v-if="session && !isCurrentSession"
-          type="button"
-          class="px-3 py-1.5 rounded-lg bg-red-900/50 hover:bg-red-800/60 text-red-200 text-sm font-medium border border-red-800/50"
-          @click="showDeleteSessionModal = true"
-        >
-          Delete session
-        </button>
       </div>
     </header>
 
@@ -252,6 +242,44 @@
         </div>
       </section>
 
+      <!-- AI Analysis -->
+      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+        <h2 class="text-base font-semibold text-slate-200 mb-3">AI Analysis</h2>
+        <p class="text-xs text-slate-500 mb-3">Local AI interpretation of this session's telemetry and events</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 mb-1">Telemetry Summary</h3>
+            <p class="text-xs text-slate-500 mb-2">AI interpretation of session telemetry (Ollama or mock)</p>
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium disabled:opacity-50"
+              :disabled="telemetrySummaryLoading"
+              @click="runTelemetrySummary"
+            >
+              {{ telemetrySummaryLoading ? 'Summarizing…' : 'Summarize' }}
+            </button>
+            <div class="mt-2 text-sm text-slate-300">
+              {{ telemetrySummaryContent }}
+            </div>
+          </div>
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 mb-1">Event Classification</h3>
+            <p class="text-xs text-slate-500 mb-2">AI analysis of session system events (Ollama or mock)</p>
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium disabled:opacity-50"
+              :disabled="eventClassificationLoading"
+              @click="runEventClassification"
+            >
+              {{ eventClassificationLoading ? 'Classifying…' : 'Classify' }}
+            </button>
+            <div class="mt-2 text-sm text-slate-300">
+              {{ eventClassificationContent }}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Recordings -->
       <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
         <h2 class="text-base font-semibold text-slate-200 mb-3">Recordings</h2>
@@ -319,6 +347,20 @@
           </template>
         </BaseModal>
       </section>
+
+      <!-- Delete session (bottom) -->
+      <section
+        v-if="session && !isCurrentSession"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4 flex justify-end"
+      >
+        <button
+          type="button"
+          class="px-3 py-1.5 rounded-lg bg-red-900/50 hover:bg-red-800/60 text-red-200 text-sm font-medium border border-red-800/50"
+          @click="showDeleteSessionModal = true"
+        >
+          Delete session
+        </button>
+      </section>
     </div>
   </div>
 </template>
@@ -339,6 +381,7 @@ import {
   deleteSession,
   deleteRecording,
 } from '@/api/session'
+import { getTelemetrySummary, getEventClassification } from '@/api/ai'
 import { recordingsUrl } from '@/config'
 import { renderPathPlot } from '@/utils/pathPlot'
 import {
@@ -385,6 +428,10 @@ const videoEl = ref<HTMLVideoElement | null>(null)
 const deleteRecordingFilename = ref<string | null>(null)
 const deletingRecording = ref(false)
 const detectionSourceFilter = ref('')
+const telemetrySummaryLoading = ref(false)
+const telemetrySummaryContent = ref('Click Summarize to get AI interpretation')
+const eventClassificationLoading = ref(false)
+const eventClassificationContent = ref('Click Classify to analyze session events')
 
 const showDeleteRecordingModal = computed({
   get: () => !!deleteRecordingFilename.value,
@@ -528,6 +575,48 @@ async function generateDebriefSummary() {
 
 function playRecording(filename: string) {
   playingFilename.value = filename
+}
+
+async function runTelemetrySummary() {
+  if (!Number.isFinite(sid.value)) return
+  telemetrySummaryLoading.value = true
+  telemetrySummaryContent.value = 'Summarizing…'
+  try {
+    const res = await getTelemetrySummary(sid.value)
+    telemetrySummaryContent.value = res.summary ?? 'No summary returned'
+  } catch (e) {
+    telemetrySummaryContent.value = e instanceof Error ? e.message : 'Summarize failed'
+  } finally {
+    telemetrySummaryLoading.value = false
+  }
+}
+
+async function runEventClassification() {
+  if (!Number.isFinite(sid.value)) return
+  eventClassificationLoading.value = true
+  eventClassificationContent.value = 'Classifying…'
+  try {
+    const res = await getEventClassification(sid.value)
+    const { severity, category, summary, likely_causes, recommended_checks } = res as Record<string, unknown>
+    if (summary != null) {
+      const parts: string[] = [String(summary)]
+      if (severity != null) parts.push(`Severity: ${severity}`)
+      if (category != null) parts.push(`Category: ${category}`)
+      if (Array.isArray(likely_causes) && likely_causes.length) {
+        parts.push(`Likely causes: ${likely_causes.join(', ')}`)
+      }
+      if (Array.isArray(recommended_checks) && recommended_checks.length) {
+        parts.push(`Checks: ${recommended_checks.join(', ')}`)
+      }
+      eventClassificationContent.value = parts.join('\n\n')
+    } else {
+      eventClassificationContent.value = 'No classification returned'
+    }
+  } catch (e) {
+    eventClassificationContent.value = e instanceof Error ? e.message : 'Classify failed'
+  } finally {
+    eventClassificationLoading.value = false
+  }
 }
 
 function openDeleteRecordingModal(filename: string) {

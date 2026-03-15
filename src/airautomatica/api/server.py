@@ -322,8 +322,10 @@ def create_app(
         return {"state": state.to_dict()}
 
     @app.post("/ai/telemetry-summary")
-    async def post_telemetry_summary() -> dict:
-        """Request AI interpretation of current telemetry. Returns TelemetrySummaryResult."""
+    async def post_telemetry_summary(
+        body: dict = Body(default_factory=dict),
+    ) -> dict:
+        """Request AI interpretation of telemetry. Optional session_id for session detail."""
         ts = _get_task_service()
         if ts is None:
             return {"error": "AI task service not available"}
@@ -333,7 +335,11 @@ def create_app(
             }
         state = store.get()
         samples: list = []
-        sid = _session_ref[0]
+        sid = (
+            body.get("session_id") if isinstance(body.get("session_id"), int) else None
+        )
+        if sid is None:
+            sid = _session_ref[0]
         if persistence is not None and sid is not None:
             samples = persistence.get_recent_telemetry_samples(sid, limit=30)
         if _preprocessor is not None:
@@ -365,14 +371,19 @@ def create_app(
         }
 
     @app.post("/ai/event-classification")
-    async def post_event_classification() -> dict:
-        """Request AI classification of recent system events. Returns EventClassificationResult."""
+    async def post_event_classification(
+        body: dict = Body(default_factory=dict),
+    ) -> dict:
+        """Request AI classification of system events. Optional session_id for session detail."""
         ts = _get_task_service()
         if ts is None:
             return {"error": "AI task service not available"}
         events: list = []
+        sid = (
+            body.get("session_id") if isinstance(body.get("session_id"), int) else None
+        )
         if persistence is not None:
-            events = persistence.get_recent_system_events(limit=30)
+            events = persistence.get_session_system_events(session_id=sid, limit=30)
         result = await ts.infer_task(
             OllamaTaskType.EVENT_CLASSIFICATION,
             {"events": events},
