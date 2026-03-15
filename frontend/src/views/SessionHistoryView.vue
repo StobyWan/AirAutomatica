@@ -62,8 +62,8 @@
           <span v-if="s.ended_at">– {{ fmtTs(s.ended_at) }}</span>
           <span>{{ labelAutopilot(s) }}</span>
           <span>{{ labelMode(s) }}</span>
-          <span v-if="(s as { detection_count?: number }).detection_count != null">
-            {{ (s as { detection_count?: number }).detection_count }} detections
+          <span v-if="getDetectionCount(s) != null">
+            {{ getDetectionCount(s) }} detections
           </span>
         </div>
         <span
@@ -113,6 +113,10 @@ function clearFilters() {
   autopilotFilter.value = ''
   modeFilter.value = ''
   sessionsStore.fetchSessions()
+}
+
+function getDetectionCount(s: { detection_count?: number }): number | null {
+  return s.detection_count ?? null
 }
 
 onMounted(() => {
