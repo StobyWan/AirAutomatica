@@ -45,12 +45,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDetectionsStore } from '@/stores/detections'
 import { fmtSourceBackend } from '@/utils/formatters'
 
 const detectionsStore = useDetectionsStore()
 const collapsed = ref(false)
+
+onMounted(() => {
+  detectionsStore.fetchRecentDetections()
+})
 
 const displayDetections = computed(() =>
   detectionsStore.detections.slice(0, 8)
