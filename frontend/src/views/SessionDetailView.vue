@@ -58,11 +58,31 @@
       {{ error }}
     </div>
 
-    <div v-else class="grid grid-rows-[minmax(0,1fr)_auto] gap-6 max-h-[calc(100vh-12rem)] min-h-[32rem]">
-      <!-- Top: path, debrief, detections, AI -->
-      <div class="overflow-y-auto min-h-0 space-y-6 pr-1">
-      <!-- Flight path (lazy-loaded when in view) -->
-      <section ref="pathSectionRef" class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+    <div v-else>
+      <!-- Tabs -->
+      <div class="flex flex-wrap gap-2 mb-4 border-b border-slate-700 pb-3">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          type="button"
+          class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          :class="activeTab === tab.id
+            ? 'bg-cyan-600/80 text-white'
+            : 'bg-slate-800/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'"
+          @click="activeTab = tab.id"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <!-- Tab content -->
+      <div class="min-h-[28rem] overflow-y-auto">
+      <!-- Path tab -->
+      <section
+        v-show="activeTab === 'path'"
+        ref="pathSectionRef"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+      >
         <h2 class="text-base font-semibold text-slate-200 mb-3">Flight Path</h2>
         <div v-if="pathData.path.length > 0" class="flex flex-wrap items-center gap-2 mb-2 text-sm">
           <span class="text-slate-400">Replay home: {{ homeLabel }}</span>
@@ -151,8 +171,11 @@
         </BaseModal>
       </section>
 
-      <!-- Debrief -->
-      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+      <!-- Debrief tab -->
+      <section
+        v-show="activeTab === 'debrief'"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+      >
         <h2 class="text-base font-semibold text-slate-200 mb-3">Debrief</h2>
         <p class="text-xs text-slate-500 mb-3">Post-flight summary from telemetry</p>
         <div v-if="debriefLoading" class="py-6 text-center">
@@ -215,8 +238,11 @@
         </div>
       </section>
 
-      <!-- Detections -->
-      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+      <!-- Detections tab -->
+      <section
+        v-show="activeTab === 'detections'"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+      >
         <h2 class="text-base font-semibold text-slate-200 mb-3">Detections</h2>
         <p class="text-xs text-slate-500 mb-2">Persisted detections for this session</p>
         <div v-if="detections.length > 0" class="flex items-center gap-2 mb-3">
@@ -251,8 +277,11 @@
         </div>
       </section>
 
-      <!-- AI Analysis -->
-      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+      <!-- AI Analysis tab -->
+      <section
+        v-show="activeTab === 'ai'"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+      >
         <h2 class="text-base font-semibold text-slate-200 mb-3">AI Analysis</h2>
         <p class="text-xs text-slate-500 mb-3">Local AI interpretation of this session's telemetry and events</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -288,11 +317,12 @@
           </div>
         </div>
       </section>
-      </div>
 
-      <!-- Bottom: Recordings + Delete -->
-      <div class="overflow-y-auto min-h-0 space-y-6">
-      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4 shrink-0">
+      <!-- Recordings tab -->
+      <section
+        v-show="activeTab === 'recordings'"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+      >
         <h2 class="text-base font-semibold text-slate-200 mb-3">Recordings</h2>
         <p class="text-xs text-slate-500 mb-3">Recordings for this flight session</p>
         <div v-if="recordingsLoading" class="py-6 text-center">
@@ -359,10 +389,10 @@
         </BaseModal>
       </section>
 
-      <!-- Delete session (bottom) -->
+      <!-- Delete session (inside Recordings tab when viewing past session) -->
       <section
-        v-if="session && !isCurrentSession"
-        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4 flex justify-end shrink-0"
+        v-if="activeTab === 'recordings' && session && !isCurrentSession"
+        class="rounded-lg border border-slate-700 bg-slate-800/50 p-4 flex justify-end mt-6"
       >
         <button
           type="button"
@@ -447,6 +477,15 @@ const eventClassificationContent = ref('Click Classify to analyze session events
 const pathSectionRef = ref<HTMLElement | null>(null)
 const pathLoading = ref(false)
 const pathLoadTriggered = ref(false)
+
+const tabs = [
+  { id: 'path' as const, label: 'Path' },
+  { id: 'debrief' as const, label: 'Debrief' },
+  { id: 'detections' as const, label: 'Detections' },
+  { id: 'ai' as const, label: 'AI' },
+  { id: 'recordings' as const, label: 'Recordings' },
+]
+const activeTab = ref<(typeof tabs)[number]['id']>('path')
 
 const showDeleteRecordingModal = computed({
   get: () => !!deleteRecordingFilename.value,
@@ -713,6 +752,10 @@ watch(session, () => {
     nextTick(setupPathLazyLoad)
   }
 }, { immediate: true })
+
+watch(activeTab, (tab) => {
+  if (tab === 'path') maybeLoadPath()
+})
 
 onUnmounted(() => {
   if (pathFallbackTimer) clearTimeout(pathFallbackTimer)
