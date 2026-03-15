@@ -5,13 +5,21 @@
       <OperationsHud class="flex-1 min-w-[280px]" />
       <LiveCameraFeed class="flex-1 min-w-[280px]" />
     </div>
-    <div class="aspect-video rounded-lg overflow-hidden bg-slate-900/50">
-      <LiveMap />
+    <div class="grid grid-cols-1 sm:grid-cols-[30%_1fr] lg:grid-cols-1 gap-4">
+      <div class="min-w-0">
+        <ConnectionHealth />
+      </div>
+      <div class="min-h-[420px] min-w-0 overflow-hidden">
+        <div class="aspect-video sm:aspect-auto sm:h-full rounded-lg overflow-hidden bg-slate-900/50 w-full min-h-[420px]">
+          <LiveMap />
+        </div>
+      </div>
     </div>
-    <LiveHomeControls />
-    <ConnectionHealth />
-    <QuickTelemetry />
-    <RecentDetectionsStrip />
+    <div class="space-y-4">
+      <LiveHomeControls />
+      <QuickTelemetry />
+      <RecentDetectionsStrip />
+    </div>
     <LiveTabs />
   </div>
 </template>

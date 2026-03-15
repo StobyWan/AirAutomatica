@@ -1,9 +1,6 @@
 <template>
-  <div class="relative w-full h-full min-h-[380px]">
+  <div class="relative w-full h-full min-h-[160px] rounded-lg overflow-hidden bg-slate-900/50">
     <div ref="mapContainerRef" class="absolute inset-0 w-full h-full" />
-    <div class="absolute inset-0 z-[1000] pointer-events-none">
-      <AviationHud />
-    </div>
   </div>
 </template>
 
@@ -12,7 +9,6 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import AviationHud from '@/components/AviationHud.vue'
 import { useTelemetryPathStore } from '@/stores/telemetryPath'
 import { useStateStore } from '@/stores/state'
 
@@ -58,7 +54,7 @@ function initMap() {
   polyline = L.polyline([], { color: '#3b82f6', weight: 3 }).addTo(map)
   marker = L.marker(defaultCenter, {
     icon: L.divIcon({
-      className: 'live-position-marker',
+      className: 'path-position-marker',
       html: positionPinHtml('#22d3ee'),
       iconSize: [24, 32],
       iconAnchor: [12, 32],
@@ -70,7 +66,7 @@ function initMap() {
   if (homeLat.value != null && homeLon.value != null) {
     homeMarker = L.marker([homeLat.value, homeLon.value], {
       icon: L.divIcon({
-        className: 'live-home-marker',
+        className: 'path-home-marker',
         html: positionPinHtml('#f59e0b'),
         iconSize: [24, 32],
         iconAnchor: [12, 32],
@@ -101,6 +97,9 @@ function updateMarker() {
   }
 }
 
+const homePinHtml =
+  '<div style="position:relative;width:24px;height:32px;margin-left:-12px;margin-top:-32px"><svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 20 12 20s12-11 12-20C24 5.4 18.6 0 12 0z" fill="#f59e0b" stroke="#0f172a" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="#0f172a"/></svg></div>'
+
 function updateHomeMarker() {
   if (!map) return
   if (homeMarker) {
@@ -110,8 +109,8 @@ function updateHomeMarker() {
   if (homeLat.value != null && homeLon.value != null) {
     homeMarker = L.marker([homeLat.value, homeLon.value], {
       icon: L.divIcon({
-        className: 'live-home-marker',
-        html: '<div style="position:relative;width:24px;height:32px;margin-left:-12px;margin-top:-32px"><svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 20 12 20s12-11 12-20C24 5.4 18.6 0 12 0z" fill="#f59e0b" stroke="#0f172a" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="#0f172a"/></svg></div>',
+        className: 'path-home-marker',
+        html: homePinHtml,
         iconSize: [24, 32],
         iconAnchor: [12, 32],
       }),
@@ -129,7 +128,7 @@ function updateDetectionMarkers() {
   for (const p of pts) {
     L.marker([p.lat!, p.lon!], {
       icon: L.divIcon({
-        className: 'live-detection-marker',
+        className: 'path-detection-marker',
         html: detectionPinHtml,
         iconSize: [20, 26],
         iconAnchor: [10, 26],
@@ -164,9 +163,9 @@ onUnmounted(() => {
 </script>
 
 <style>
-.leaflet-marker-icon.live-position-marker,
-.leaflet-marker-icon.live-home-marker,
-.leaflet-marker-icon.live-detection-marker {
+.leaflet-marker-icon.path-position-marker,
+.leaflet-marker-icon.path-home-marker,
+.leaflet-marker-icon.path-detection-marker {
   background: none !important;
   border: none !important;
 }
