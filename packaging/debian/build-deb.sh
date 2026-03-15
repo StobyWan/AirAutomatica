@@ -95,13 +95,19 @@ echo "==> Removed frontend, wheel, src, tests, docs to free disk space"
 
 # Build .deb
 echo "==> Building .deb"
+echo "==> Disk space before dpkg-deb:"
+df -h . 2>/dev/null || true
 DEB_PATH="$REPO_ROOT/airautomatica_${VERSION}_all.deb"
-dpkg-deb --root-owner-group --build "$STAGING" "$DEB_PATH"
+if ! dpkg-deb --root-owner-group --build "$STAGING" "$DEB_PATH"; then
+  echo "ERROR: dpkg-deb failed. 'tar: stdout: write error' usually means disk full. Free more space and retry."
+  exit 1
+fi
 
 # Verify .deb contains Alembic assets
 echo "==> Verifying .deb contains Alembic assets"
-if ! dpkg -c "$DEB_PATH" | grep -qE "alembic\.ini|alembic/"; then
-  echo "ERROR: .deb is missing alembic.ini or alembic/. Build failed."
+if ! dpkg -c "$DEB_PATH" 2>/dev/null | grep -qE "alembic\.ini|alembic/"; then
+  echo "ERROR: .deb verification failed (alembic not found in package listing)."
+  echo "If dpkg-deb reported 'tar: stdout: write error', the root cause is disk exhaustion, not missing alembic."
   exit 1
 fi
 
