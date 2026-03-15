@@ -9,7 +9,7 @@ export const useTrendsStore = defineStore('trends', () => {
   const groundspeed = ref<number[]>([])
   const heartbeat = ref<number[]>([])
 
-  const socket = useSocket()
+  const { socket } = useSocket()
   socket.on('trends_update', (payload: TrendsUpdatePayload) => {
     voltage.value = payload.voltage ?? []
     relAlt.value = payload.rel_alt ?? []

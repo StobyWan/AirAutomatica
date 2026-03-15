@@ -2,7 +2,7 @@
   <div class="p-4 max-w-4xl mx-auto">
     <nav class="mb-6">
       <router-link
-        :to="dashboardPath"
+        :to="{ name: 'Dashboard' }"
         class="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors text-sm font-medium"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,46 +38,28 @@
     </header>
 
     <!-- Delete session modal -->
-    <div
-      v-if="showDeleteSessionModal"
-      class="fixed inset-0 z-50 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div class="flex min-h-screen items-center justify-center p-4">
-        <div class="fixed inset-0 bg-black/60" aria-hidden="true" @click="showDeleteSessionModal = false" />
-        <div class="relative rounded-xl bg-slate-800 border border-slate-700 p-6 shadow-xl max-w-md w-full">
-          <h3 class="text-lg font-semibold text-white">Delete this session?</h3>
-          <p class="mt-2 text-sm text-slate-400">
-            This will permanently delete the session and all its recordings. This cannot be undone.
-          </p>
-          <div class="mt-6 flex gap-3 justify-end">
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
-              @click="showDeleteSessionModal = false"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium"
-              :disabled="deletingSession"
-              @click="confirmDeleteSession"
-            >
-              {{ deletingSession ? 'Deleting…' : 'Delete' }}
-            </button>
-          </div>
-        </div>
+    <BaseModal v-model="showDeleteSessionModal">
+      <h3 class="text-lg font-semibold text-white">Delete this session?</h3>
+      <p class="mt-2 text-sm text-slate-400">
+        This will permanently delete the session and all its recordings. This cannot be undone.
+      </p>
+      <div class="mt-6 flex gap-3 justify-end">
+        <BaseButton variant="secondary" @click="showDeleteSessionModal = false">
+          Cancel
+        </BaseButton>
+        <BaseButton
+          variant="danger"
+          :disabled="deletingSession"
+          @click="confirmDeleteSession"
+        >
+          {{ deletingSession ? 'Deleting…' : 'Delete' }}
+        </BaseButton>
       </div>
-    </div>
+    </BaseModal>
 
     <div v-if="loading" class="rounded-xl bg-slate-900/50 border border-slate-800 p-8 text-center">
       <div class="inline-flex items-center gap-2 text-slate-400">
-        <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
+        <BaseSpinner />
         Loading…
       </div>
     </div>
@@ -116,6 +98,7 @@
           </button>
         </div>
         <div class="path-svg rounded-lg overflow-hidden bg-black/20">
+          <!-- eslint-disable vue/no-v-html -- SVG from internal pathPlot utility, not user input -->
           <svg
             v-if="pathSvg"
             width="100%"
@@ -124,75 +107,59 @@
             class="block"
             v-html="pathSvg"
           />
+          <!-- eslint-enable vue/no-v-html -->
           <div v-else class="flex items-center justify-center h-[220px] text-slate-500 text-sm">
             No path data
           </div>
         </div>
 
         <!-- Home override modal -->
-        <div
-          v-if="showHomeModal"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          @click.self="showHomeModal = false"
-        >
-          <div class="bg-slate-800 rounded-lg p-4 max-w-sm w-full mx-4 border border-slate-600">
-            <h3 class="text-lg font-medium text-white mb-3">Override home for replay</h3>
-            <p class="text-xs text-slate-500 mb-3">
-              Affects replay and debrief only. Does not change the flight controller's RTL home.
-            </p>
-            <div class="space-y-2 mb-4">
-              <label class="block text-sm text-slate-400">Latitude</label>
-              <input
-                v-model.number="homeModalLat"
-                type="number"
-                step="any"
-                min="-90"
-                max="90"
-                class="w-full rounded bg-slate-700 text-white px-3 py-2 border border-slate-600"
-                placeholder="e.g. 37.6213"
-              />
-              <label class="block text-sm text-slate-400">Longitude</label>
-              <input
-                v-model.number="homeModalLon"
-                type="number"
-                step="any"
-                min="-180"
-                max="180"
-                class="w-full rounded bg-slate-700 text-white px-3 py-2 border border-slate-600"
-                placeholder="e.g. -122.379"
-              />
-            </div>
-            <div class="flex gap-2 justify-end">
-              <button
-                type="button"
-                class="px-3 py-1 rounded bg-slate-600 hover:bg-slate-500 text-white text-sm"
-                @click="showHomeModal = false"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                class="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-sm"
-                @click="applyHomeOverride"
-              >
-                Apply
-              </button>
-            </div>
+        <BaseModal v-model="showHomeModal" size="sm">
+          <h3 class="text-lg font-medium text-white mb-3">Override home for replay</h3>
+          <p class="text-xs text-slate-500 mb-3">
+            Affects replay and debrief only. Does not change the flight controller's RTL home.
+          </p>
+          <div class="space-y-2 mb-4">
+            <label class="block text-sm text-slate-400">Latitude</label>
+            <input
+              v-model.number="homeModalLat"
+              type="number"
+              step="any"
+              min="-90"
+              max="90"
+              class="w-full rounded-lg bg-slate-700 text-white px-3 py-2 border border-slate-600"
+              placeholder="e.g. 37.6213"
+            />
+            <label class="block text-sm text-slate-400">Longitude</label>
+            <input
+              v-model.number="homeModalLon"
+              type="number"
+              step="any"
+              min="-180"
+              max="180"
+              class="w-full rounded-lg bg-slate-700 text-white px-3 py-2 border border-slate-600"
+              placeholder="e.g. -122.379"
+            />
           </div>
-        </div>
+          <div class="flex gap-2 justify-end">
+            <BaseButton variant="secondary" size="sm" @click="showHomeModal = false">
+              Cancel
+            </BaseButton>
+            <BaseButton variant="primary" size="sm" @click="applyHomeOverride">
+              Apply
+            </BaseButton>
+          </div>
+        </BaseModal>
       </section>
 
       <!-- Debrief -->
       <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
         <h2 class="text-base font-semibold text-slate-200 mb-3">Debrief</h2>
         <p class="text-xs text-slate-500 mb-3">Post-flight summary from telemetry</p>
-        <div v-if="debriefLoading" class="py-4 text-center">
-          <svg class="animate-spin h-5 w-5 mx-auto text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+        <div v-if="debriefLoading" class="py-6 text-center">
+          <BaseSpinner color="slate" center />
         </div>
-        <div v-else-if="!debrief" class="py-4 text-center text-slate-500 text-sm">
+        <div v-else-if="!debrief" class="py-6 text-center text-slate-500 text-sm">
           No debrief data for this session.
         </div>
         <div v-else>
@@ -290,12 +257,9 @@
         <h2 class="text-base font-semibold text-slate-200 mb-3">Recordings</h2>
         <p class="text-xs text-slate-500 mb-3">Recordings for this flight session</p>
         <div v-if="recordingsLoading" class="py-6 text-center">
-          <svg class="animate-spin h-6 w-6 mx-auto text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+          <BaseSpinner size="lg" color="slate" center />
         </div>
-        <div v-else-if="recordings.length === 0" class="py-8 text-center">
+        <div v-else-if="recordings.length === 0" class="py-6 text-center">
           <p class="text-slate-500 text-sm">No recordings for this session</p>
         </div>
         <div v-else>
@@ -335,38 +299,25 @@
         </div>
 
         <!-- Delete recording modal -->
-        <div
-          v-if="deleteRecordingFilename"
-          class="fixed inset-0 z-50 overflow-y-auto"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div class="flex min-h-screen items-center justify-center p-4">
-            <div class="fixed inset-0 bg-black/60" @click="deleteRecordingFilename = null" />
-            <div class="relative rounded-xl bg-slate-800 border border-slate-700 p-6 shadow-xl max-w-md w-full">
-              <h3 class="text-lg font-semibold text-white">Delete recording?</h3>
-              <p class="mt-2 text-sm text-slate-400 font-mono">{{ deleteRecordingFilename }}</p>
-              <p class="mt-2 text-sm text-slate-500">This cannot be undone.</p>
-              <div class="mt-6 flex gap-3 justify-end">
-                <button
-                  type="button"
-                  class="px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium"
-                  @click="deleteRecordingFilename = null"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium"
-                  :disabled="deletingRecording"
-                  @click="confirmDeleteRecording"
-                >
-                  {{ deletingRecording ? 'Deleting…' : 'Delete' }}
-                </button>
-              </div>
+        <BaseModal v-model="showDeleteRecordingModal">
+          <template #default>
+            <h3 class="text-lg font-semibold text-white">Delete recording?</h3>
+            <p class="mt-2 text-sm text-slate-400 font-mono">{{ deleteRecordingFilename }}</p>
+            <p class="mt-2 text-sm text-slate-500">This cannot be undone.</p>
+            <div class="mt-6 flex gap-3 justify-end">
+              <BaseButton variant="secondary" @click="showDeleteRecordingModal = false">
+                Cancel
+              </BaseButton>
+              <BaseButton
+                variant="danger"
+                :disabled="deletingRecording"
+                @click="confirmDeleteRecording"
+              >
+                {{ deletingRecording ? 'Deleting…' : 'Delete' }}
+              </BaseButton>
             </div>
-          </div>
-        </div>
+          </template>
+        </BaseModal>
       </section>
     </div>
   </div>
@@ -375,6 +326,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import {
   getSession,
   getSessionPath,
@@ -406,9 +360,6 @@ import type { Detection } from '@/types'
 const route = useRoute()
 const router = useRouter()
 
-const basePath = (import.meta.env.VITE_BASE_PATH || '').replace(/\/$/, '')
-const dashboardPath = basePath ? basePath + '/dashboard' : '/dashboard'
-
 const sid = computed(() => {
   const id = route.params.id
   return typeof id === 'string' ? parseInt(id, 10) : Number(id)
@@ -434,6 +385,13 @@ const videoEl = ref<HTMLVideoElement | null>(null)
 const deleteRecordingFilename = ref<string | null>(null)
 const deletingRecording = ref(false)
 const detectionSourceFilter = ref('')
+
+const showDeleteRecordingModal = computed({
+  get: () => !!deleteRecordingFilename.value,
+  set: (v) => {
+    if (!v) deleteRecordingFilename.value = null
+  },
+})
 
 const isCurrentSession = computed(() => session.value?.current_session_id === sid.value)
 
@@ -595,7 +553,7 @@ async function confirmDeleteSession() {
   deletingSession.value = true
   try {
     await deleteSession(sid.value)
-    router.push(dashboardPath)
+    router.push({ name: 'Dashboard' })
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to delete session'
   } finally {

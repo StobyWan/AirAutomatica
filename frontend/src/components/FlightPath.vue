@@ -1,5 +1,6 @@
 <template>
   <div class="path-svg rounded-lg overflow-hidden bg-black/20">
+    <!-- eslint-disable vue/no-v-html -- SVG from internal pathPlot utility, not user input -->
     <svg
       v-if="svgContent"
       :width="width"
@@ -8,6 +9,7 @@
       class="block"
       v-html="svgContent"
     />
+    <!-- eslint-enable vue/no-v-html -->
     <div v-else class="flex items-center justify-center h-full text-muted text-sm">
       No path data
     </div>

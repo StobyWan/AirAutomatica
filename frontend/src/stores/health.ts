@@ -6,7 +6,7 @@ import type { HealthUpdatePayload } from '@/types'
 export const useHealthStore = defineStore('health', () => {
   const lastHealth = ref<HealthUpdatePayload | null>(null)
 
-  const socket = useSocket()
+  const { socket } = useSocket()
   socket.on('health_update', (payload: HealthUpdatePayload) => {
     lastHealth.value = payload
   })

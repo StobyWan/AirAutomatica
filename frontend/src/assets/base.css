@@ -33,30 +33,6 @@ body {
 .status-badge {
   @apply inline-block rounded px-2 py-1 text-sm font-semibold;
 }
-.status-connected {
-  background: var(--connected);
-  color: #000;
-}
-.status-stale {
-  background: var(--stale);
-  color: #000;
-}
-.status-disconnected {
-  background: var(--disconnected);
-  color: #fff;
-}
-.status-backoff {
-  background: var(--backoff);
-  color: #000;
-}
-.status-connecting {
-  background: var(--connecting);
-  color: #fff;
-}
-.status-starting {
-  background: var(--starting);
-  color: #fff;
-}
 
 .card {
   background: var(--card);
@@ -69,31 +45,6 @@ body {
 
 .na {
   color: var(--muted);
-}
-
-.operations-chip-ok {
-  @apply inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold;
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ade80;
-  border: 1px solid rgba(34, 197, 94, 0.4);
-}
-.operations-chip-muted {
-  @apply inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold;
-  background: rgba(148, 163, 184, 0.15);
-  color: #94a3b8;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-}
-.operations-chip-warn {
-  @apply inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold;
-  background: rgba(234, 179, 8, 0.2);
-  color: #facc15;
-  border: 1px solid rgba(234, 179, 8, 0.4);
-}
-.operations-chip-recording {
-  @apply inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold;
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
 .tab-btn {

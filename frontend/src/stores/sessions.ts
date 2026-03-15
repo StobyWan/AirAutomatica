@@ -6,13 +6,19 @@ import { normalizeSession } from '@/api/session'
 import type { SessionSummary } from '@/types'
 import { ApiError } from '@/api/client'
 
+export interface SessionFilters {
+  autopilot: string
+  connection_mode: string
+}
+
 export const useSessionsStore = defineStore('sessions', () => {
   const sessions = ref<SessionSummary[]>([])
   const currentSessionId = ref<number | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const filters = ref<SessionFilters>({ autopilot: '', connection_mode: '' })
 
-  const socket = useSocket()
+  const { socket } = useSocket()
   socket.on('connect', () => {
     fetchSessions()
   })
@@ -48,12 +54,29 @@ export const useSessionsStore = defineStore('sessions', () => {
     error.value = null
   }
 
+  function setFilters(updates?: { autopilot?: string; connection_mode?: string }) {
+    if (updates?.autopilot !== undefined) filters.value.autopilot = updates.autopilot
+    if (updates?.connection_mode !== undefined) filters.value.connection_mode = updates.connection_mode
+    const params: { autopilot?: string; connection_mode?: string } = {}
+    if (filters.value.autopilot) params.autopilot = filters.value.autopilot
+    if (filters.value.connection_mode) params.connection_mode = filters.value.connection_mode
+    return fetchSessions(params)
+  }
+
+  function clearFilters() {
+    filters.value = { autopilot: '', connection_mode: '' }
+    return fetchSessions()
+  }
+
   return {
     sessions,
     currentSessionId,
     loading,
     error,
+    filters,
     fetchSessions,
     clearError,
+    setFilters,
+    clearFilters,
   }
 })

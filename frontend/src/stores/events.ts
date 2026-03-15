@@ -6,7 +6,7 @@ import type { Event } from '@/types'
 export const useEventsStore = defineStore('events', () => {
   const events = ref<Event[]>([])
 
-  const socket = useSocket()
+  const { socket } = useSocket()
   socket.on('events_update', (payload: { events: Event[] }) => {
     events.value = payload.events ?? []
   })

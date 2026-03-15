@@ -19,27 +19,27 @@
       <div class="operations-hud-block rounded-lg border border-slate-700 bg-slate-800/50 p-3">
         <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Session</div>
         <div class="flex items-center gap-2 flex-wrap">
-          <span v-if="connectionStore.sessionId" class="text-cyan-400 font-mono text-sm">
-            #{{ connectionStore.sessionId }}
+          <span v-if="connectionStore.liveSessionId" class="text-cyan-400 font-mono text-sm">
+            #{{ connectionStore.liveSessionId }}
           </span>
           <span v-else class="text-slate-500 text-sm">Idle</span>
           <button
-            v-if="!connectionStore.sessionId && canStartSession"
+            v-if="!connectionStore.liveSessionId && canStartSession"
             type="button"
             class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium disabled:opacity-50"
-            :disabled="opsLoading || startingSession"
-            @click="handleStartSession"
+            :disabled="operationsStore.startingSession"
+            @click="operationsStore.startSession"
           >
-            {{ startingSession ? 'Starting…' : 'Start Session' }}
+            {{ operationsStore.startingSession ? 'Starting…' : 'Start Session' }}
           </button>
           <button
-            v-if="connectionStore.sessionId"
+            v-if="connectionStore.liveSessionId"
             type="button"
             class="px-3 py-1.5 rounded-lg bg-amber-900/30 hover:bg-amber-800/40 text-amber-200 text-sm font-medium border border-amber-700/50 disabled:opacity-50"
-            :disabled="opsLoading || stoppingSession"
-            @click="handleStopSession"
+            :disabled="operationsStore.stoppingSession"
+            @click="operationsStore.stopSession"
           >
-            {{ stoppingSession ? 'Stopping…' : 'Stop Session' }}
+            {{ operationsStore.stoppingSession ? 'Stopping…' : 'Stop Session' }}
           </button>
         </div>
       </div>
@@ -73,20 +73,20 @@
           </span>
           <span v-if="recordingTimer" class="text-xs font-mono text-slate-400">{{ recordingTimer }}</span>
           <button
-            v-if="cameraRecording && !stoppingRecording"
+            v-if="cameraRecording && !operationsStore.stoppingRecording"
             type="button"
             class="px-2 py-1 rounded text-xs font-medium bg-red-900/30 text-red-300 hover:bg-red-800/40 border border-red-800/50 disabled:opacity-50"
-            :disabled="opsLoading"
-            @click="handleStopRecording"
+            :disabled="operationsStore.stoppingRecording"
+            @click="operationsStore.stopRecording"
           >
             Stop
           </button>
           <button
-            v-else-if="connectionStore.sessionId && cameraRecordingAvailable && !cameraRecording"
+            v-else-if="connectionStore.liveSessionId && cameraRecordingAvailable && !cameraRecording"
             type="button"
             class="px-2 py-1 rounded text-xs font-medium bg-cyan-600/20 text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-50"
-            :disabled="opsLoading"
-            @click="handleStartRecording"
+            :disabled="operationsStore.startingRecording"
+            @click="operationsStore.startRecording"
           >
             Start
           </button>
@@ -100,6 +100,20 @@
       :class="transitionRowClass"
     >
       {{ transitionRowText }}
+    </div>
+
+    <div
+      v-if="operationsStore.opsError"
+      class="mt-3 px-4 py-3 rounded-lg border border-red-800/50 bg-red-950/30 text-red-200 text-sm"
+    >
+      {{ operationsStore.opsError }}
+      <button
+        type="button"
+        class="ml-2 text-xs text-red-300 hover:text-red-100 underline"
+        @click="operationsStore.clearOpsError"
+      >
+        Dismiss
+      </button>
     </div>
 
     <div
@@ -126,18 +140,14 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useHealthStore } from '@/stores/health'
-import * as sessionApi from '@/api/session'
-import * as cameraApi from '@/api/camera'
+import { useOperationsStore } from '@/stores/operations'
 import { recordingsUrl } from '@/config'
 import { labelMode } from '@/utils/formatters'
 
 const connectionStore = useConnectionStore()
 const healthStore = useHealthStore()
+const operationsStore = useOperationsStore()
 
-const opsLoading = ref(false)
-const startingSession = ref(false)
-const stoppingSession = ref(false)
-const stoppingRecording = ref(false)
 const timerTick = ref(0)
 
 let recordingTimerInterval: ReturnType<typeof setInterval> | null = null
@@ -155,8 +165,8 @@ const cameraRecordingAvailable = computed(
 )
 
 const sessionStatusText = computed(() => {
-  if (connectionStore.sessionId) {
-    return `Session active #${connectionStore.sessionId}`
+  if (connectionStore.liveSessionId) {
+    return `Session active #${connectionStore.liveSessionId}`
   }
   return 'No active session. Click Start Session to begin recording telemetry and detections.'
 })
@@ -176,13 +186,13 @@ const connectionChipClass = computed(() => {
 })
 
 const recordingChipText = computed(() => {
-  if (stoppingRecording.value) return 'Stopping…'
+  if (operationsStore.stoppingRecording) return 'Stopping…'
   if (cameraRecording.value) return 'REC'
   return 'Idle'
 })
 
 const recordingChipClass = computed(() => {
-  if (stoppingRecording.value || cameraRecording.value) {
+  if (operationsStore.stoppingRecording || cameraRecording.value) {
     return 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse'
   }
   return 'bg-slate-600/30 text-slate-400 border border-slate-500/40'
@@ -191,7 +201,7 @@ const recordingChipClass = computed(() => {
 const recordingTimer = computed(() => {
   void timerTick.value
   const startedAt = healthStore.lastHealth?.camera_recording_started_at
-  if (!startedAt || (!cameraRecording.value && !stoppingRecording.value)) return ''
+  if (!startedAt || (!cameraRecording.value && !operationsStore.stoppingRecording)) return ''
   const elapsedMs = Date.now() - new Date(startedAt).getTime()
   const sec = Math.max(0, Math.floor(elapsedMs / 1000))
   const m = Math.floor(sec / 60)
@@ -211,17 +221,17 @@ const latestRecordingFilename = computed(() => {
 })
 
 const transitionRowVisible = computed(
-  () => startingSession.value || stoppingSession.value
+  () => operationsStore.startingSession || operationsStore.stoppingSession
 )
 
 const transitionRowText = computed(() => {
-  if (startingSession.value) return 'Starting session…'
-  if (stoppingSession.value) return 'Stopping session…'
+  if (operationsStore.startingSession) return 'Starting session…'
+  if (operationsStore.stoppingSession) return 'Stopping session…'
   return ''
 })
 
 const transitionRowClass = computed(() => {
-  if (stoppingSession.value) {
+  if (operationsStore.stoppingSession) {
     return 'border-amber-700/50 bg-amber-900/10 text-amber-200'
   }
   return 'border-slate-600 bg-slate-800/40 text-slate-300'
@@ -242,61 +252,16 @@ const operationsSourceText = computed(() => {
 async function toggleCameraReady() {
   const next = !cameraReady.value
   try {
-    await cameraApi.postCameraReady(next)
-    healthStore.patchHealth({ camera_ready: next })
+    await operationsStore.setCameraReady(next)
   } catch {
-    // ignore
-  }
-}
-
-async function handleStartSession() {
-  startingSession.value = true
-  opsLoading.value = true
-  try {
-    await sessionApi.startSession()
-    await connectionStore.fetchState()
-  } finally {
-    startingSession.value = false
-    opsLoading.value = false
-  }
-}
-
-async function handleStopSession() {
-  stoppingSession.value = true
-  opsLoading.value = true
-  try {
-    await sessionApi.stopSession()
-    await connectionStore.fetchState()
-  } finally {
-    stoppingSession.value = false
-    opsLoading.value = false
-  }
-}
-
-async function handleStartRecording() {
-  opsLoading.value = true
-  try {
-    await cameraApi.startRecording()
-  } finally {
-    opsLoading.value = false
-  }
-}
-
-async function handleStopRecording() {
-  stoppingRecording.value = true
-  opsLoading.value = true
-  try {
-    await cameraApi.stopRecording()
-  } finally {
-    stoppingRecording.value = false
-    opsLoading.value = false
+    // Error surfaced in operationsStore.opsError
   }
 }
 
 onMounted(() => {
   recordingTimerInterval = setInterval(() => {
     if (
-      (cameraRecording.value || stoppingRecording.value) &&
+      (cameraRecording.value || operationsStore.stoppingRecording) &&
       healthStore.lastHealth?.camera_recording_started_at
     ) {
       timerTick.value++

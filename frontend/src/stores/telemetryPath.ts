@@ -9,7 +9,7 @@ export const useTelemetryPathStore = defineStore('telemetryPath', () => {
   const detections = ref<PathPoint[]>([])
   const sessionId = ref<number | null>(null)
 
-  const socket = useSocket()
+  const { socket } = useSocket()
   socket.on(
     'telemetry_path_update',
     (payload: TelemetryPathUpdatePayload) => {

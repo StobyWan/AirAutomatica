@@ -6,7 +6,7 @@ import type { AircraftState } from '@/types'
 export const useStateStore = defineStore('state', () => {
   const lastState = ref<AircraftState | null>(null)
 
-  const socket = useSocket()
+  const { socket } = useSocket()
   socket.on('state_update', (payload: { state: AircraftState }) => {
     lastState.value = payload.state
   })

@@ -7,9 +7,9 @@
         <label for="sessions-filter-autopilot" class="text-xs text-slate-400">Autopilot</label>
         <select
           id="sessions-filter-autopilot"
-          v-model="autopilotFilter"
+          v-model="sessionsStore.filters.autopilot"
           class="px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-sm text-slate-200"
-          @change="applyFilters"
+          @change="sessionsStore.setFilters()"
         >
           <option value="">All</option>
           <option value="ardupilot">ArduPilot</option>
@@ -21,9 +21,9 @@
         <label for="sessions-filter-mode" class="text-xs text-slate-400">Mode</label>
         <select
           id="sessions-filter-mode"
-          v-model="modeFilter"
+          v-model="sessionsStore.filters.connection_mode"
           class="px-2 py-1 rounded bg-slate-700/50 border border-slate-600 text-sm text-slate-200"
-          @change="applyFilters"
+          @change="sessionsStore.setFilters()"
         >
           <option value="">All</option>
           <option value="mock">Mock</option>
@@ -34,7 +34,7 @@
       <button
         type="button"
         class="px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-600/50 transition-colors"
-        @click="clearFilters"
+        @click="sessionsStore.clearFilters()"
       >
         Clear filters
       </button>
@@ -42,10 +42,7 @@
     </div>
 
     <div v-if="sessionsStore.loading" class="flex items-center gap-2 py-6">
-      <svg class="animate-spin h-5 w-5 text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-      </svg>
+      <BaseSpinner />
       <span class="text-sm text-slate-400">Loading…</span>
     </div>
 
@@ -75,7 +72,7 @@
       </router-link>
     </div>
 
-    <div v-else class="py-8 text-center">
+    <div v-else class="py-6 text-center">
       <p class="text-slate-500 text-sm">No sessions</p>
       <router-link
         :to="{ name: 'Dashboard' }"
@@ -88,32 +85,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useSessionsStore } from '@/stores/sessions'
+import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { fmtTs, labelAutopilot, labelMode } from '@/utils/formatters'
 
 const sessionsStore = useSessionsStore()
-
-const autopilotFilter = ref('')
-const modeFilter = ref('')
 
 const resultCountText = computed(() => {
   const n = sessionsStore.sessions.length
   return n === 0 ? 'No results' : `${n} session${n === 1 ? '' : 's'}`
 })
-
-function applyFilters() {
-  const params: { autopilot?: string; connection_mode?: string } = {}
-  if (autopilotFilter.value) params.autopilot = autopilotFilter.value
-  if (modeFilter.value) params.connection_mode = modeFilter.value
-  sessionsStore.fetchSessions(params)
-}
-
-function clearFilters() {
-  autopilotFilter.value = ''
-  modeFilter.value = ''
-  sessionsStore.fetchSessions()
-}
 
 function getDetectionCount(s: Record<string, unknown>): number | null {
   const v = s.detection_count
@@ -121,6 +103,6 @@ function getDetectionCount(s: Record<string, unknown>): number | null {
 }
 
 onMounted(() => {
-  applyFilters()
+  sessionsStore.setFilters()
 })
 </script>
