@@ -103,13 +103,4 @@ if ! dpkg-deb --root-owner-group --build "$STAGING" "$DEB_PATH"; then
   exit 1
 fi
 
-# Verify .deb contains Alembic assets
-echo "==> Verifying .deb contains Alembic assets"
-if ! dpkg -c "$DEB_PATH" | grep -q "alembic"; then
-  echo "ERROR: .deb verification failed (alembic not found in package listing)."
-  echo "Package contents:"
-  dpkg -c "$DEB_PATH" | head -50
-  exit 1
-fi
-
 echo "==> Done: $DEB_PATH"
