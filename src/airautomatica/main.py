@@ -47,6 +47,7 @@ from airautomatica.config import (
     get_local_llm_model,
     get_local_llm_provider,
     get_local_llm_timeout,
+    get_mock_telemetry_type,
     get_ollama_required,
     get_preprocessing_enabled,
     get_recording_ai_overlay_enabled,
@@ -159,7 +160,10 @@ def _create_telemetry_source(
 
     backend = get_telemetry_backend()
     if backend == "mock":
-        return MockTelemetry()
+        return MockTelemetry(
+            mock_type=get_mock_telemetry_type(),
+            capability_callback=_capability_callback,
+        )
     if backend == "serial":
         return SerialMavlinkTelemetry(
             port=get_serial_port(),
@@ -167,7 +171,10 @@ def _create_telemetry_source(
             capability_callback=_capability_callback,
         )
     logger.warning("Unknown backend %r, defaulting to mock", backend)
-    return MockTelemetry()
+    return MockTelemetry(
+        mock_type=get_mock_telemetry_type(),
+        capability_callback=_capability_callback,
+    )
 
 
 def _create_base_ai_service() -> AiService:

@@ -30,6 +30,7 @@ _provider_explicit: bool = True
 ApplyMode = Literal["live", "reconnect", "restart"]
 SETTING_APPLY_MODES: dict[str, ApplyMode] = {
     "TELEMETRY_BACKEND": "restart",
+    "MOCK_TELEMETRY_TYPE": "restart",
     "SERIAL_PORT": "restart",
     "SERIAL_BAUD": "restart",
     "LOCAL_LLM_PROVIDER": "reconnect",
@@ -65,12 +66,13 @@ AI_SUBSYSTEM_KEYS = frozenset(
 
 # Keys that trigger telemetry reconnect when _reload_telemetry_fn is available.
 TELEMETRY_SUBSYSTEM_KEYS = frozenset(
-    {"TELEMETRY_BACKEND", "SERIAL_PORT", "SERIAL_BAUD"}
+    {"TELEMETRY_BACKEND", "MOCK_TELEMETRY_TYPE", "SERIAL_PORT", "SERIAL_BAUD"}
 )
 
 # Canonical keys: returned by GET /settings and persisted on save. No legacy keys.
 CANONICAL_SETTINGS_KEYS = [
     "TELEMETRY_BACKEND",
+    "MOCK_TELEMETRY_TYPE",
     "SERIAL_PORT",
     "SERIAL_BAUD",
     "LOCAL_LLM_PROVIDER",
@@ -202,6 +204,7 @@ def get_raw_settings() -> dict:
     For LOCAL_LLM_PROVIDER when unset (discovered at runtime), returns empty string."""
     defaults: dict[str, str] = {
         "TELEMETRY_BACKEND": "mock",
+        "MOCK_TELEMETRY_TYPE": "ardupilot",
         "SERIAL_PORT": "/dev/ttyUSB0",
         "SERIAL_BAUD": "921600",
         "LOCAL_LLM_BASE_URL": "http://127.0.0.1:11434",
