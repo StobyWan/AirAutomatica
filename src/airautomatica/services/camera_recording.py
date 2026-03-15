@@ -19,6 +19,7 @@ from airautomatica.config import (
     get_recording_telemetry_overlay_enabled,
     get_recordings_dir,
 )
+from airautomatica.services.camera_preview import release_camera_for_recording
 from airautomatica.services.recording_ai_ingest import RecordingAiIngest
 from airautomatica.services.recordings_service import (
     _FILENAME_PATTERN,
@@ -283,7 +284,10 @@ class CameraRecordingService:
                 str(self._output_path.resolve()),
             )
 
-            # 3. Build command(s) and 4. Launch direct or pipe path
+            # 3. Release preview stream if active (camera can only be used by one process)
+            release_camera_for_recording()
+
+            # 4. Build command(s) and 5. Launch direct or pipe path
             ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
             use_pipe = ffmpeg_cmd is not None and cmd == "rpicam-vid"
             logger.info(
