@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, computed } from 'vue'
 import {
   getConnectionState,
   detectConnection,
@@ -9,6 +9,7 @@ import {
 } from '@/api/connection'
 import type { ConnectionStateResponse } from '@/types'
 import { useSocket } from '@/composables/useSocket'
+import { useHealthStore } from '@/stores/health'
 import { ApiError } from '@/api/client'
 
 export type ConnectionStatus =
@@ -29,7 +30,7 @@ export const useConnectionStore = defineStore('connection', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const socket = useSocket()
+  const { socket } = useSocket()
 
   socket.on('connect', () => {
     connectionStatus.value = 'Connected'
@@ -40,6 +41,12 @@ export const useConnectionStore = defineStore('connection', () => {
   })
   socket.on('connect_error', () => {
     connectionStatus.value = 'Disconnected'
+  })
+
+  const healthStore = useHealthStore()
+  const liveSessionId = computed(() => {
+    if (sessionId.value != null) return sessionId.value
+    return healthStore.lastHealth?.session_id ?? null
   })
 
   async function fetchState() {
@@ -118,6 +125,7 @@ export const useConnectionStore = defineStore('connection', () => {
     sessionState,
     mode,
     sessionId,
+    liveSessionId,
     detectionResult,
     connectionStatus,
     loading,

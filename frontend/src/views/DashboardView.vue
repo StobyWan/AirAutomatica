@@ -1,6 +1,12 @@
 <template>
   <LandingView v-if="connectionStore.connectionState === 'setup'" />
   <div v-else class="p-4">
+    <div
+      v-if="!connected"
+      class="mb-4 px-4 py-2 rounded-lg border border-amber-700/50 bg-amber-900/20 text-amber-200 text-sm font-medium"
+    >
+      Reconnecting…
+    </div>
     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
       <h1 class="text-xl font-bold text-slate-100 tracking-tight">AIRAUTOMATICA Dashboard</h1>
       <div class="flex items-center gap-2">
@@ -38,7 +44,10 @@ import { computed, onMounted } from 'vue'
 import DashboardNav from '@/components/DashboardNav.vue'
 import LandingView from '@/views/LandingView.vue'
 import { useConnectionStore } from '@/stores/connection'
+import { useSocket } from '@/composables/useSocket'
+
 const connectionStore = useConnectionStore()
+const { connected } = useSocket()
 
 const statusClass = computed(() => {
   const s = connectionStore.connectionStatus

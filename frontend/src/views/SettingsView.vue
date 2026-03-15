@@ -12,7 +12,7 @@
       <span class="text-sm text-slate-400">Loading settings…</span>
     </div>
 
-    <form v-else @submit.prevent="save" class="space-y-6">
+    <form v-else class="space-y-6" @submit.prevent="save">
       <!-- Telemetry -->
       <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
         <h2 class="text-base font-semibold text-slate-200 mb-3">Telemetry</h2>

@@ -98,6 +98,7 @@
           </button>
         </div>
         <div class="path-svg rounded-lg overflow-hidden bg-black/20">
+          <!-- eslint-disable vue/no-v-html -- SVG from internal pathPlot utility, not user input -->
           <svg
             v-if="pathSvg"
             width="100%"
@@ -106,6 +107,7 @@
             class="block"
             v-html="pathSvg"
           />
+          <!-- eslint-enable vue/no-v-html -->
           <div v-else class="flex items-center justify-center h-[220px] text-slate-500 text-sm">
             No path data
           </div>

@@ -11,7 +11,7 @@
     <div v-else-if="!recordings.length" class="py-6 text-center">
       <p class="text-slate-500 text-sm">{{ emptyMessage }}</p>
       <router-link
-        v-if="!connectionStore.sessionId"
+        v-if="!connectionStore.liveSessionId"
         :to="{ name: 'SessionHistory' }"
         class="mt-2 inline-block text-sm text-cyan-400 hover:text-cyan-300"
       >
@@ -43,9 +43,9 @@
           </button>
         </div>
       </div>
-      <div v-if="connectionStore.sessionId" class="mt-2">
+      <div v-if="connectionStore.liveSessionId" class="mt-2">
         <router-link
-          :to="{ name: 'SessionDetail', params: { id: String(connectionStore.sessionId) } }"
+          :to="{ name: 'SessionDetail', params: { id: String(connectionStore.liveSessionId) } }"
           class="text-sm text-cyan-400 hover:text-cyan-300"
         >
           View full session
@@ -110,9 +110,9 @@ const emptyMessage = ref('No active session or no recordings yet')
 async function fetchRecordings() {
   loading.value = true
   try {
-    const res = await getRecordings(connectionStore.sessionId ?? undefined)
+    const res = await getRecordings(connectionStore.liveSessionId ?? undefined)
     recordings.value = res.recordings.map((r) => ({ filename: r.filename, timestamp: r.timestamp }))
-    emptyMessage.value = connectionStore.sessionId
+    emptyMessage.value = connectionStore.liveSessionId
       ? 'No recordings yet'
       : 'No active session or no recordings yet'
   } catch {
@@ -147,5 +147,5 @@ async function confirmDelete() {
 
 onMounted(fetchRecordings)
 
-watch(() => connectionStore.sessionId, fetchRecordings)
+watch(() => connectionStore.liveSessionId, fetchRecordings)
 </script>

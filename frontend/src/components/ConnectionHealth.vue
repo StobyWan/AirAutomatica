@@ -98,15 +98,17 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useHealthStore } from '@/stores/health'
+import { useConnectionStore } from '@/stores/connection'
 import { aiDetect, getLastDetection } from '@/api/ai'
 
 const healthStore = useHealthStore()
+const connectionStore = useConnectionStore()
 
 const aiDetectLoading = ref(false)
 const aiDetectResult = ref('')
 const lastDetection = ref('')
 
-const sessionId = computed(() => healthStore.lastHealth?.session_id ?? null)
+const sessionId = computed(() => connectionStore.liveSessionId)
 
 const capabilities = computed(() => {
   const caps = healthStore.lastHealth?.capabilities as Record<string, unknown> | undefined
