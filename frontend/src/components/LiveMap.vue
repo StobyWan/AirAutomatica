@@ -1,5 +1,5 @@
 <template>
-  <div class="relative w-full h-full min-h-[380px]">
+  <div class="relative w-full h-full min-h-200">
     <div ref="mapContainerRef" class="absolute inset-0 w-full h-full" />
     <div class="absolute inset-0 z-[1000] pointer-events-none">
       <AviationHud />

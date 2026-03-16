@@ -36,6 +36,8 @@ AI HAT runs alongside Ollama when enabled. One-shot detection via `POST /api/ai/
 
 ## Matek F405-WING V2 Hookup
 
+See [Matek F405-WING V2 Build Card](matek_f405_build_card.md) for the full Pi 5 + RP3 ELRS + BE-220 GPS layout.
+
 - Use **TELEM1** or **TELEM2** for MAVLink companion.
 - FC params: `SERIALx_PROTOCOL=2` (MAVLink2), `SERIALx_BAUD=921` (921600).
 - Wiring: FC UART TX → CP2102 RX; FC UART RX → CP2102 TX; FC GND → CP2102 GND.
