@@ -43,6 +43,8 @@ For SERIAL1 (TELEM1), use SERIAL1_PROTOCOL and SERIAL1_BAUD.
 | SERIAL4 | GPS2 | UART4 |
 | SERIAL5/6/7 | USER | UART5/6/2 |
 
+**See also:** [Matek F405-WING V2 Build Card](matek_f405_build_card.md) for Pi 5 + RP3 ELRS + BE-220 GPS stack.
+
 ---
 
 ## Companion Computer (Raspberry Pi)

@@ -56,6 +56,10 @@
     <DashboardNav />
 
     <RouterView />
+
+    <footer class="mt-8 pt-4 border-t border-white/10 text-center text-sm text-slate-500">
+      AirAutomatica
+    </footer>
   </div>
 </template>
 

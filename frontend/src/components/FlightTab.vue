@@ -8,10 +8,10 @@
       <h2 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-4">Aircraft State</h2>
       <AircraftState />
     </section>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <section class="rounded-xl border border-slate-600/80 bg-slate-800/60 p-4">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[320px]">
+      <section class="rounded-xl border border-slate-600/80 bg-slate-800/60 p-4 min-w-0 overflow-hidden">
         <h2 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Path</h2>
-        <PathMap class="h-[200px] w-full" />
+        <PathMap class="h-[254px] w-full min-h-0" />
       </section>
       <section class="rounded-xl border border-slate-600/80 bg-slate-800/60 p-4">
         <h2 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">Trends</h2>

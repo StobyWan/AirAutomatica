@@ -1,6 +1,6 @@
 <template>
-  <div class="relative w-full h-full min-h-[160px] rounded-lg overflow-hidden bg-slate-900/50">
-    <div ref="mapContainerRef" class="absolute inset-0 w-full h-full" />
+  <div class="relative w-full min-h-[160px] rounded-[10px] overflow-hidden bg-slate-900/50">
+    <div ref="mapContainerRef" class="absolute inset-0 w-full h-full rounded-[10px]" />
   </div>
 </template>
 
