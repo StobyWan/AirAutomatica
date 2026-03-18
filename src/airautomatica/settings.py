@@ -51,6 +51,8 @@ SETTING_APPLY_MODES: dict[str, ApplyMode] = {
     "RECORDING_AI_OVERLAY_ENABLED": "live",
     "RECORDING_AI_PERSIST_ENABLED": "live",
     "SESSION_AUTO_START_ON_ARM": "live",
+    "CAMERA_SOURCE_ID": "restart",
+    "CAMERA_SOURCE_AUTO_FALLBACK": "restart",
 }
 
 # Keys that trigger AI subsystem hot-reload when _reload_ai_fn is available.
@@ -93,6 +95,8 @@ CANONICAL_SETTINGS_KEYS = [
     "RECORDING_AI_OVERLAY_ENABLED",
     "RECORDING_AI_PERSIST_ENABLED",
     "SESSION_AUTO_START_ON_ARM",
+    "CAMERA_SOURCE_ID",
+    "CAMERA_SOURCE_AUTO_FALLBACK",
 ]
 
 # Legacy keys accepted when loading from file or in POST body; never persisted.
@@ -224,6 +228,8 @@ def get_raw_settings() -> dict:
         "RECORDING_AI_OVERLAY_ENABLED": "0",
         "RECORDING_AI_PERSIST_ENABLED": "0",
         "SESSION_AUTO_START_ON_ARM": "0",
+        "CAMERA_SOURCE_ID": "",
+        "CAMERA_SOURCE_AUTO_FALLBACK": "1",
     }
     file_data: dict = {}
     if _SETTINGS_FILE.exists():

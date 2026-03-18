@@ -428,6 +428,34 @@ def get_camera_recording_disarm_debounce_sec() -> float:
         return 2.5
 
 
+def get_camera_source_id() -> str:
+    """Selected camera ID (e.g. csi:0, usb:/dev/video0). Empty = auto (first available).
+    Env: CAMERA_SOURCE_ID (also from settings.json)."""
+    try:
+        from airautomatica.settings import get_raw_settings
+
+        raw = get_raw_settings().get("CAMERA_SOURCE_ID") or os.environ.get(
+            "CAMERA_SOURCE_ID", ""
+        )
+    except Exception:
+        raw = os.environ.get("CAMERA_SOURCE_ID", "")
+    return str(raw).strip()
+
+
+def get_camera_source_auto_fallback() -> bool:
+    """True if we should fall back to first available when selected camera is missing.
+    Default: True. Env: CAMERA_SOURCE_AUTO_FALLBACK (1/true/yes)."""
+    try:
+        from airautomatica.settings import get_raw_settings
+
+        raw = get_raw_settings().get("CAMERA_SOURCE_AUTO_FALLBACK") or os.environ.get(
+            "CAMERA_SOURCE_AUTO_FALLBACK", "1"
+        )
+    except Exception:
+        raw = os.environ.get("CAMERA_SOURCE_AUTO_FALLBACK", "1")
+    return str(raw).lower().strip() in ("1", "true", "yes")
+
+
 def get_session_auto_start_on_arm() -> bool:
     """True if session should auto-start when armed and auto-stop when disarmed.
     Default: False. Env: SESSION_AUTO_START_ON_ARM (1/true/yes)."""
