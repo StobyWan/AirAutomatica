@@ -13,10 +13,16 @@ export interface HealthUpdatePayload {
   camera_recording_file?: string | null
   camera_recording_last_file?: string | null
   camera_recording_mode?: string
+  camera_recording_available?: boolean
   telemetry_backend?: string
   mode?: string | null
   source_port?: string | null
   baud?: number | null
+  active_camera_id?: string | null
+  active_camera_label?: string | null
+  active_camera_kind?: string | null
+  still_capture_available?: boolean
+  configured_source_id?: string
   [key: string]: unknown
 }
 

@@ -112,3 +112,40 @@ def test_preview_includes_csi1_when_selector_returns_csi1() -> None:
     assert "-c" in args
     idx = args.index("-c")
     assert args[idx + 1] == "1"
+
+
+def test_preview_uses_usb_when_selector_returns_usb() -> None:
+    """When CameraSelector returns USB descriptor, use ffmpeg v4l2 for preview."""
+    mock_proc = MagicMock()
+    mock_proc.stdout = MagicMock()
+    mock_proc.stdout.read.return_value = b""
+    mock_proc.poll.return_value = None
+
+    desc = CameraDescriptor(
+        id="usb:/dev/video0",
+        source_type="usb",
+        display_name="USB Webcam",
+        path="/dev/video0",
+    )
+
+    def is_recording() -> bool:
+        return False
+
+    with patch(
+        "airautomatica.services.camera_preview.CameraSelector"
+    ) as mock_selector_cls:
+        mock_selector = MagicMock()
+        mock_selector.resolve.return_value = desc
+        mock_selector_cls.return_value = mock_selector
+        with patch(
+            "airautomatica.services.camera_preview.subprocess.Popen",
+            return_value=mock_proc,
+        ) as mock_popen:
+            with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+                chunks = list(stream_preview_frames(is_recording))
+    assert mock_popen.called
+    args = mock_popen.call_args[0][0]
+    assert args[0].endswith("ffmpeg")
+    assert "-f" in args
+    assert "v4l2" in args
+    assert "/dev/video0" in args

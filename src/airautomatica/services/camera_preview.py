@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Optional
 
 from airautomatica.camera.backends.csi import csi_camera_index_args
+from airautomatica.camera.backends.usb import usb_preview_argv
 from airautomatica.camera.selector import CameraSelector
 
 logger = logging.getLogger(__name__)
@@ -128,9 +129,31 @@ def stream_preview_frames(
     is_recording: Callable[[], bool],
 ) -> Iterator[bytes]:
     """Yield MJPEG multipart chunks. Prefers rpicam-vid stream; falls back to rpicam-still loop."""
+    global _active_preview_process
     descriptor = CameraSelector().resolve()
-    camera_index_args = csi_camera_index_args(descriptor)
 
+    usb_argv = usb_preview_argv(descriptor)
+    if usb_argv:
+        try:
+            proc = subprocess.Popen(
+                usb_argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            if proc.stdout:
+                with _preview_lock:
+                    _active_preview_process = proc
+                try:
+                    yield from _stream_mjpeg_from_vid(proc, is_recording)
+                finally:
+                    with _preview_lock:
+                        if _active_preview_process is proc:
+                            _active_preview_process = None
+                return
+        except Exception as e:
+            logger.debug("USB preview failed: %s", e)
+
+    camera_index_args = csi_camera_index_args(descriptor)
     vid_cmd = _get_rpicam_vid()
     if vid_cmd:
         try:
@@ -155,7 +178,6 @@ def stream_preview_frames(
             )
             if proc.stdout:
                 with _preview_lock:
-                    global _active_preview_process
                     _active_preview_process = proc
                 try:
                     yield from _stream_mjpeg_from_vid(proc, is_recording)

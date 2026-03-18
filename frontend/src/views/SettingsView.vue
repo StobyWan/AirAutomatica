@@ -154,6 +154,33 @@
             <span class="text-sm text-slate-300">Recording AI persist</span>
           </label>
           <p class="text-xs text-slate-500">Extract frames and run Hailo inference; save to Recent Detections. Overlay and persist cannot both run.</p>
+          <div>
+            <label for="CAMERA_SOURCE_ID" class="block text-sm text-slate-300 mb-1">Camera source</label>
+            <select
+              id="CAMERA_SOURCE_ID"
+              v-model="form.CAMERA_SOURCE_ID"
+              class="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-slate-200 text-sm"
+            >
+              <option value="">Auto (first available)</option>
+              <option
+                v-for="cam in cameraSelectOptions"
+                :key="cam.id"
+                :value="cam.id"
+              >
+                {{ cam.display_name }} ({{ cam.source_type }})
+              </option>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">Which camera to use for preview, recording, and one-shot detection. Restart required after change.</p>
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              v-model="form.CAMERA_SOURCE_AUTO_FALLBACK"
+              type="checkbox"
+              class="rounded border-slate-600 bg-slate-700 text-cyan-600 focus:ring-cyan-500"
+            />
+            <span class="text-sm text-slate-300">Auto-fallback when selected camera unavailable</span>
+          </label>
+          <p class="text-xs text-slate-500">When enabled, use first available camera if the selected one is unplugged. Restart required.</p>
         </div>
       </section>
 
@@ -276,13 +303,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getSettings, postSettings } from '@/api/settings'
+import { getCameraStatus } from '@/api/camera'
 import BaseSpinner from '@/components/ui/BaseSpinner.vue'
 import { CHECKBOX_KEYS } from '@/constants/settings'
 import type { Settings } from '@/types'
 
 const loading = ref(true)
+const cameraOptions = ref<{ id: string; display_name: string; source_type: string }[]>([])
+
+const cameraSelectOptions = computed(() => {
+  const opts = cameraOptions.value
+  const current = String(form.CAMERA_SOURCE_ID || '').trim()
+  if (!current) return opts
+  const found = opts.some((c) => c.id === current)
+  if (found) return opts
+  return [{ id: current, display_name: current, source_type: '—' }, ...opts]
+})
 const saving = ref(false)
 const statusMessage = ref('')
 const activeSummary = ref('')
@@ -311,6 +349,8 @@ const form = reactive<Record<string, string | boolean>>({
   RECORDING_AI_OVERLAY_ENABLED: false,
   RECORDING_AI_PERSIST_ENABLED: false,
   SESSION_AUTO_START_ON_ARM: false,
+  CAMERA_SOURCE_ID: '',
+  CAMERA_SOURCE_AUTO_FALLBACK: true,
 })
 
 function parseValue(key: string, raw: string | number | boolean | null): string | boolean {
@@ -333,10 +373,22 @@ async function fetchSettings() {
   loading.value = true
   statusMessage.value = ''
   try {
-    const res = await getSettings()
-    load(res.settings as Settings)
-    activeSummary.value = res.active_summary ?? ''
-    providerReason.value = res.provider_reason ?? ''
+    const [settingsRes, cameraRes] = await Promise.all([
+      getSettings(),
+      getCameraStatus().catch(() => null),
+    ])
+    load(settingsRes.settings as Settings)
+    activeSummary.value = settingsRes.active_summary ?? ''
+    providerReason.value = settingsRes.provider_reason ?? ''
+    if (cameraRes?.cameras) {
+      cameraOptions.value = cameraRes.cameras.map((c) => ({
+        id: c.id,
+        display_name: c.display_name,
+        source_type: c.source_type,
+      }))
+    } else {
+      cameraOptions.value = []
+    }
   } catch (e) {
     statusMessage.value = `Failed to load: ${e instanceof Error ? e.message : 'Unknown error'}`
   } finally {

@@ -16,6 +16,7 @@
       <FlightTab v-if="activeTab === 'flight'" />
       <EventsTab v-if="activeTab === 'events'" />
       <RecordingsTab v-if="activeTab === 'recordings'" />
+      <AiTab v-if="activeTab === 'ai'" />
     </div>
   </div>
 </template>
@@ -25,11 +26,13 @@ import { ref } from 'vue'
 import FlightTab from './FlightTab.vue'
 import EventsTab from './EventsTab.vue'
 import RecordingsTab from './RecordingsTab.vue'
+import AiTab from './AiTab.vue'
 
 const tabs = [
   { id: 'flight', label: 'Flight' },
   { id: 'events', label: 'Events' },
   { id: 'recordings', label: 'Recordings' },
+  { id: 'ai', label: 'AI' },
 ] as const
 
 const activeTab = ref<(typeof tabs)[number]['id']>('flight')

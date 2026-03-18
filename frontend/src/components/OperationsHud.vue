@@ -58,6 +58,12 @@
         />
       </button>
       <span class="text-xs text-slate-400">{{ cameraReady ? 'Ready' : 'Not ready' }}</span>
+      <span
+        v-if="cameraSourceText"
+        class="text-xs text-slate-500"
+      >
+        · {{ cameraSourceText }}
+      </span>
       <span class="text-slate-600">·</span>
       <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Recording</span>
       <span
@@ -156,6 +162,18 @@ const cameraRecording = computed(() => healthStore.lastHealth?.camera_recording 
 const cameraRecordingAvailable = computed(
   () => healthStore.lastHealth?.camera_recording_available !== false
 )
+
+const cameraSourceText = computed(() => {
+  const configured = healthStore.lastHealth?.configured_source_id
+  const active = healthStore.lastHealth?.active_camera_label
+  const configuredLabel = configured && configured.trim() ? configured : 'Auto'
+  if (active) {
+    return configured && configured.trim()
+      ? `Configured: ${configuredLabel} · Active: ${active}`
+      : `Camera: ${active}`
+  }
+  return configured && configured.trim() ? `Camera: ${configured}` : null
+})
 
 const sessionStatusText = computed(() => {
   if (connectionStore.liveSessionId) {

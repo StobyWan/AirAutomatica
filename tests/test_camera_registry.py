@@ -117,7 +117,46 @@ def test_camera_registry_get_camera(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cam is not None
     assert cam.id == "csi:0"
     assert registry.get_camera("csi:99") is None
-    assert registry.get_camera("usb:/dev/video0") is None
+
+
+def test_camera_registry_includes_usb_when_discovered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Registry returns CSI + USB when both are discovered."""
+    mock_result = type("Result", (), {})()
+    mock_result.returncode = 0
+    mock_result.stdout = _SAMPLE_LIST_CAMERAS
+    mock_result.stderr = ""
+
+    v4l2_output = "Logitech C920 (usb-0000:00:1d.0-1.4):\n\t/dev/video1\n"
+
+    def fake_run(cmd, *args, **kwargs):
+        if "v4l2-ctl" in str(cmd):
+            r = type("Result", (), {})()
+            r.returncode = 0
+            r.stdout = v4l2_output
+            r.stderr = ""
+            return r
+        return mock_result
+
+    with patch(
+        "airautomatica.camera.registry._get_csi_command",
+        return_value="/usr/bin/rpicam-vid",
+    ):
+        with patch(
+            "airautomatica.camera.usb_discovery._get_v4l2_ctl",
+            return_value="/usr/bin/v4l2-ctl",
+        ):
+            with patch("pathlib.Path.exists", return_value=False):
+                with patch("subprocess.run", side_effect=fake_run):
+                    registry = CameraRegistry()
+                    cameras = registry.list_cameras()
+    assert len(cameras) >= 2
+    csi_cams = [c for c in cameras if c.source_type == "csi"]
+    usb_cams = [c for c in cameras if c.source_type == "usb"]
+    assert len(csi_cams) == 1
+    assert len(usb_cams) >= 1
+    assert registry.get_camera("usb:/dev/video1") is not None
 
 
 def test_camera_registry_refresh_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:

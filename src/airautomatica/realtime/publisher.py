@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING, Optional
 import socketio
 
 from airautomatica.ai.ollama_tasks import get_telemetry_summary_counts
+from airautomatica.camera.registry import CameraRegistry
+from airautomatica.camera.selector import CameraSelector
+from airautomatica.camera.status import get_camera_status_summary
 from airautomatica.config import (
     get_camera_recording_mode,
     get_sqlite_db_path,
@@ -149,6 +152,12 @@ class DashboardPublisher:
         self._app_home_store = app_home_store
         self._heartbeat_buffer: deque[dict] = deque(maxlen=_HEARTBEAT_BUFFER_MAX)
         self._loop_count = 0
+        self._camera_registry = CameraRegistry() if camera_recording_service else None
+        self._camera_selector = (
+            CameraSelector(registry=self._camera_registry)
+            if self._camera_registry
+            else None
+        )
 
     async def run(self) -> None:
         """Emit updates at interval. Runs until cancelled."""
@@ -207,6 +216,27 @@ class DashboardPublisher:
                         if rec_state.started_at
                         else None
                     )
+                    if (
+                        self._camera_registry is not None
+                        and self._camera_selector is not None
+                    ):
+                        status = get_camera_status_summary(
+                            self._camera_registry,
+                            self._camera_selector,
+                            self._camera_recording_service,
+                            refresh_registry=False,
+                        )
+                        health["active_camera_id"] = status.get("active_camera_id")
+                        health["active_camera_label"] = status.get(
+                            "active_camera_label"
+                        )
+                        health["active_camera_kind"] = status.get("active_camera_kind")
+                        health["still_capture_available"] = status.get(
+                            "still_capture_available", False
+                        )
+                        health["configured_source_id"] = status.get(
+                            "configured_source_id", ""
+                        )
                 await self._sio.emit("health_update", health)
 
                 state_payload = _build_state_payload(state, self._app_home_store)

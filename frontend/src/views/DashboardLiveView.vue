@@ -25,6 +25,7 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import FlightStatusStrip from '@/components/FlightStatusStrip.vue'
 import OperationsHud from '@/components/OperationsHud.vue'
 import LiveCameraFeed from '@/components/LiveCameraFeed.vue'
@@ -34,4 +35,11 @@ import ConnectionHealth from '@/components/ConnectionHealth.vue'
 import QuickTelemetry from '@/components/QuickTelemetry.vue'
 import RecentDetectionsStrip from '@/components/RecentDetectionsStrip.vue'
 import LiveTabs from '@/components/LiveTabs.vue'
+import { useCameraStore } from '@/stores/camera'
+
+const cameraStore = useCameraStore()
+
+onMounted(() => {
+  cameraStore.fetchCameraStatus()
+})
 </script>

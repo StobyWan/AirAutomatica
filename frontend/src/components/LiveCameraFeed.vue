@@ -1,13 +1,28 @@
 <template>
   <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-    <h2 class="text-base font-semibold text-slate-200 mb-3">Live Camera</h2>
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <h2 class="text-base font-semibold text-slate-200">Live Camera</h2>
+      <router-link
+        :to="{ name: 'Settings' }"
+        class="text-xs text-slate-500 hover:text-slate-400"
+      >
+        Change camera in Settings
+      </router-link>
+    </div>
+
+    <div v-if="cameras.length" class="mb-2 text-xs text-slate-400">
+      <span class="font-medium">Active camera:</span> {{ activeCameraLabel }}
+    </div>
+    <div v-if="cameras.length > 1" class="mb-2 text-xs text-slate-500">
+      {{ cameras.length }} cameras found
+    </div>
 
     <div class="relative aspect-video rounded bg-slate-900/50 overflow-hidden">
       <div
         v-if="!cameraAvailable"
         class="absolute inset-0 flex items-center justify-center"
       >
-        <p class="text-slate-500 text-sm">Camera not available</p>
+        <p class="text-slate-500 text-sm">{{ noCamerasMessage }}</p>
       </div>
 
       <div
@@ -48,11 +63,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useHealthStore } from '@/stores/health'
+import { useCameraStore } from '@/stores/camera'
 import { useStateStore } from '@/stores/state'
 import { API_BASE } from '@/config'
 import type { AircraftState } from '@/types'
 
 const healthStore = useHealthStore()
+const cameraStore = useCameraStore()
 const stateStore = useStateStore()
 
 const cameraRecording = computed(
@@ -66,6 +83,19 @@ const cameraAvailable = computed(
 const cameraReady = computed(
   () => healthStore.lastHealth?.camera_ready === true
 )
+
+const activeCameraLabel = computed(
+  () => healthStore.lastHealth?.active_camera_label ?? '—'
+)
+
+const cameras = computed(() => cameraStore.cameraStatus?.cameras ?? [])
+
+const noCamerasMessage = computed(() => {
+  if (cameras.value.length === 0 && cameraStore.cameraStatus) {
+    return 'No cameras found'
+  }
+  return 'Camera not available'
+})
 
 const hud = computed(() => formatTelemetryHud(stateStore.lastState))
 
