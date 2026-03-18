@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from airautomatica.camera import CameraDescriptor
 from airautomatica.models.state import AircraftState
 from airautomatica.services.camera_recording import (
     CameraRecordingService,
@@ -277,6 +278,103 @@ def test_rpicam_vid_uses_mpegts_pipe_when_ffmpeg_available(
     assert "--libav-format" in cam_args
     assert "mpegts" in cam_args
     assert "--nopreview" in cam_args
+
+
+def test_recording_no_camera_index_when_selector_returns_none(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When CameraSelector returns None (auto/no cameras), no -c arg (preserve default)."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.CameraSelector"
+        ) as mock_selector_cls:
+            mock_selector = MagicMock()
+            mock_selector.resolve.return_value = None
+            mock_selector_cls.return_value = mock_selector
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                return_value=mock_proc,
+            ) as mock_popen:
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc.start_recording()
+    cam_args = mock_popen.call_args_list[0][0][0]
+    assert "-c" not in cam_args
+
+
+def test_recording_includes_csi0_when_selector_returns_csi0(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When CameraSelector returns csi:0, recording command includes -c 0."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    desc = CameraDescriptor(
+        id="csi:0",
+        source_type="csi",
+        display_name="CSI Camera 0",
+        path=None,
+    )
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.CameraSelector"
+        ) as mock_selector_cls:
+            mock_selector = MagicMock()
+            mock_selector.resolve.return_value = desc
+            mock_selector_cls.return_value = mock_selector
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                return_value=mock_proc,
+            ) as mock_popen:
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc.start_recording()
+    cam_args = mock_popen.call_args_list[0][0][0]
+    assert "-c" in cam_args
+    idx = cam_args.index("-c")
+    assert cam_args[idx + 1] == "0"
+
+
+def test_recording_includes_csi1_when_selector_returns_csi1(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When CameraSelector returns csi:1, recording command includes -c 1."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    desc = CameraDescriptor(
+        id="csi:1",
+        source_type="csi",
+        display_name="CSI Camera 1",
+        path=None,
+    )
+    with patch(
+        "airautomatica.services.camera_recording.get_camera_video_command",
+        return_value="libcamera-vid",
+    ):
+        with patch(
+            "airautomatica.services.camera_recording.CameraSelector"
+        ) as mock_selector_cls:
+            mock_selector = MagicMock()
+            mock_selector.resolve.return_value = desc
+            mock_selector_cls.return_value = mock_selector
+            with patch(
+                "airautomatica.services.camera_recording.subprocess.Popen",
+                return_value=mock_proc,
+            ) as mock_popen:
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    svc.start_recording()
+    cam_args = mock_popen.call_args_list[0][0][0]
+    assert "-c" in cam_args
+    idx = cam_args.index("-c")
+    assert cam_args[idx + 1] == "1"
 
 
 def test_start_recording_logs_command(

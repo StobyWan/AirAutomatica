@@ -1,5 +1,19 @@
 """Camera module. Frame acquisition for future AI HAT vision integration."""
 
+from airautomatica.camera.descriptor import (
+    CameraCapabilities,
+    CameraDescriptor,
+    SourceType,
+)
 from airautomatica.camera.interface import CameraFrameProvider
+from airautomatica.camera.registry import CameraRegistry
+from airautomatica.camera.selector import CameraSelector
 
-__all__ = ["CameraFrameProvider"]
+__all__ = [
+    "CameraCapabilities",
+    "CameraDescriptor",
+    "CameraFrameProvider",
+    "CameraRegistry",
+    "CameraSelector",
+    "SourceType",
+]

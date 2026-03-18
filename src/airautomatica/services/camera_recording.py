@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, List, Optional
 
 from airautomatica.ai.hailo_detection import RPCAM_ASSETS_PATH
+from airautomatica.camera.backends.csi import csi_camera_index_args
+from airautomatica.camera.selector import CameraSelector
 from airautomatica.config import (
     get_camera_recording_disarm_debounce_sec,
     get_recording_ai_overlay_enabled,
@@ -389,6 +391,9 @@ class CameraRecordingService:
             release_camera_for_recording()
 
             # 4. Build command(s) and 5. Launch direct or pipe path
+            descriptor = CameraSelector().resolve()
+            camera_index_args = csi_camera_index_args(descriptor)
+
             ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
             use_pipe = ffmpeg_cmd is not None and cmd == "rpicam-vid"
             logger.info(
@@ -399,12 +404,15 @@ class CameraRecordingService:
             )
             try:
                 if ffmpeg_cmd is not None:
-                    cam_args = [
-                        cmd,
-                        "-t",
-                        "0",
-                        "--nopreview",
-                    ]
+                    cam_args = (
+                        [cmd]
+                        + camera_index_args
+                        + [
+                            "-t",
+                            "0",
+                            "--nopreview",
+                        ]
+                    )
                     cam_args.extend(_overlay_args_if_enabled(cmd))
                     cam_args.extend(
                         [
@@ -518,7 +526,7 @@ class CameraRecordingService:
                         " ".join(ffmpeg_args),
                     )
                 else:
-                    args = [cmd, "-t", "0"]
+                    args = [cmd] + camera_index_args + ["-t", "0"]
                     args.extend(_overlay_args_if_enabled(cmd))
                     args.extend(["-o", str(self._output_path)])
                     self._process = subprocess.Popen(args, stderr=subprocess.PIPE)

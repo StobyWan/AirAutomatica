@@ -9,6 +9,9 @@ import time
 from pathlib import Path
 from typing import Callable, Iterator, Optional
 
+from airautomatica.camera.backends.csi import csi_camera_index_args
+from airautomatica.camera.selector import CameraSelector
+
 logger = logging.getLogger(__name__)
 
 _active_preview_process: Optional[subprocess.Popen[bytes]] = None
@@ -89,7 +92,9 @@ def _stream_mjpeg_from_vid(
             proc.kill()
 
 
-def _capture_frame_still() -> bytes | None:
+def _capture_frame_still(
+    camera_index_args: Optional[list[str]] = None,
+) -> bytes | None:
     """Capture one JPEG via rpicam-still. Fallback when rpicam-vid unavailable."""
     rpicam = shutil.which("rpicam-still")
     if not rpicam:
@@ -98,8 +103,13 @@ def _capture_frame_still() -> bytes | None:
     try:
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
             path = Path(f.name)
+        args = (
+            [rpicam]
+            + (camera_index_args or [])
+            + ["-t", "1", "--immediate", "-n", "-o", str(path)]
+        )
         result = subprocess.run(
-            [rpicam, "-t", "1", "--immediate", "-n", "-o", str(path)],
+            args,
             capture_output=True,
             text=True,
             timeout=_CAPTURE_TIMEOUT_SEC,
@@ -118,12 +128,16 @@ def stream_preview_frames(
     is_recording: Callable[[], bool],
 ) -> Iterator[bytes]:
     """Yield MJPEG multipart chunks. Prefers rpicam-vid stream; falls back to rpicam-still loop."""
+    descriptor = CameraSelector().resolve()
+    camera_index_args = csi_camera_index_args(descriptor)
+
     vid_cmd = _get_rpicam_vid()
     if vid_cmd:
         try:
             proc = subprocess.Popen(
-                [
-                    vid_cmd,
+                [vid_cmd]
+                + camera_index_args
+                + [
                     "-t",
                     "0",
                     "--codec",
@@ -156,7 +170,7 @@ def stream_preview_frames(
     while True:
         if is_recording():
             break
-        frame = _capture_frame_still()
+        frame = _capture_frame_still(camera_index_args)
         if frame:
             yield (
                 b"--"
