@@ -11,6 +11,7 @@ from airautomatica.camera.descriptor import (
     CameraDescriptor,
     SourceType,
 )
+from airautomatica.camera.usb_discovery import discover_usb_cameras
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def _parse_csi_list_cameras_output(stdout: str) -> list[CameraDescriptor]:
 
 
 class CameraRegistry:
-    """Discovers cameras and exposes them for selection. Phase 1: CSI only."""
+    """Discovers cameras and exposes them for selection. CSI first, then USB."""
 
     def __init__(self) -> None:
         self._cameras: list[CameraDescriptor] = []
@@ -79,10 +80,17 @@ class CameraRegistry:
         return list(self._cameras)
 
     def refresh(self) -> None:
-        """Re-run discovery and update internal camera list."""
-        self._cameras = self._discover_csi_cameras()
+        """Re-run discovery and update internal camera list. CSI first, then USB."""
+        csi = self._discover_csi_cameras()
+        usb = discover_usb_cameras()
+        self._cameras = csi + usb
         self._refreshed = True
-        logger.debug("CameraRegistry refreshed: %d cameras", len(self._cameras))
+        logger.debug(
+            "CameraRegistry refreshed: %d CSI + %d USB = %d cameras",
+            len(csi),
+            len(usb),
+            len(self._cameras),
+        )
 
     def get_camera(self, camera_id: str) -> Optional[CameraDescriptor]:
         """Return descriptor for given id, or None if not found."""

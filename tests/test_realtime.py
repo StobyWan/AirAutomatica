@@ -235,3 +235,7 @@ async def test_dashboard_publisher_emits_camera_fields_when_service_provided(
     assert "camera_recording" in health
     assert "camera_recording_file" in health
     assert "camera_recording_started_at" in health
+    assert "active_camera_id" in health
+    assert "active_camera_label" in health
+    assert "active_camera_kind" in health
+    assert "still_capture_available" in health

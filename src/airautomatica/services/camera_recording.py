@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Callable, Iterator, List, Optional
 
 from airautomatica.ai.hailo_detection import RPCAM_ASSETS_PATH
 from airautomatica.camera.backends.csi import csi_camera_index_args
+from airautomatica.camera.backends.usb import usb_recording_argv
 from airautomatica.camera.selector import CameraSelector
 from airautomatica.config import (
     get_camera_recording_disarm_debounce_sec,
@@ -353,8 +354,10 @@ class CameraRecordingService:
             )
 
     def is_available(self) -> bool:
-        """True if rpicam-vid or libcamera-vid is present and service is usable."""
-        return get_camera_video_command() is not None
+        """True if rpicam-vid, libcamera-vid, or ffmpeg (for USB) is present."""
+        return (
+            get_camera_video_command() is not None or get_ffmpeg_command() is not None
+        )
 
     def start_recording(self) -> tuple[RecordingState, Optional[str]]:
         """Start recording. Returns (state, error_message). Error is None on success."""
@@ -372,196 +375,226 @@ class CameraRecordingService:
                     None,
                 )
             logger.info("Recording start requested")
-            cmd = get_camera_video_command()
-            if cmd is None:
-                self._last_error = "rpicam-vid or libcamera-vid not found"
-                return (self._idle_state(), "rpicam-vid or libcamera-vid not found")
+            descriptor = CameraSelector().resolve()
 
-            # 2. Prepare output target
             self._recordings_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
-            ext = "mp4" if cmd == "rpicam-vid" else "h264"
-            self._output_path = self._recordings_dir / f"{ts}_cam.{ext}"
-            logger.info(
-                "Recording output path (absolute): %s",
-                str(self._output_path.resolve()),
-            )
 
-            # 3. Release preview stream if active (camera can only be used by one process)
             release_camera_for_recording()
 
-            # 4. Build command(s) and 5. Launch direct or pipe path
-            descriptor = CameraSelector().resolve()
-            camera_index_args = csi_camera_index_args(descriptor)
-
-            ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
-            use_pipe = ffmpeg_cmd is not None and cmd == "rpicam-vid"
-            logger.info(
-                "AIRAUTOMATICA camera_recording: strategy=%s (cam=%s ffmpeg=%s)",
-                "pipe" if use_pipe else "direct",
-                cmd,
-                ffmpeg_cmd or "none",
+            usb_output = self._recordings_dir / f"{ts}_cam.mp4"
+            usb_argv = (
+                usb_recording_argv(descriptor, usb_output) if descriptor else None
             )
-            try:
-                if ffmpeg_cmd is not None:
-                    cam_args = (
-                        [cmd]
-                        + camera_index_args
-                        + [
-                            "-t",
-                            "0",
-                            "--nopreview",
-                        ]
-                    )
-                    cam_args.extend(_overlay_args_if_enabled(cmd))
-                    cam_args.extend(
-                        [
-                            "--codec",
-                            "libav",
-                            "--libav-format",
-                            "mpegts",
-                            "-o",
-                            "-",
-                        ]
-                    )
+            cmd: Optional[str] = None
+            if usb_argv:
+                self._output_path = usb_output
+                logger.info(
+                    "Recording output path (absolute): %s",
+                    str(self._output_path.resolve()),
+                )
+                try:
                     self._process = subprocess.Popen(
-                        cam_args,
-                        stdout=subprocess.PIPE,
+                        usb_argv,
                         stderr=subprocess.PIPE,
                     )
-                    use_telemetry_overlay = (
-                        get_recording_telemetry_overlay_enabled()
-                        and self._get_state is not None
-                    )
-                    if use_telemetry_overlay and self._get_state is not None:
-                        get_state_fn = self._get_state
-                        self._telemetry_writer = TelemetryWriter(get_state=get_state_fn)
-                        telemetry_path = self._telemetry_writer.start()
-                        drawtext_filter = (
-                            f"drawtext=textfile={telemetry_path}:reload=1:"
-                            "fontsize=20:fontcolor=white:borderw=2:bordercolor=black:"
-                            "x=10:y=10"
-                        )
-                        ffmpeg_args = [
-                            ffmpeg_cmd,
-                            "-hide_banner",
-                            "-loglevel",
-                            "error",
-                            "-y",
-                            "-f",
-                            "mpegts",
-                            "-i",
-                            "pipe:0",
-                            "-vf",
-                            drawtext_filter,
-                            "-map",
-                            "0:v",
-                            "-c:v",
-                            "libx264",
-                            "-preset",
-                            "veryfast",
-                            "-movflags",
-                            "frag_keyframe+empty_moov+default_base_moof",
-                            str(self._output_path),
-                            "-map",
-                            "0:v",
-                            "-c:v",
-                            "mjpeg",
-                            "-q:v",
-                            "5",
-                            "-f",
-                            "mjpeg",
-                            "pipe:1",
-                        ]
-                    else:
-                        ffmpeg_args = [
-                            ffmpeg_cmd,
-                            "-hide_banner",
-                            "-loglevel",
-                            "error",
-                            "-y",
-                            "-f",
-                            "mpegts",
-                            "-i",
-                            "pipe:0",
-                            "-c",
-                            "copy",
-                            "-movflags",
-                            "frag_keyframe+empty_moov+default_base_moof",
-                            str(self._output_path),
-                        ]
-                    muxer_stdout = (
-                        subprocess.PIPE
-                        if use_telemetry_overlay and self._get_state is not None
-                        else subprocess.DEVNULL
-                    )
-                    self._muxer_process = subprocess.Popen(
-                        ffmpeg_args,
-                        stdin=self._process.stdout,
-                        stdout=muxer_stdout,
-                        stderr=subprocess.PIPE,
-                    )
-                    if self._process.stdout:
-                        self._process.stdout.close()
-                    if (
-                        muxer_stdout == subprocess.PIPE
-                        and self._muxer_process.stdout is not None
-                    ):
-                        self._recording_stream_queue = queue.Queue(
-                            maxsize=_RECORDING_STREAM_QUEUE_MAX
-                        )
-                        self._recording_stream_thread = threading.Thread(
-                            target=self._drain_recording_stream,
-                            daemon=True,
-                        )
-                        self._recording_stream_thread.start()
-                    logger.info(
-                        "Recording command launched pid=%s: %s",
-                        self._process.pid,
-                        " ".join(cam_args),
-                    )
-                    logger.info(
-                        "Recording muxer launched pid=%s: %s",
-                        self._muxer_process.pid,
-                        " ".join(ffmpeg_args),
-                    )
-                else:
-                    args = [cmd] + camera_index_args + ["-t", "0"]
-                    args.extend(_overlay_args_if_enabled(cmd))
-                    args.extend(["-o", str(self._output_path)])
-                    self._process = subprocess.Popen(args, stderr=subprocess.PIPE)
                     self._muxer_process = None
                     logger.info(
-                        "Recording command launched pid=%s: %s",
+                        "Recording command launched pid=%s (USB): %s",
                         self._process.pid,
-                        " ".join(args),
+                        " ".join(usb_argv),
                     )
-                    if cmd == "rpicam-vid":
-                        logger.warning(
-                            "ffmpeg not found; MP4 output may be corrupt when stopping by signal"
+                except Exception as e:
+                    self._last_error = str(e)
+                    logger.warning("USB recording start failed: %s", e)
+                    self._process = None
+                    self._output_path = None
+                    return (self._idle_state(), str(e))
+                cmd = "usb"
+            else:
+                cmd = get_camera_video_command()
+                if cmd is None:
+                    self._last_error = "rpicam-vid or libcamera-vid not found"
+                    return (
+                        self._idle_state(),
+                        "rpicam-vid or libcamera-vid not found",
+                    )
+                ext = "mp4" if cmd == "rpicam-vid" else "h264"
+                self._output_path = self._recordings_dir / f"{ts}_cam.{ext}"
+                logger.info(
+                    "Recording output path (absolute): %s",
+                    str(self._output_path.resolve()),
+                )
+                camera_index_args = csi_camera_index_args(descriptor)
+                ffmpeg_cmd = get_ffmpeg_command() if cmd == "rpicam-vid" else None
+                use_pipe = ffmpeg_cmd is not None and cmd == "rpicam-vid"
+                logger.info(
+                    "AIRAUTOMATICA camera_recording: strategy=%s (cam=%s ffmpeg=%s)",
+                    "pipe" if use_pipe else "direct",
+                    cmd,
+                    ffmpeg_cmd or "none",
+                )
+                try:
+                    if ffmpeg_cmd is not None:
+                        cam_args = (
+                            [cmd]
+                            + camera_index_args
+                            + [
+                                "-t",
+                                "0",
+                                "--nopreview",
+                            ]
                         )
-            except Exception as e:
-                # 7. Cleanup failure (Popen raised)
-                self._last_error = str(e)
-                logger.warning("Recording start failed: %s", e)
-                self._stop_telemetry_writer()
-                self._stop_recording_stream()
-                if self._process is not None:
-                    try:
-                        self._process.kill()
-                        self._process.wait()
-                    except Exception:
-                        pass
-                if self._muxer_process is not None:
-                    try:
-                        self._muxer_process.kill()
-                        self._muxer_process.wait()
-                    except Exception:
-                        pass
-                self._process = None
-                self._muxer_process = None
-                self._output_path = None
-                return (self._idle_state(), str(e))
+                        cam_args.extend(_overlay_args_if_enabled(cmd))
+                        cam_args.extend(
+                            [
+                                "--codec",
+                                "libav",
+                                "--libav-format",
+                                "mpegts",
+                                "-o",
+                                "-",
+                            ]
+                        )
+                        self._process = subprocess.Popen(
+                            cam_args,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                        )
+                        use_telemetry_overlay = (
+                            get_recording_telemetry_overlay_enabled()
+                            and self._get_state is not None
+                        )
+                        if use_telemetry_overlay and self._get_state is not None:
+                            get_state_fn = self._get_state
+                            self._telemetry_writer = TelemetryWriter(
+                                get_state=get_state_fn
+                            )
+                            telemetry_path = self._telemetry_writer.start()
+                            drawtext_filter = (
+                                f"drawtext=textfile={telemetry_path}:reload=1:"
+                                "fontsize=20:fontcolor=white:borderw=2:bordercolor=black:"
+                                "x=10:y=10"
+                            )
+                            ffmpeg_args = [
+                                ffmpeg_cmd,
+                                "-hide_banner",
+                                "-loglevel",
+                                "error",
+                                "-y",
+                                "-f",
+                                "mpegts",
+                                "-i",
+                                "pipe:0",
+                                "-vf",
+                                drawtext_filter,
+                                "-map",
+                                "0:v",
+                                "-c:v",
+                                "libx264",
+                                "-preset",
+                                "veryfast",
+                                "-movflags",
+                                "frag_keyframe+empty_moov+default_base_moof",
+                                str(self._output_path),
+                                "-map",
+                                "0:v",
+                                "-c:v",
+                                "mjpeg",
+                                "-q:v",
+                                "5",
+                                "-f",
+                                "mjpeg",
+                                "pipe:1",
+                            ]
+                        else:
+                            ffmpeg_args = [
+                                ffmpeg_cmd,
+                                "-hide_banner",
+                                "-loglevel",
+                                "error",
+                                "-y",
+                                "-f",
+                                "mpegts",
+                                "-i",
+                                "pipe:0",
+                                "-c",
+                                "copy",
+                                "-movflags",
+                                "frag_keyframe+empty_moov+default_base_moof",
+                                str(self._output_path),
+                            ]
+                        muxer_stdout = (
+                            subprocess.PIPE
+                            if use_telemetry_overlay and self._get_state is not None
+                            else subprocess.DEVNULL
+                        )
+                        self._muxer_process = subprocess.Popen(
+                            ffmpeg_args,
+                            stdin=self._process.stdout,
+                            stdout=muxer_stdout,
+                            stderr=subprocess.PIPE,
+                        )
+                        if self._process.stdout:
+                            self._process.stdout.close()
+                        if (
+                            muxer_stdout == subprocess.PIPE
+                            and self._muxer_process.stdout is not None
+                        ):
+                            self._recording_stream_queue = queue.Queue(
+                                maxsize=_RECORDING_STREAM_QUEUE_MAX
+                            )
+                            self._recording_stream_thread = threading.Thread(
+                                target=self._drain_recording_stream,
+                                daemon=True,
+                            )
+                            self._recording_stream_thread.start()
+                        logger.info(
+                            "Recording command launched pid=%s: %s",
+                            self._process.pid,
+                            " ".join(cam_args),
+                        )
+                        logger.info(
+                            "Recording muxer launched pid=%s: %s",
+                            self._muxer_process.pid,
+                            " ".join(ffmpeg_args),
+                        )
+                    else:
+                        args = [cmd] + camera_index_args + ["-t", "0"]
+                        args.extend(_overlay_args_if_enabled(cmd))
+                        args.extend(["-o", str(self._output_path)])
+                        self._process = subprocess.Popen(args, stderr=subprocess.PIPE)
+                        self._muxer_process = None
+                        logger.info(
+                            "Recording command launched pid=%s: %s",
+                            self._process.pid,
+                            " ".join(args),
+                        )
+                        if cmd == "rpicam-vid":
+                            logger.warning(
+                                "ffmpeg not found; MP4 output may be corrupt when stopping by signal"
+                            )
+                except Exception as e:
+                    self._last_error = str(e)
+                    logger.warning("Recording start failed: %s", e)
+                    self._stop_telemetry_writer()
+                    self._stop_recording_stream()
+                    if self._process is not None:
+                        try:
+                            self._process.kill()
+                            self._process.wait()
+                        except Exception:
+                            pass
+                    if self._muxer_process is not None:
+                        try:
+                            self._muxer_process.kill()
+                            self._muxer_process.wait()
+                        except Exception:
+                            pass
+                    self._process = None
+                    self._muxer_process = None
+                    self._output_path = None
+                    return (self._idle_state(), str(e))
 
             # 5. Verify child liveness
             time.sleep(_LIVENESS_POLL_SEC)

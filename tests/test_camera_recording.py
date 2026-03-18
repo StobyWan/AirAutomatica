@@ -213,9 +213,13 @@ def test_is_available_libcamera_vid(
 def test_is_available_neither(
     monkeypatch: pytest.MonkeyPatch, recordings_dir: str
 ) -> None:
-    """is_available False when neither command exists."""
+    """is_available False when neither rpicam-vid/libcamera-vid nor ffmpeg exists."""
     monkeypatch.setattr(
         "airautomatica.services.camera_recording.get_camera_video_command",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "airautomatica.services.camera_recording.get_ffmpeg_command",
         lambda: None,
     )
     svc = CameraRecordingService(recordings_dir=recordings_dir)
@@ -375,6 +379,43 @@ def test_recording_includes_csi1_when_selector_returns_csi1(
     assert "-c" in cam_args
     idx = cam_args.index("-c")
     assert cam_args[idx + 1] == "1"
+
+
+def test_recording_uses_usb_when_selector_returns_usb(
+    monkeypatch: pytest.MonkeyPatch, recordings_dir: str
+) -> None:
+    """When CameraSelector returns USB descriptor, use ffmpeg v4l2 for recording."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    desc = CameraDescriptor(
+        id="usb:/dev/video0",
+        source_type="usb",
+        display_name="USB Webcam",
+        path="/dev/video0",
+    )
+    with patch(
+        "airautomatica.services.camera_recording.CameraSelector"
+    ) as mock_selector_cls:
+        mock_selector = MagicMock()
+        mock_selector.resolve.return_value = desc
+        mock_selector_cls.return_value = mock_selector
+        with patch(
+            "airautomatica.services.camera_recording.subprocess.Popen",
+            return_value=mock_proc,
+        ) as mock_popen:
+            with patch(
+                "airautomatica.camera.backends.usb.shutil.which",
+                return_value="/usr/bin/ffmpeg",
+            ):
+                with patch("time.sleep"):
+                    svc = CameraRecordingService(recordings_dir=recordings_dir)
+                    state, err = svc.start_recording()
+    assert err is None
+    assert state.recording is True
+    args = mock_popen.call_args[0][0]
+    assert args[0].endswith("ffmpeg")
+    assert "v4l2" in args
+    assert "/dev/video0" in args
 
 
 def test_start_recording_logs_command(

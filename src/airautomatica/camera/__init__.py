@@ -1,5 +1,6 @@
 """Camera module. Frame acquisition for future AI HAT vision integration."""
 
+from airautomatica.camera.capture import capture_still
 from airautomatica.camera.descriptor import (
     CameraCapabilities,
     CameraDescriptor,
@@ -16,4 +17,5 @@ __all__ = [
     "CameraRegistry",
     "CameraSelector",
     "SourceType",
+    "capture_still",
 ]

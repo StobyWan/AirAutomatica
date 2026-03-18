@@ -2404,6 +2404,29 @@ def test_delete_recording_rejects_path_traversal(
     assert r.status_code == 400
 
 
+def test_get_camera_status(
+    store: StateStore,
+    tmp_path: Path,
+) -> None:
+    """GET /camera/status returns cameras, configured/active source, capabilities."""
+    camera_svc = CameraRecordingService(recordings_dir=str(tmp_path / "recordings"))
+    client = TestClient(create_app(store, camera_recording_service=camera_svc))
+    r = client.get("/camera/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert "cameras" in data
+    assert isinstance(data["cameras"], list)
+    assert "configured_source_id" in data
+    assert "configured_auto_fallback" in data
+    assert "active_camera_id" in data
+    assert "active_camera_label" in data
+    assert "active_camera_kind" in data
+    assert "preview_available" in data
+    assert "recording_available" in data
+    assert "still_capture_available" in data
+    assert "recording_active" in data
+
+
 def test_post_camera_ready(client: TestClient) -> None:
     """POST /camera/ready sets and returns camera ready state."""
     r = client.post("/camera/ready", json={"ready": True})

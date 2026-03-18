@@ -28,6 +28,23 @@
     </div>
 
     <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+      <h2 class="text-base font-semibold text-slate-200 mb-3">One-shot detection</h2>
+      <p class="text-xs text-slate-500 mb-2">Capture one frame from the active camera and run Hailo inference.</p>
+      <div v-if="activeCameraLabel" class="text-xs text-slate-500 mb-2">Active camera: {{ activeCameraLabel }}</div>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="oneShotDisabled"
+        @click="runOneShotDetection"
+      >
+        {{ oneShotLoading ? 'Running…' : 'Run one-shot detection' }}
+      </button>
+      <div v-if="oneShotResult" class="mt-2 text-sm" :class="oneShotError ? 'text-amber-400' : 'text-slate-300'">
+        {{ oneShotResult }}
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
       <h2 class="text-base font-semibold text-slate-200 mb-3">AI Analysis</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -66,12 +83,57 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useDetectionsStore } from '@/stores/detections'
-import { getTelemetrySummary, getEventClassification } from '@/api/ai'
+import { useHealthStore } from '@/stores/health'
+import { aiDetect, getTelemetrySummary, getEventClassification } from '@/api/ai'
 import { fmtSourceBackend } from '@/utils/formatters'
 
 const detectionsStore = useDetectionsStore()
+const healthStore = useHealthStore()
+
+const oneShotLoading = ref(false)
+const oneShotResult = ref('')
+
+const cameraRecording = computed(
+  () => healthStore.lastHealth?.camera_recording === true
+)
+const stillCaptureAvailable = computed(
+  () => healthStore.lastHealth?.still_capture_available === true
+)
+const activeCameraLabel = computed(
+  () => healthStore.lastHealth?.active_camera_label ?? null
+)
+const oneShotDisabled = computed(
+  () =>
+    oneShotLoading.value ||
+    cameraRecording.value ||
+    !stillCaptureAvailable.value
+)
+const oneShotError = computed(() => {
+  const r = oneShotResult.value
+  return r && (r.includes('error') || r.includes('failed') || r.includes('Error'))
+})
+
+async function runOneShotDetection() {
+  oneShotLoading.value = true
+  oneShotResult.value = ''
+  try {
+    const res = await aiDetect()
+    if (res.errors?.length) {
+      oneShotResult.value = res.errors.join('; ')
+    } else if (res.detections?.length) {
+      oneShotResult.value = `Detected: ${res.detections.map((d) => d.label).join(', ')}`
+    } else {
+      oneShotResult.value = 'No detections'
+    }
+    detectionsStore.fetchRecentDetections()
+  } catch (e) {
+    oneShotResult.value = e instanceof Error ? e.message : 'Detection failed'
+  } finally {
+    oneShotLoading.value = false
+  }
+}
 
 const telemetrySummaryLoading = ref(false)
 const telemetrySummaryContent = ref('Click Summarize to get AI interpretation')

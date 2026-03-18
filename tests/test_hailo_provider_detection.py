@@ -136,7 +136,7 @@ def test_run_one_shot_detection_uses_detection_pipeline_with_one_shot_mode() -> 
         errors=[],
     )
     with patch(
-        "airautomatica.ai.hailo_detection_impl._capture_frame",
+        "airautomatica.ai.hailo_detection_impl.capture_still",
         return_value=(fake_frame, None),
     ):
         with patch(
@@ -148,3 +148,15 @@ def test_run_one_shot_detection_uses_detection_pipeline_with_one_shot_mode() -> 
     args = mock_pipeline.call_args[0]
     assert args[0] == fake_frame
     assert args[1] == DetectionMode.ONE_SHOT
+
+
+def test_run_one_shot_detection_returns_error_when_capture_fails() -> None:
+    """run_one_shot_detection returns error result when capture_still fails."""
+    with patch(
+        "airautomatica.ai.hailo_detection_impl.capture_still",
+        return_value=(None, "No camera available"),
+    ):
+        result = run_one_shot_detection()
+    assert result.state == "error"
+    assert result.detections == []
+    assert "No camera" in result.errors[0]

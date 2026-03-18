@@ -1,4 +1,4 @@
-"""Camera routes: ready, recording start/stop, preview stream."""
+"""Camera routes: ready, recording start/stop, preview stream, status."""
 
 import logging
 from typing import Optional
@@ -6,6 +6,9 @@ from typing import Optional
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from airautomatica.camera.registry import CameraRegistry
+from airautomatica.camera.selector import CameraSelector
+from airautomatica.camera.status import get_camera_status_summary
 from airautomatica.config import get_camera_recording_mode
 from airautomatica.services.camera_preview import stream_preview_frames
 from airautomatica.services.camera_ready_state import get as get_camera_ready
@@ -20,6 +23,19 @@ def create_camera_router(
 ) -> APIRouter:
     """Create camera router with injected dependencies."""
     router = APIRouter(prefix="/camera", tags=["camera"])
+    registry = CameraRegistry()
+    selector = CameraSelector(registry=registry)
+
+    @router.get("/status")
+    def get_camera_status() -> dict:
+        """Full camera status: discovered cameras, configured/active source, capabilities."""
+        status = get_camera_status_summary(
+            registry,
+            selector,
+            camera_recording_service,
+            refresh_registry=True,
+        )
+        return status
 
     @router.post("/ready")
     def post_camera_ready(body: dict = Body(...)) -> dict:

@@ -11,9 +11,6 @@ Verified imports (hailo-apps):
 """
 
 import logging
-import shutil
-import subprocess
-import tempfile
 import time
 from enum import Enum
 from pathlib import Path
@@ -24,13 +21,13 @@ from airautomatica.ai.detection_models import (
     DetectionResult,
     DetectionState,
 )
+from airautomatica.camera.capture import capture_still
 from airautomatica.config import get_ai_hat_detection_threshold
 
 logger = logging.getLogger(__name__)
 
 # Phase 1: single known model path (hailo-models package on Pi)
 HEF_PATH_H8L = Path("/usr/share/hailo-models/yolov6n_h8l.hef")
-CAPTURE_TIMEOUT_SEC = 20
 INFERENCE_TIMEOUT_MS = 15000
 
 
@@ -49,47 +46,6 @@ def _hailo_apps_available() -> bool:
         return True
     except ImportError:
         return False
-
-
-def _capture_frame() -> tuple[bytes | None, str | None]:
-    """Capture one frame via rpicam-still. Returns (jpeg_bytes, error)."""
-    rpicam = shutil.which("rpicam-still")
-    if not rpicam:
-        return None, "rpicam-still not found"
-
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
-            path = Path(f.name)
-        result = subprocess.run(
-            [
-                rpicam,
-                "-t",
-                "1",
-                "--immediate",
-                "-n",
-                "-o",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=CAPTURE_TIMEOUT_SEC,
-        )
-        if result.returncode != 0:
-            err = result.stderr or result.stdout or "unknown"
-            path.unlink(missing_ok=True)
-            return None, f"rpicam-still failed: {err}"
-        if not path.exists():
-            return None, "rpicam-still did not produce output"
-        data = path.read_bytes()
-        path.unlink(missing_ok=True)
-        return data, None
-    except subprocess.TimeoutExpired:
-        path.unlink(missing_ok=True)
-        return None, "camera capture timed out"
-    except Exception as e:
-        if "path" in dir() and path.exists():
-            path.unlink(missing_ok=True)
-        return None, f"camera capture failed: {e}"
 
 
 def run_inference_on_image_bytes(
@@ -359,8 +315,8 @@ def _run_inference_on_image(
 
 
 def run_one_shot_detection() -> DetectionResult:
-    """Capture one frame, run inference, return structured result. Never raises."""
-    frame_data, capture_err = _capture_frame()
+    """Capture one frame from selected camera, run inference, return structured result. Never raises."""
+    frame_data, capture_err = capture_still()
     if capture_err or frame_data is None:
         return DetectionResult(
             backend="hailo",

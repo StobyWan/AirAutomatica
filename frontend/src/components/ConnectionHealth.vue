@@ -70,23 +70,23 @@
     <div class="mt-3 pt-3 border-t border-slate-600/50">
       <h3 class="text-xs font-semibold text-slate-400 mb-1.5">AI HAT (optional)</h3>
       <p class="text-[10px] text-slate-500 mb-2">Companion-side perception. One-shot detection. Not flight-critical.</p>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm mb-2">
-        <span class="text-slate-500">—</span>
+      <div v-if="activeCameraLabel" class="text-xs text-slate-500 mb-2">
+        Active camera: {{ activeCameraLabel }}
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <button
           v-if="!cameraRecording"
           type="button"
           class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-slate-200 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="aiDetectLoading"
-          title="Capture one frame and run Hailo inference"
+          :disabled="aiDetectDisabled"
+          :title="aiDetectDisabled ? 'Camera busy or still capture unavailable' : 'Capture one frame and run Hailo inference'"
           @click="runAiDetect"
         >
           Run one-shot detection
         </button>
         <span v-if="aiDetectLoading" class="text-xs text-slate-400">Running…</span>
       </div>
-      <div v-if="aiDetectResult" class="mt-2 text-xs text-slate-400">
+      <div v-if="aiDetectResult" class="mt-2 text-xs" :class="aiDetectError ? 'text-amber-400' : 'text-slate-400'">
         {{ aiDetectResult }}
       </div>
       <div v-if="lastDetection" class="mt-1.5 text-xs text-slate-500">
@@ -114,6 +114,23 @@ const sessionId = computed(() => connectionStore.liveSessionId)
 const cameraRecording = computed(
   () => healthStore.lastHealth?.camera_recording === true
 )
+
+const stillCaptureAvailable = computed(
+  () => healthStore.lastHealth?.still_capture_available === true
+)
+
+const activeCameraLabel = computed(
+  () => healthStore.lastHealth?.active_camera_label ?? null
+)
+
+const aiDetectDisabled = computed(
+  () => aiDetectLoading.value || cameraRecording.value || !stillCaptureAvailable.value
+)
+
+const aiDetectError = computed(() => {
+  const r = aiDetectResult.value
+  return r && (r.includes('error') || r.includes('failed') || r.includes('Error'))
+})
 
 const capabilities = computed(() => {
   const caps = healthStore.lastHealth?.capabilities as Record<string, unknown> | undefined
@@ -181,6 +198,7 @@ async function runAiDetect() {
     }
   } catch (e) {
     aiDetectResult.value = e instanceof Error ? e.message : 'Detection failed'
+    lastDetection.value = ''
   } finally {
     aiDetectLoading.value = false
   }
