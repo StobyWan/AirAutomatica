@@ -4,29 +4,35 @@ import { defineConfig } from 'vite'
 
 const basePath = process.env.VITE_BASE_PATH || ''
 const base = basePath ? basePath.replace(/\/$/, '') + '/' : '/'
+const apiPort = process.env.VITE_API_PORT || process.env.API_PORT || '8000'
+const apiTarget = `http://localhost:${apiPort}`
 
 export default defineConfig({
   plugins: [vue()],
   base,
+  define: {
+    'import.meta.env.VITE_API_PORT': JSON.stringify(apiPort),
+  },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: {
     port: 5173,
     proxy: {
-      '/connection': { target: 'http://localhost:8000', changeOrigin: true },
-      '/session': { target: 'http://localhost:8000', changeOrigin: true },
-      '/sessions': { target: 'http://localhost:8000', changeOrigin: true },
-      '/camera': { target: 'http://localhost:8000', changeOrigin: true },
-      '/recordings': { target: 'http://localhost:8000', changeOrigin: true },
-      '/recent-events': { target: 'http://localhost:8000', changeOrigin: true },
-      '/settings': { target: 'http://localhost:8000', changeOrigin: true },
-      '/ai': { target: 'http://localhost:8000', changeOrigin: true },
-      '/api': { target: 'http://localhost:8000', changeOrigin: true },
-      '/live': { target: 'http://localhost:8000', changeOrigin: true },
-      '/health': { target: 'http://localhost:8000', changeOrigin: true },
-      '/static': { target: 'http://localhost:8000', changeOrigin: true },
-      '/socket.io': { target: 'http://localhost:8000', ws: true },
+      '/connection': { target: apiTarget, changeOrigin: true },
+      '/session': { target: apiTarget, changeOrigin: true },
+      '/sessions': { target: apiTarget, changeOrigin: true },
+      '/camera': { target: apiTarget, changeOrigin: true },
+      '/recordings': { target: apiTarget, changeOrigin: true },
+      '/recent-events': { target: apiTarget, changeOrigin: true },
+      '/settings': { target: apiTarget, changeOrigin: true },
+      '/ai': { target: apiTarget, changeOrigin: true },
+      '/api': { target: apiTarget, changeOrigin: true },
+      '/live': { target: apiTarget, changeOrigin: true },
+      '/vehicle': { target: apiTarget, changeOrigin: true },
+      '/health': { target: apiTarget, changeOrigin: true },
+      '/static': { target: apiTarget, changeOrigin: true },
+      '/socket.io': { target: apiTarget, ws: true },
     },
   },
 })
