@@ -2440,6 +2440,95 @@ def test_post_camera_ready(client: TestClient) -> None:
     assert r3.json()["ready"] is False
 
 
+def test_vehicle_control_rejected_when_drone_mode(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /vehicle/control returns error when VEHICLE_MODE=drone."""
+    monkeypatch.setenv("VEHICLE_MODE", "drone")
+    r = client.post(
+        "/vehicle/control",
+        json={
+            "timestamp": "2025-03-19T12:00:00.000Z",
+            "seq": 1,
+            "steering": 0.5,
+            "throttle": 0.3,
+            "source": "api",
+            "mode": "rover",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("ok") is False
+    assert "rover or bench" in data.get("error", "").lower()
+
+
+def test_vehicle_control_accepted_when_rover_mode(
+    store: StateStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /vehicle/control accepts and stores when VEHICLE_MODE=rover."""
+    monkeypatch.setenv("VEHICLE_MODE", "rover")
+    client = TestClient(create_app(store))
+    r = client.post(
+        "/vehicle/control",
+        json={
+            "timestamp": "2025-03-19T12:00:00.000Z",
+            "seq": 1,
+            "steering": 0.5,
+            "throttle": 0.3,
+            "source": "api",
+            "mode": "rover",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    r2 = client.get("/vehicle/status")
+    assert r2.status_code == 200
+    data = r2.json()
+    assert data["vehicle_mode"] == "rover"
+    assert data["last_control"] is not None
+    assert data["last_control"]["steering"] == 0.5
+    assert data["last_control"]["throttle"] == 0.3
+
+
+def test_vehicle_stop_accepted_when_bench_mode(
+    store: StateStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /vehicle/stop clears control when VEHICLE_MODE=bench."""
+    monkeypatch.setenv("VEHICLE_MODE", "bench")
+    client = TestClient(create_app(store))
+    from airautomatica.vehicle.control_store import update_control
+
+    update_control(
+        {
+            "timestamp": "2025-03-19T12:00:00.000Z",
+            "seq": 1,
+            "steering": 0.5,
+            "throttle": 0.3,
+            "source": "api",
+            "mode": "bench",
+        }
+    )
+    r = client.post("/vehicle/stop")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    r2 = client.get("/vehicle/status")
+    assert r2.json()["last_control"] is None
+
+
+def test_vehicle_status_returns_mode_and_control(
+    store: StateStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /vehicle/status returns vehicle_mode and last_control."""
+    monkeypatch.setenv("VEHICLE_MODE", "rover")
+    client = TestClient(create_app(store))
+    r = client.get("/vehicle/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert "vehicle_mode" in data
+    assert data["vehicle_mode"] == "rover"
+    assert "last_control" in data
+
+
 def test_post_live_home_503_when_no_store(store: StateStore) -> None:
     """POST /live/home returns 503 when app_home_store not provided."""
     client = TestClient(create_app(store))

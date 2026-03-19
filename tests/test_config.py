@@ -11,8 +11,37 @@ from airautomatica.config import (
     get_ollama_required,
     get_recording_ai_overlay_enabled,
     get_recording_ai_persist_threshold,
+    get_vehicle_mode,
     validate_serial_config,
 )
+
+
+def test_get_vehicle_mode_default() -> None:
+    """Default is drone when VEHICLE_MODE not set."""
+    with pytest.MonkeyPatch.context() as m:
+        m.delenv("VEHICLE_MODE", raising=False)
+        assert get_vehicle_mode() == "drone"
+
+
+def test_get_vehicle_mode_rover() -> None:
+    """VEHICLE_MODE=rover returns rover."""
+    with pytest.MonkeyPatch.context() as m:
+        m.setenv("VEHICLE_MODE", "rover")
+        assert get_vehicle_mode() == "rover"
+
+
+def test_get_vehicle_mode_bench() -> None:
+    """VEHICLE_MODE=bench returns bench."""
+    with pytest.MonkeyPatch.context() as m:
+        m.setenv("VEHICLE_MODE", "bench")
+        assert get_vehicle_mode() == "bench"
+
+
+def test_get_vehicle_mode_invalid_fallback() -> None:
+    """Invalid value falls back to drone."""
+    with pytest.MonkeyPatch.context() as m:
+        m.setenv("VEHICLE_MODE", "invalid")
+        assert get_vehicle_mode() == "drone"
 
 
 def test_get_ollama_num_thread_default() -> None:

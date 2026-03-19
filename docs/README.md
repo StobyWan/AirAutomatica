@@ -11,6 +11,7 @@ Index of documentation files.
 | [ai_hat_scope.md](ai_hat_scope.md) | AI HAT subsystem boundaries, glossary, roadmap |
 | [detection_usability_plan.md](detection_usability_plan.md) | Detection usability implementation plan |
 | [detection_config.md](detection_config.md) | Detection config matrix, thresholds, dependency chain |
+| [hybrid_vehicle_platform_plan.md](hybrid_vehicle_platform_plan.md) | Hybrid drone/rover/bench platform, mode-aware UI, vehicle control |
 
 ## Core Docs
 

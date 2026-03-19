@@ -7,6 +7,7 @@ import type { SessionSummary } from './api'
 
 export interface HealthUpdatePayload {
   session_id?: number | null
+  vehicle_mode?: 'drone' | 'rover' | 'bench'
   camera_recording?: boolean
   camera_ready?: boolean
   camera_recording_started_at?: string | null

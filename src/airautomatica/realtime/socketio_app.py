@@ -25,6 +25,14 @@ async def disconnect(sid: str) -> None:
     logger.debug("Dashboard client disconnected: sid=%s", sid)
 
 
+@sio.event
+async def vehicle_control(sid: str, data: dict) -> None:
+    """Receive normalized rover control from browser. Validates and stores for bridge."""
+    from airautomatica.vehicle.control_store import update_control
+
+    update_control(data)
+
+
 def wrap_app(app: FastAPI) -> socketio.ASGIApp:
     """Wrap FastAPI app with Socket.IO. Returns combined ASGI app."""
     return socketio.ASGIApp(sio, app)

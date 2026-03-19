@@ -53,6 +53,7 @@ SETTING_APPLY_MODES: dict[str, ApplyMode] = {
     "SESSION_AUTO_START_ON_ARM": "live",
     "CAMERA_SOURCE_ID": "restart",
     "CAMERA_SOURCE_AUTO_FALLBACK": "restart",
+    "VEHICLE_MODE": "restart",
 }
 
 # Keys that trigger AI subsystem hot-reload when _reload_ai_fn is available.
@@ -97,6 +98,7 @@ CANONICAL_SETTINGS_KEYS = [
     "SESSION_AUTO_START_ON_ARM",
     "CAMERA_SOURCE_ID",
     "CAMERA_SOURCE_AUTO_FALLBACK",
+    "VEHICLE_MODE",
 ]
 
 # Legacy keys accepted when loading from file or in POST body; never persisted.
@@ -230,6 +232,7 @@ def get_raw_settings() -> dict:
         "SESSION_AUTO_START_ON_ARM": "0",
         "CAMERA_SOURCE_ID": "",
         "CAMERA_SOURCE_AUTO_FALLBACK": "1",
+        "VEHICLE_MODE": "drone",
     }
     file_data: dict = {}
     if _SETTINGS_FILE.exists():

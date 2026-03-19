@@ -13,6 +13,26 @@
     </div>
 
     <form v-else class="space-y-6" @submit.prevent="save">
+      <!-- Vehicle Mode -->
+      <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+        <h2 class="text-base font-semibold text-slate-200 mb-3">Vehicle Mode</h2>
+        <div class="space-y-3">
+          <div>
+            <label for="VEHICLE_MODE" class="block text-sm text-slate-300 mb-1">Mode</label>
+            <select
+              id="VEHICLE_MODE"
+              v-model="form.VEHICLE_MODE"
+              class="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-slate-200 text-sm"
+            >
+              <option value="drone">drone</option>
+              <option value="rover">rover</option>
+              <option value="bench">bench</option>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">drone: MAVLink telemetry, flight path. rover: teleoperated ground vehicle. bench: safe testing without actuators. Restart required.</p>
+          </div>
+        </div>
+      </section>
+
       <!-- Telemetry -->
       <section class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
         <h2 class="text-base font-semibold text-slate-200 mb-3">Telemetry</h2>
@@ -351,6 +371,7 @@ const form = reactive<Record<string, string | boolean>>({
   SESSION_AUTO_START_ON_ARM: false,
   CAMERA_SOURCE_ID: '',
   CAMERA_SOURCE_AUTO_FALLBACK: true,
+  VEHICLE_MODE: 'drone',
 })
 
 function parseValue(key: string, raw: string | number | boolean | null): string | boolean {
