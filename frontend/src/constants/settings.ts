@@ -24,6 +24,7 @@ export const SETTINGS_KEYS = [
   'SESSION_AUTO_START_ON_ARM',
   'CAMERA_SOURCE_ID',
   'CAMERA_SOURCE_AUTO_FALLBACK',
+  'VEHICLE_MODE',
 ] as const
 
 export const CHECKBOX_KEYS = new Set([

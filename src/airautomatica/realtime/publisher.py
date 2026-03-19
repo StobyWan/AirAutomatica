@@ -15,6 +15,7 @@ from airautomatica.config import (
     get_camera_recording_mode,
     get_sqlite_db_path,
     get_telemetry_backend,
+    get_vehicle_mode,
 )
 from airautomatica.db.base import get_engine, get_last_init_error
 from airautomatica.models.state import AircraftState, nan_to_none
@@ -22,6 +23,7 @@ from airautomatica.services.camera_ready_state import get as get_camera_ready
 from airautomatica.services.mission_logic import get_perception_counts
 from airautomatica.system.observability import get_ai_observability_rates
 from airautomatica.system.thermal import get_thermal_state, read_temperature_c
+from airautomatica.vehicle.telemetry import get_rover_telemetry
 
 if TYPE_CHECKING:
     from airautomatica.services.app_home_store import AppHomeStore
@@ -49,6 +51,7 @@ def _build_health_payload(
         "status": "ok",
         "ai_mode": ai_mode,
         "telemetry_backend": telemetry_backend,
+        "vehicle_mode": get_vehicle_mode(),
         "session_id": session_id,
         "thermal": {
             "temp_c": read_temperature_c(),
@@ -237,6 +240,8 @@ class DashboardPublisher:
                         health["configured_source_id"] = status.get(
                             "configured_source_id", ""
                         )
+                if get_vehicle_mode() in ("rover", "bench"):
+                    health["rover_telemetry"] = get_rover_telemetry()
                 await self._sio.emit("health_update", health)
 
                 state_payload = _build_state_payload(state, self._app_home_store)

@@ -34,6 +34,7 @@ from airautomatica.api.routers import recordings as recordings_router_mod
 from airautomatica.api.routers import session as session_router_mod
 from airautomatica.api.routers import sessions as sessions_router_mod
 from airautomatica.api.routers import settings as settings_router_mod
+from airautomatica.api.routers import vehicle as vehicle_router_mod
 from airautomatica.config import (
     get_ai_duplicate_window_sec,
     get_ai_hat_enabled,
@@ -202,6 +203,7 @@ def create_app(
         )
     )
     app.include_router(camera_router_mod.create_camera_router(camera_recording_service))
+    app.include_router(vehicle_router_mod.router)
     app.include_router(
         recordings_router_mod.create_recordings_router(
             recordings_service,

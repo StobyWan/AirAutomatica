@@ -177,6 +177,17 @@ def get_local_llm_timeout() -> float:
         return 30.0
 
 
+def get_vehicle_mode() -> str:
+    """Vehicle mode: 'drone', 'rover', or 'bench'. Default: drone.
+    drone: MAVLink telemetry, flight path, read-only dashboard.
+    rover: Teleoperated ground vehicle with live video and bidirectional control.
+    bench: Safe testing without live actuators."""
+    raw = os.environ.get("VEHICLE_MODE", "drone").lower().strip()
+    if raw in ("drone", "rover", "bench"):
+        return raw
+    return "drone"
+
+
 def get_ollama_required() -> bool:
     """True if startup should fail when Ollama is not ready. Default: False (degraded mode).
     Env: AIRAUTOMATICA_OLLAMA_REQUIRED (wins) or OLLAMA_REQUIRED.

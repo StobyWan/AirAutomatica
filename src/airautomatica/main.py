@@ -57,6 +57,7 @@ from airautomatica.config import (
     get_session_auto_start_on_arm,
     get_sqlite_db_path,
     get_telemetry_backend,
+    get_vehicle_mode,
 )
 from airautomatica.db import init_db
 from airautomatica.logging_config import setup_logging
@@ -306,7 +307,7 @@ def _create_task_service(
 
 def _reload_ai_subsystem(
     holder: AiSubsystemHolder,
-    mission_logic: MissionLogic,
+    mission_logic: MissionLogic | None,
     scheduler: AiInferenceScheduler | None,
     provider_before: str,
 ) -> ReloadResult:
@@ -346,7 +347,8 @@ def _reload_ai_subsystem(
         new_ai = _create_ai_service(ollama_transport, scheduler)
         new_task = _create_task_service(ollama_transport, scheduler)
         holder.swap(new_ai, new_task)
-        mission_logic.set_ai_service(new_ai)
+        if mission_logic is not None:
+            mission_logic.set_ai_service(new_ai)
         logger.info("AI subsystem reloaded: provider=%s", provider_after)
         return ReloadResult(
             success=True,
@@ -402,14 +404,26 @@ def main() -> None:
 
     init_db(get_sqlite_db_path())
 
+    vehicle_mode = get_vehicle_mode()
+    logger.info("Vehicle mode: %s", vehicle_mode)
+
     persistence = PersistenceService()
     connection_store = ConnectionStateStore()
     ai_detection_store = AiDetectionStore()
     session_ref: list[int | None] = [None]
-    source = _create_telemetry_source(store, persistence, session_ref)
-    sampler = TelemetrySampler(persistence, session_ref, interval_sec=1.0)
-    path_recorder = PathRecorder(persistence, session_ref, min_distance_m=5.0)
-    lifecycle_logger = TelemetryLifecycleLogger(persistence, session_ref)
+
+    source: TelemetrySource | None = None
+    sampler: TelemetrySampler | None = None
+    path_recorder: PathRecorder | None = None
+    lifecycle_logger: TelemetryLifecycleLogger | None = None
+    recording_auto_controller: RecordingAutoController | None = None
+    session_auto_controller: SessionAutoController | None = None
+
+    if vehicle_mode == "drone":
+        source = _create_telemetry_source(store, persistence, session_ref)
+        sampler = TelemetrySampler(persistence, session_ref, interval_sec=1.0)
+        path_recorder = PathRecorder(persistence, session_ref, min_distance_m=5.0)
+        lifecycle_logger = TelemetryLifecycleLogger(persistence, session_ref)
 
     camera_recording_service = CameraRecordingService(
         session_ref=session_ref,
@@ -423,24 +437,26 @@ def main() -> None:
         os.environ.get("HOME", "<unset>"),
         "set" if os.environ.get("AIRAUTOMATICA_RECORDINGS_DIR") else "unset",
     )
-    recording_auto_controller = RecordingAutoController(
-        camera_recording_service,
-        get_mode_fn=get_camera_recording_mode,
-        session_ref=session_ref,
-    )
+    if vehicle_mode == "drone":
+        recording_auto_controller = RecordingAutoController(
+            camera_recording_service,
+            get_mode_fn=get_camera_recording_mode,
+            session_ref=session_ref,
+        )
     app_home_store = AppHomeStore()
-    session_auto_controller = SessionAutoController(
-        persistence,
-        session_ref,
-        connection_store,
-        get_enabled_fn=get_session_auto_start_on_arm,
-        app_home_store=app_home_store,
-    )
+    if vehicle_mode == "drone":
+        session_auto_controller = SessionAutoController(
+            persistence,
+            session_ref,
+            connection_store,
+            get_enabled_fn=get_session_auto_start_on_arm,
+            app_home_store=app_home_store,
+        )
 
     preprocessor: TelemetryPreprocessor | None = None
     event_recorder: EventPersistenceRecorder | None = None
     phase_recorder: PhasePersistenceRecorder | None = None
-    if get_preprocessing_enabled():
+    if vehicle_mode == "drone" and get_preprocessing_enabled():
         preprocessor = TelemetryPreprocessor()
         event_recorder = EventPersistenceRecorder(
             persistence,
@@ -470,14 +486,16 @@ def main() -> None:
     ai_holder = AiSubsystemHolder(ai_service, task_service)
     ai_detection_store = AiDetectionStore()
 
-    mission_logic = MissionLogic(
-        store,
-        ai_service=ai_service,
-        persistence=persistence,
-        session_ref=session_ref,
-        min_confidence=get_ai_min_confidence(),
-        duplicate_window_sec=get_ai_duplicate_window_sec(),
-    )
+    mission_logic: MissionLogic | None = None
+    if vehicle_mode == "drone":
+        mission_logic = MissionLogic(
+            store,
+            ai_service=ai_service,
+            persistence=persistence,
+            session_ref=session_ref,
+            min_confidence=get_ai_min_confidence(),
+            duplicate_window_sec=get_ai_duplicate_window_sec(),
+        )
 
     def _reload_fn(provider_before: str) -> ReloadResult:
         return _reload_ai_subsystem(
@@ -487,33 +505,40 @@ def main() -> None:
     def _create_telemetry_source_fn() -> TelemetrySource:
         return _create_telemetry_source(store, persistence, session_ref)
 
-    def _start_telemetry_task(src: TelemetrySource) -> asyncio.Task[None]:
-        return asyncio.create_task(
-            _run_with_restart(
-                _telemetry_loop,
-                store,
-                src,
-                sampler,
-                path_recorder,
-                lifecycle_logger,
-                recording_auto_controller,
-                session_auto_controller,
-                preprocessor,
-                event_recorder,
-                phase_recorder,
-                app_home_store,
-                name="telemetry",
+    telemetry_controller: TelemetryController | None = None
+    if vehicle_mode == "drone" and source is not None:
+
+        def _start_telemetry_task(src: TelemetrySource) -> asyncio.Task[None]:
+            return asyncio.create_task(
+                _run_with_restart(
+                    _telemetry_loop,
+                    store,
+                    src,
+                    sampler,
+                    path_recorder,
+                    lifecycle_logger,
+                    recording_auto_controller,
+                    session_auto_controller,
+                    preprocessor,
+                    event_recorder,
+                    phase_recorder,
+                    app_home_store,
+                    name="telemetry",
+                )
             )
+
+        telemetry_controller = TelemetryController(
+            source=source,
+            create_source_fn=_create_telemetry_source_fn,
+            get_backend_fn=get_telemetry_backend,
+            start_task_fn=_start_telemetry_task,
         )
 
-    telemetry_controller = TelemetryController(
-        source=source,
-        create_source_fn=_create_telemetry_source_fn,
-        get_backend_fn=get_telemetry_backend,
-        start_task_fn=_start_telemetry_task,
-    )
-
     async def _reload_telemetry_fn() -> TelemetryReconnectResult:
+        if telemetry_controller is None:
+            return TelemetryReconnectResult(
+                success=False, error="Telemetry not available in rover/bench mode"
+            )
         return await telemetry_controller.reconnect()
 
     app = create_app(
@@ -602,10 +627,23 @@ def main() -> None:
         scheduler_task: asyncio.Task[None] | None = None
         if scheduler is not None:
             scheduler_task = asyncio.create_task(scheduler.run())
-        telemetry_task = telemetry_controller.start()
-        mission_task = asyncio.create_task(
-            _run_with_restart(mission_logic.run, name="mission")
-        )
+        if telemetry_controller is not None:
+            telemetry_task = telemetry_controller.start()
+        else:
+            from airautomatica.vehicle.bridge import run_bridge
+
+            telemetry_task = asyncio.create_task(run_bridge())
+        if mission_logic is not None:
+            mission_task = asyncio.create_task(
+                _run_with_restart(mission_logic.run, name="mission")
+            )
+        else:
+
+            async def _rover_placeholder() -> None:
+                while True:
+                    await asyncio.sleep(3600.0)
+
+            mission_task = asyncio.create_task(_rover_placeholder())
         publisher_task = asyncio.create_task(publisher.run())
         ports_publisher = PortsPublisher(sio, interval_sec=15.0)
         ports_publisher_task = asyncio.create_task(ports_publisher.run())
