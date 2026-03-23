@@ -55,6 +55,7 @@ def session_auto_harness() -> tuple[MagicMock, list[int | None], SessionAutoCont
         connection_store=conn_store,
         get_enabled_fn=lambda: True,
         debounce_sec=2.5,
+        arm_debounce_sec=0.0,
     )
     return persistence, session_ref, ctrl
 
@@ -96,6 +97,46 @@ def test_disarm_debounce_resets_when_telemetry_untrustworthy(
     ctrl.maybe_auto_start_stop(_aircraft_state(connected=True, armed=False))
     assert persistence.end_session.call_count == 1
     persistence.end_session.assert_called_once_with(99)
+
+
+def test_arm_debounce_delays_session_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """armed=True must persist for arm_debounce_sec before start_session."""
+    persistence = MagicMock()
+    persistence.start_session.return_value = 200
+    session_ref: list[int | None] = [None]
+    conn_store = ConnectionStateStore()
+    conn_store.set_connection_state(ConnectionState.CONNECTED_ARDUPILOT)
+    ctrl = SessionAutoController(
+        persistence=persistence,
+        session_ref=session_ref,
+        connection_store=conn_store,
+        get_enabled_fn=lambda: True,
+        debounce_sec=2.5,
+        arm_debounce_sec=2.0,
+    )
+    ctrl._last_armed = False
+
+    times = iter([0.0, 1.0, 2.1])
+
+    def fake_mono() -> float:
+        return next(times)
+
+    monkeypatch.setattr(
+        "airautomatica.services.session_auto_controller.time.monotonic", fake_mono
+    )
+
+    ctrl.maybe_auto_start_stop(_aircraft_state(connected=True, armed=True))
+    assert persistence.start_session.call_count == 0
+    assert session_ref[0] is None
+
+    ctrl.maybe_auto_start_stop(_aircraft_state(connected=True, armed=True))
+    assert persistence.start_session.call_count == 0
+
+    ctrl.maybe_auto_start_stop(_aircraft_state(connected=True, armed=True))
+    assert persistence.start_session.call_count == 1
+    assert session_ref[0] == 200
 
 
 def test_untrustworthy_telemetry_does_not_update_last_armed(

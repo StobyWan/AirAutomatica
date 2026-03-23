@@ -491,3 +491,17 @@ def get_session_auto_stop_disarm_debounce_sec() -> float:
         )
     except ValueError:
         return 2.5
+
+
+def get_session_auto_start_arm_debounce_sec() -> float:
+    """Seconds armed=True must persist before auto-start session. Default: 3.0.
+    Prevents a new session immediately after a false auto-stop when MAVLink armed
+    jitters. Should be >= disarm debounce for best damping. Env:
+    SESSION_AUTO_START_ARM_DEBOUNCE_SEC."""
+    try:
+        return max(
+            0.0,
+            float(os.environ.get("SESSION_AUTO_START_ARM_DEBOUNCE_SEC", "3.0")),
+        )
+    except ValueError:
+        return 3.0

@@ -2,6 +2,7 @@
 
 import glob
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -139,7 +140,37 @@ def list_ports_with_status() -> list[PortInfo]:
     for pattern in DEFAULT_PORTS:
         ports.extend(glob.glob(pattern))
     ports = sorted(set(ports))
+
+    # Do not open the port used by the live MAVLink reader — periodic UI scans
+    # (e.g. PortsPublisher every ~15s) would steal /dev/ttyUSB0 and corrupt telemetry.
+    skip_probe_realpath: str | None = None
+    try:
+        from airautomatica.config import get_serial_port, get_telemetry_backend
+
+        if get_telemetry_backend() == "serial":
+            cfg = (get_serial_port() or "").strip()
+            if cfg:
+                skip_probe_realpath = os.path.realpath(cfg)
+    except Exception:
+        skip_probe_realpath = None
+
     for port in ports:
+        if skip_probe_realpath is not None:
+            try:
+                if os.path.realpath(port) == skip_probe_realpath:
+                    result.append(
+                        PortInfo(
+                            path=port,
+                            mavlink_active=True,
+                            autopilot=None,
+                            baud=PORTS_LIST_BAUD,
+                            status="telemetry",
+                        )
+                    )
+                    continue
+            except OSError:
+                pass
+
         found, autopilot = _probe_port_quick(
             port, PORTS_LIST_BAUD, PORTS_LIST_PROBE_TIMEOUT
         )
