@@ -1,12 +1,13 @@
 """Connection routes: state, detect, mode, disconnect."""
 
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, Body
 
-from airautomatica.config import get_serial_baud, get_serial_port
+from airautomatica.config import get_serial_baud, get_serial_port, get_telemetry_backend
 from airautomatica.models.connection_state import (
     ConnectionMode,
     ConnectionState,
@@ -23,6 +24,18 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+def _serial_settings_already_match(port: str, baud: int) -> bool:
+    """True if env-backed telemetry is already serial on this port and baud."""
+    if get_telemetry_backend() != "serial":
+        return False
+    try:
+        if os.path.realpath(str(port)) != os.path.realpath(get_serial_port()):
+            return False
+    except OSError:
+        return False
+    return int(baud) == int(get_serial_baud())
 
 
 def create_connection_router(
@@ -97,7 +110,11 @@ def create_connection_router(
         Optional body: { port?, baud? } to probe a single port only."""
         # Lazy import: telemetry.detector pulls in pymavlink/pyserial, which can cause
         # SIGBUS on some Raspberry Pi setups when loaded at process startup.
-        from airautomatica.telemetry.detector import detect_on_port, scan_and_detect
+        from airautomatica.telemetry.detector import (
+            detect_on_port,
+            detect_on_port_skips_open_if_live_link,
+            scan_and_detect,
+        )
 
         port = body.get("port")
         baud = body.get("baud")
@@ -111,7 +128,21 @@ def create_connection_router(
             connection_store.set_connection_state(ConnectionState.DETECTING)
         try:
             if port and baud is not None:
-                r = detect_on_port(str(port), baud)
+                fa: str | None = None
+                fm: str | None = None
+                if connection_store is not None:
+                    d0 = connection_store.get_detection_result()
+                    if d0 is not None:
+                        fa = d0.autopilot
+                        fm = d0.message
+                r = detect_on_port_skips_open_if_live_link(
+                    str(port),
+                    baud,
+                    fallback_autopilot=fa,
+                    fallback_message=fm,
+                )
+                if r is None:
+                    r = detect_on_port(str(port), baud)
             else:
                 r = scan_and_detect()
             if connection_store is not None:
@@ -136,15 +167,16 @@ def create_connection_router(
                 else:
                     connection_store.set_connection_state(ConnectionState.NOT_DETECTED)
             if r.detected and r.port and r.baud is not None:
-                save_settings(
-                    {
-                        "TELEMETRY_BACKEND": "serial",
-                        "SERIAL_PORT": str(r.port),
-                        "SERIAL_BAUD": str(r.baud),
-                    }
-                )
-                if reload_telemetry_fn is not None:
-                    await reload_telemetry_fn()
+                if not _serial_settings_already_match(str(r.port), int(r.baud)):
+                    save_settings(
+                        {
+                            "TELEMETRY_BACKEND": "serial",
+                            "SERIAL_PORT": str(r.port),
+                            "SERIAL_BAUD": str(int(r.baud)),
+                        }
+                    )
+                    if reload_telemetry_fn is not None:
+                        await reload_telemetry_fn()
             mode = r.autopilot if r.autopilot else "inav"
             if r.autopilot == "generic":
                 mode = "inav"

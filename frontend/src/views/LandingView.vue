@@ -145,6 +145,7 @@ onMounted(async () => {
     return
   }
   if (
+    connectionStore.connectionState === 'setup' &&
     !autoConnectAttempted.value &&
     connectionStore.lastConnectedPort &&
     connectionStore.lastConnectedBaud != null

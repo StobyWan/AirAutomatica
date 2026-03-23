@@ -43,13 +43,34 @@ class DetectionResult:
     heartbeat_age_ms: float | None = None
 
 
+def _configured_serial_skip_realpath() -> str | None:
+    """Realpath of SERIAL_PORT to skip probing (live reader or mock+configured cable)."""
+    try:
+        from airautomatica.config import get_serial_port, get_telemetry_backend
+
+        if get_telemetry_backend() not in ("serial", "mock"):
+            return None
+        cfg = (get_serial_port() or "").strip()
+        if not cfg:
+            return None
+        return os.path.realpath(cfg)
+    except Exception:
+        return None
+
+
 def scan_and_detect() -> DetectionResult:
     """Scan ports, read messages in loop until HEARTBEAT or timeout."""
     ports = []
     for pattern in DEFAULT_PORTS:
         ports.extend(glob.glob(pattern))
     ports = sorted(set(ports))
+    skip_live = _configured_serial_skip_realpath()
     for port in ports:
+        try:
+            if skip_live is not None and os.path.realpath(port) == skip_live:
+                continue
+        except OSError:
+            pass
         for baud in DEFAULT_BAUDS:
             try:
                 t = SerialTransport(port, baud)
@@ -80,6 +101,50 @@ def scan_and_detect() -> DetectionResult:
         baud=None,
         autopilot=None,
         message="No MAVLink HEARTBEAT found on scanned ports",
+    )
+
+
+def detect_on_port_skips_open_if_live_link(
+    port: str,
+    baud: int,
+    *,
+    fallback_autopilot: str | None = None,
+    fallback_message: str | None = None,
+) -> DetectionResult | None:
+    """If serial backend already uses this port/baud, return a result without opening.
+
+    Caller supplies autopilot/message from connection_store when known; otherwise
+    defaults are conservative for the API response shape.
+    """
+    try:
+        from airautomatica.config import (
+            get_serial_baud,
+            get_serial_port,
+            get_telemetry_backend,
+        )
+
+        if get_telemetry_backend() != "serial":
+            return None
+        if int(baud) != int(get_serial_baud()):
+            return None
+        try:
+            if os.path.realpath(port) != os.path.realpath(get_serial_port()):
+                return None
+        except OSError:
+            return None
+    except Exception:
+        return None
+    ap = (fallback_autopilot or "ardupilot").lower()
+    if ap not in ("ardupilot", "inav", "generic"):
+        ap = "ardupilot"
+    msg = fallback_message or f"Live telemetry on {port} @ {baud} (probe skipped)"
+    return DetectionResult(
+        detected=True,
+        port=port,
+        baud=baud,
+        autopilot=ap,
+        message=msg,
+        heartbeat_age_ms=None,
     )
 
 
@@ -141,18 +206,9 @@ def list_ports_with_status() -> list[PortInfo]:
         ports.extend(glob.glob(pattern))
     ports = sorted(set(ports))
 
-    # Do not open the port used by the live MAVLink reader — periodic UI scans
-    # (e.g. PortsPublisher every ~15s) would steal /dev/ttyUSB0 and corrupt telemetry.
-    skip_probe_realpath: str | None = None
-    try:
-        from airautomatica.config import get_serial_port, get_telemetry_backend
-
-        if get_telemetry_backend() == "serial":
-            cfg = (get_serial_port() or "").strip()
-            if cfg:
-                skip_probe_realpath = os.path.realpath(cfg)
-    except Exception:
-        skip_probe_realpath = None
+    # Do not open the configured UART for probes while mock or serial uses it as the
+    # designated FC link — periodic UI scans would steal the port and log noise.
+    skip_probe_realpath = _configured_serial_skip_realpath()
 
     for port in ports:
         if skip_probe_realpath is not None:
