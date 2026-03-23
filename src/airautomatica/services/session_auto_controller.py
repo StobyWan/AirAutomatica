@@ -7,15 +7,13 @@ from typing import TYPE_CHECKING, Optional
 
 from airautomatica.config import get_session_auto_stop_disarm_debounce_sec
 from airautomatica.models.connection_state import ConnectionState, SessionState
+from airautomatica.services.persistence import build_session_start_params
 
 if TYPE_CHECKING:
     from airautomatica.models.state import AircraftState
     from airautomatica.services.app_home_store import AppHomeStore
     from airautomatica.services.connection_state_store import ConnectionStateStore
-    from airautomatica.services.persistence import (
-        PersistenceService,
-        build_session_start_params,
-    )
+    from airautomatica.services.persistence import PersistenceService
 
 logger = logging.getLogger(__name__)
 
