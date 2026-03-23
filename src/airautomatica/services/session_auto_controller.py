@@ -5,7 +5,10 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Optional
 
-from airautomatica.config import get_session_auto_stop_disarm_debounce_sec
+from airautomatica.config import (
+    get_session_auto_start_arm_debounce_sec,
+    get_session_auto_stop_disarm_debounce_sec,
+)
 from airautomatica.models.connection_state import ConnectionState, SessionState
 from airautomatica.services.persistence import build_session_start_params
 
@@ -30,12 +33,16 @@ _AUTO_ALLOWED: frozenset[ConnectionState] = frozenset(
 class SessionAutoController:
     """Edge-triggered auto session start/stop based on armed state.
 
-    When enabled: start session on arm, stop on disarm (with debounce).
-    Only runs when connection_state is mock_idle or connected_*.
+    When enabled: start session on arm (after arm debounce), stop on disarm
+    (after disarm debounce). Only runs when connection_state is mock_idle or
+    connected_*.
 
     Disarm debounce uses monotonic time; it is cleared whenever telemetry is not
     fully live (disconnected/stale/connecting). Otherwise a brief serial glitch
     could leave an old _disarm_since so reconnect immediately "confirms" disarm.
+
+    Arm debounce avoids starting a session on the first armed=True tick after a
+    spurious disarm (e.g. competing serial readers on the same port).
     """
 
     def __init__(
@@ -45,6 +52,7 @@ class SessionAutoController:
         connection_store: "ConnectionStateStore",
         get_enabled_fn: Callable[[], bool],
         debounce_sec: Optional[float] = None,
+        arm_debounce_sec: Optional[float] = None,
         app_home_store: Optional["AppHomeStore"] = None,
     ) -> None:
         self._persistence = persistence
@@ -57,8 +65,14 @@ class SessionAutoController:
             if debounce_sec is not None
             else get_session_auto_stop_disarm_debounce_sec()
         )
+        self._arm_debounce_sec = (
+            arm_debounce_sec
+            if arm_debounce_sec is not None
+            else get_session_auto_start_arm_debounce_sec()
+        )
         self._last_armed: Optional[bool] = None
         self._disarm_since: Optional[float] = None
+        self._arm_since: Optional[float] = None
 
     @staticmethod
     def _telemetry_trustworthy(state: "AircraftState") -> bool:
@@ -77,21 +91,32 @@ class SessionAutoController:
             # Do not carry disarm debounce across link loss (monotonic time keeps
             # advancing); do not update _last_armed from stale/disconnect samples.
             self._disarm_since = None
+            self._arm_since = None
             return
 
         armed = state.armed
         sid = self._session_ref[0]
+        now = time.monotonic()
+
+        if not armed:
+            self._arm_since = None
 
         if armed:
             self._disarm_since = None
             if (self._last_armed is None or not self._last_armed) and sid is None:
-                sid_new = self._do_start_session()
-                if sid_new is not None:
-                    self._session_ref[0] = sid_new
-                    self._connection_store.set_session_state(SessionState.ACTIVE)
-                    logger.info("Auto session started on arm: #%s", sid_new)
+                if self._arm_since is None:
+                    self._arm_since = now
+                arm_ready = self._arm_debounce_sec <= 0 or (
+                    (now - self._arm_since) >= self._arm_debounce_sec
+                )
+                if arm_ready:
+                    self._arm_since = None
+                    sid_new = self._do_start_session()
+                    if sid_new is not None:
+                        self._session_ref[0] = sid_new
+                        self._connection_store.set_session_state(SessionState.ACTIVE)
+                        logger.info("Auto session started on arm: #%s", sid_new)
         elif not armed and sid is not None:
-            now = time.monotonic()
             if self._disarm_since is None:
                 self._disarm_since = now
             if (
@@ -114,7 +139,18 @@ class SessionAutoController:
         else:
             self._disarm_since = None
 
-        self._last_armed = armed
+        # While arm debounce is counting, keep _last_armed False so we keep evaluating
+        # the start branch; otherwise one armed=True tick sets _last_armed True and we
+        # never accumulate the full arm_debounce_sec window.
+        sid_now = self._session_ref[0]
+        awaiting_arm_confirm = (
+            armed
+            and sid_now is None
+            and self._arm_since is not None
+            and self._arm_debounce_sec > 0
+            and (now - self._arm_since) < self._arm_debounce_sec
+        )
+        self._last_armed = False if awaiting_arm_confirm else armed
 
     def _do_start_session(self) -> Optional[int]:
         """Start session using connection_store metadata. Returns session_id or None."""
