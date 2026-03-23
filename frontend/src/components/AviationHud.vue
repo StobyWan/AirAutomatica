@@ -34,29 +34,57 @@
       <div class="mt-1 text-center text-[10px] text-slate-500 font-mono w-full truncate">{{ attitudeText }}</div>
     </div>
 
-    <!-- HOME – bottom right, narrower to avoid overlapping map labels, same right margin as ATTITUDE -->
-    <div
-      class="absolute bottom-3 right-4 w-[80px] min-w-[80px] max-w-[80px] rounded-lg border border-slate-600/80 bg-slate-900/85 backdrop-blur-sm p-1.5 shadow-lg flex flex-col items-center"
-    >
-      <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 w-full text-center">Home</div>
-      <div v-if="!hasHome" class="w-14 h-14 shrink-0 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center text-slate-500 text-[9px]">
-        —
-      </div>
-      <div v-else class="flex flex-col items-center gap-0.5">
-        <div class="relative w-14 h-14 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center">
-          <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[8px] font-semibold text-slate-500">N</span>
-          <div
-            class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150"
-            :style="{ transform: `rotate(${homeBearing}deg)` }"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24">
-              <polygon points="12,4 20,20 4,20" fill="#22c55e" stroke="#166534" stroke-width="1" />
-            </svg>
-          </div>
+    <!-- HEADING above HOME – bottom right stack, same width as Attitude right margin -->
+    <div class="absolute bottom-3 right-4 flex flex-col items-center gap-2">
+      <div
+        class="w-[80px] min-w-[80px] max-w-[80px] rounded-lg border border-slate-600/80 bg-slate-900/85 backdrop-blur-sm p-1.5 shadow-lg flex flex-col items-center"
+      >
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 w-full text-center">Heading</div>
+        <div
+          v-if="!hasHeading"
+          class="w-14 h-14 shrink-0 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center text-slate-500 text-[9px]"
+        >
+          —
         </div>
-        <div class="text-center w-full min-w-0">
-          <div class="font-mono text-[9px] text-slate-300 truncate">{{ formatDistance(homeDistanceM) }}</div>
-          <div class="text-[8px] text-slate-500">{{ homeBearing != null ? homeBearing.toFixed(0) + '°' : '—' }}</div>
+        <div v-else class="flex flex-col items-center gap-0.5 w-full">
+          <div class="relative w-14 h-14 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center shadow-inner">
+            <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[8px] font-semibold text-slate-500">N</span>
+            <div
+              class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150"
+              :style="{ transform: `rotate(${headingDeg}deg)` }"
+            >
+              <svg class="w-7 h-7 text-cyan-400 drop-shadow-sm" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L4 22h4l4-8 4 8h4L12 2z" />
+              </svg>
+            </div>
+          </div>
+          <div class="text-center font-mono text-[9px] text-slate-300 tabular-nums">{{ headingText }}</div>
+        </div>
+      </div>
+
+      <div
+        class="w-[80px] min-w-[80px] max-w-[80px] rounded-lg border border-slate-600/80 bg-slate-900/85 backdrop-blur-sm p-1.5 shadow-lg flex flex-col items-center"
+      >
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 w-full text-center">Home</div>
+        <div v-if="!hasHome" class="w-14 h-14 shrink-0 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center text-slate-500 text-[9px]">
+          —
+        </div>
+        <div v-else class="flex flex-col items-center gap-0.5">
+          <div class="relative w-14 h-14 rounded-full border border-slate-600 bg-slate-900/80 flex items-center justify-center">
+            <span class="absolute -top-0.5 left-1/2 -translate-x-1/2 text-[8px] font-semibold text-slate-500">N</span>
+            <div
+              class="absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-150"
+              :style="{ transform: `rotate(${homeBearing}deg)` }"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24">
+                <polygon points="12,4 20,20 4,20" fill="#22c55e" stroke="#166534" stroke-width="1" />
+              </svg>
+            </div>
+          </div>
+          <div class="text-center w-full min-w-0">
+            <div class="font-mono text-[9px] text-slate-300 truncate">{{ formatDistance(homeDistanceM) }}</div>
+            <div class="text-[8px] text-slate-500">{{ homeBearing != null ? homeBearing.toFixed(0) + '°' : '—' }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -98,6 +126,29 @@ import { formatDistance, formatMetersOrKm } from '@/utils/formatters'
 const stateStore = useStateStore()
 const pathStore = useTelemetryPathStore()
 
+/** Path store updates are throttled; state_update has lat/lon every tick. */
+const navCurrentLatLon = computed((): { lat: number; lon: number } | null => {
+  const c = pathStore.currentPosition
+  if (
+    c?.lat != null &&
+    c?.lon != null &&
+    Number.isFinite(c.lat) &&
+    Number.isFinite(c.lon)
+  ) {
+    return { lat: c.lat, lon: c.lon }
+  }
+  const s = stateStore.lastState
+  if (
+    s?.lat != null &&
+    s?.lon != null &&
+    Number.isFinite(s.lat) &&
+    Number.isFinite(s.lon)
+  ) {
+    return { lat: s.lat, lon: s.lon }
+  }
+  return null
+})
+
 const rollRad = computed(() => stateStore.lastState?.roll_rad ?? null)
 const pitchRad = computed(() => stateStore.lastState?.pitch_rad ?? null)
 const relAlt = computed(() => stateStore.lastState?.rel_alt_m ?? null)
@@ -107,6 +158,23 @@ const current = computed(() => stateStore.lastState?.current_a ?? null)
 
 const hasAttitude = computed(() => rollRad.value != null || pitchRad.value != null)
 const hasHome = computed(() => homeDistanceM.value != null)
+
+const headingDeg = computed(() => {
+  const h = stateStore.lastState?.heading_deg
+  if (h == null || !Number.isFinite(h)) return 0
+  return h
+})
+
+const hasHeading = computed(() => {
+  const h = stateStore.lastState?.heading_deg
+  return h != null && Number.isFinite(h)
+})
+
+const headingText = computed(() => {
+  const h = stateStore.lastState?.heading_deg
+  if (h == null || !Number.isFinite(h)) return '—'
+  return `${Math.round(h)}°`
+})
 
 const rollDeg = computed(() => (rollRad.value != null ? (rollRad.value * 180) / Math.PI : 0))
 const pitchDeg = computed(() => (pitchRad.value != null ? (pitchRad.value * 180) / Math.PI : 0))
@@ -140,9 +208,18 @@ const homePosition = computed(() => {
 })
 
 const homeDistanceM = computed(() => {
-  const cur = pathStore.currentPosition
+  const cur = navCurrentLatLon.value
   const home = homePosition.value
-  if (!cur?.lat || !cur?.lon || !home?.lat || !home?.lon) return null
+  if (
+    !cur ||
+    !home ||
+    home.lat == null ||
+    home.lon == null ||
+    !Number.isFinite(home.lat) ||
+    !Number.isFinite(home.lon)
+  ) {
+    return null
+  }
   const R = 6371000
   const dLat = ((home.lat - cur.lat) * Math.PI) / 180
   const dLon = ((home.lon - cur.lon) * Math.PI) / 180
@@ -157,9 +234,18 @@ const homeDistanceM = computed(() => {
 })
 
 const homeBearing = computed(() => {
-  const cur = pathStore.currentPosition
+  const cur = navCurrentLatLon.value
   const home = homePosition.value
-  if (!cur?.lat || !cur?.lon || !home?.lat || !home?.lon) return null
+  if (
+    !cur ||
+    !home ||
+    home.lat == null ||
+    home.lon == null ||
+    !Number.isFinite(home.lat) ||
+    !Number.isFinite(home.lon)
+  ) {
+    return null
+  }
   const dLon = ((home.lon - cur.lon) * Math.PI) / 180
   const y = Math.sin(dLon) * Math.cos((home.lat * Math.PI) / 180)
   const x =

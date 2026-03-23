@@ -109,6 +109,29 @@ import { formatDistance, formatMetersOrKm } from '@/utils/formatters'
 const stateStore = useStateStore()
 const pathStore = useTelemetryPathStore()
 
+/** Path store updates are throttled; state_update has lat/lon every tick. */
+const navCurrentLatLon = computed((): { lat: number; lon: number } | null => {
+  const c = pathStore.currentPosition
+  if (
+    c?.lat != null &&
+    c?.lon != null &&
+    Number.isFinite(c.lat) &&
+    Number.isFinite(c.lon)
+  ) {
+    return { lat: c.lat, lon: c.lon }
+  }
+  const s = stateStore.lastState
+  if (
+    s?.lat != null &&
+    s?.lon != null &&
+    Number.isFinite(s.lat) &&
+    Number.isFinite(s.lon)
+  ) {
+    return { lat: s.lat, lon: s.lon }
+  }
+  return null
+})
+
 const rollRad = computed(() => stateStore.lastState?.roll_rad ?? null)
 const pitchRad = computed(() => stateStore.lastState?.pitch_rad ?? null)
 const relAlt = computed(() => stateStore.lastState?.rel_alt_m ?? null)
@@ -161,9 +184,18 @@ const homePosition = computed(() => {
 })
 
 const homeDistanceM = computed(() => {
-  const current = pathStore.currentPosition
+  const current = navCurrentLatLon.value
   const home = homePosition.value
-  if (!current?.lat || !current?.lon || !home?.lat || !home?.lon) return null
+  if (
+    !current ||
+    !home ||
+    home.lat == null ||
+    home.lon == null ||
+    !Number.isFinite(home.lat) ||
+    !Number.isFinite(home.lon)
+  ) {
+    return null
+  }
   const R = 6371000
   const dLat = ((home.lat - current.lat) * Math.PI) / 180
   const dLon = ((home.lon - current.lon) * Math.PI) / 180
@@ -178,9 +210,18 @@ const homeDistanceM = computed(() => {
 })
 
 const homeBearing = computed(() => {
-  const current = pathStore.currentPosition
+  const current = navCurrentLatLon.value
   const home = homePosition.value
-  if (!current?.lat || !current?.lon || !home?.lat || !home?.lon) return 0
+  if (
+    !current ||
+    !home ||
+    home.lat == null ||
+    home.lon == null ||
+    !Number.isFinite(home.lat) ||
+    !Number.isFinite(home.lon)
+  ) {
+    return 0
+  }
   const dLon = ((home.lon - current.lon) * Math.PI) / 180
   const y = Math.sin(dLon) * Math.cos((home.lat * Math.PI) / 180)
   const x =
