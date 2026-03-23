@@ -32,6 +32,10 @@ class SessionAutoController:
 
     When enabled: start session on arm, stop on disarm (with debounce).
     Only runs when connection_state is mock_idle or connected_*.
+
+    Disarm debounce uses monotonic time; it is cleared whenever telemetry is not
+    fully live (disconnected/stale/connecting). Otherwise a brief serial glitch
+    could leave an old _disarm_since so reconnect immediately "confirms" disarm.
     """
 
     def __init__(
@@ -56,6 +60,11 @@ class SessionAutoController:
         self._last_armed: Optional[bool] = None
         self._disarm_since: Optional[float] = None
 
+    @staticmethod
+    def _telemetry_trustworthy(state: "AircraftState") -> bool:
+        """True when armed/disarm signals should drive session auto (live link)."""
+        return state.connected and state.telemetry_status == "connected"
+
     def maybe_auto_start_stop(self, state: "AircraftState") -> None:
         """Call from telemetry loop. Start/stop session based on armed transitions."""
         if not self._get_enabled():
@@ -63,6 +72,13 @@ class SessionAutoController:
         conn = self._connection_store.get_connection_state()
         if conn not in _AUTO_ALLOWED:
             return
+
+        if not self._telemetry_trustworthy(state):
+            # Do not carry disarm debounce across link loss (monotonic time keeps
+            # advancing); do not update _last_armed from stale/disconnect samples.
+            self._disarm_since = None
+            return
+
         armed = state.armed
         sid = self._session_ref[0]
 
@@ -75,8 +91,6 @@ class SessionAutoController:
                     self._connection_store.set_session_state(SessionState.ACTIVE)
                     logger.info("Auto session started on arm: #%s", sid_new)
         elif not armed and sid is not None:
-            if not state.connected:
-                return
             now = time.monotonic()
             if self._disarm_since is None:
                 self._disarm_since = now
