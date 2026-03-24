@@ -1788,14 +1788,58 @@ async def test_post_settings_telemetry_reconnect_success(
         )
         r = client.post(
             "/settings",
-            json={"TELEMETRY_BACKEND": "mock", "SERIAL_PORT": "/dev/ttyUSB0"},
+            json={
+                "TELEMETRY_BACKEND": "mock",
+                "SERIAL_PORT": "/dev/ttyUSB0",
+                "SERIAL_BAUD": "57600",
+            },
         )
         assert r.status_code == 200
         data = r.json()
         assert data["ok"] is True
         assert "TELEMETRY_BACKEND" in data["live"]
-        assert "SERIAL_PORT" in data["live"]
+        assert "SERIAL_BAUD" in data["live"]
         assert "apply immediately" in data["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_post_settings_telemetry_noop_skips_reconnect(
+    monkeypatch: pytest.MonkeyPatch,
+    store: StateStore,
+) -> None:
+    """POST /settings with telemetry keys that do not change effective config skips reload."""
+    from airautomatica.runtime.telemetry_subsystem import TelemetryReconnectResult
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_dir = Path(tmp) / ".airautomatica"
+        settings_dir.mkdir()
+        monkeypatch.setattr("airautomatica.settings._SETTINGS_DIR", settings_dir)
+        monkeypatch.setattr(
+            "airautomatica.settings._SETTINGS_FILE", settings_dir / "settings.json"
+        )
+        monkeypatch.setenv("TELEMETRY_BACKEND", "mock")
+        monkeypatch.setenv("SERIAL_PORT", "/dev/ttyUSB0")
+        monkeypatch.setenv("SERIAL_BAUD", "921600")
+        monkeypatch.setenv("MOCK_TELEMETRY_TYPE", "ardupilot")
+
+        reload_called: list[bool] = []
+
+        async def track_reload() -> TelemetryReconnectResult:
+            reload_called.append(True)
+            return TelemetryReconnectResult(success=True)
+
+        client = TestClient(
+            create_app(store, reload_telemetry_fn=track_reload),
+        )
+        r = client.post(
+            "/settings",
+            json={"TELEMETRY_BACKEND": "mock", "SERIAL_PORT": "/dev/ttyUSB0"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert len(reload_called) == 0
+        assert "TELEMETRY_BACKEND" not in data["live"]
 
 
 @pytest.mark.asyncio

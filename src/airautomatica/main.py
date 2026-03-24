@@ -1,8 +1,12 @@
 """Entry point: select telemetry and AI backends, run API and loops."""
 
-from airautomatica.settings import load_settings
+from airautomatica.settings import (
+    load_settings,
+    reconcile_telemetry_env_from_settings_file,
+)
 
 load_settings()
+reconcile_telemetry_env_from_settings_file()
 
 import argparse
 import asyncio

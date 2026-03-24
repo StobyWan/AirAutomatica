@@ -16,6 +16,7 @@ from airautomatica.config import (
     get_recording_ai_overlay_enabled,
     get_recording_ai_persist_enabled,
     get_session_auto_start_on_arm,
+    validate_serial_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -203,6 +204,65 @@ def load_settings() -> None:
         )
     else:
         _provider_explicit = True
+
+
+def reconcile_telemetry_env_from_settings_file() -> None:
+    """Apply saved serial telemetry to os.environ when the process was started with
+    TELEMETRY_BACKEND=mock (e.g. systemd default) but settings.json already contains
+    a validated serial configuration.
+
+    load_settings() does not override existing env keys, so mock in the environment
+    would otherwise win until POST /connection/detect (e.g. connect-to-last-port)
+    re-saves and reconnects — producing a confusing mock→real transition seconds after
+    the dashboard opens.
+    """
+    if os.environ.get("AIRAUTOMATICA_SKIP_FILE_TELEMETRY_RECONCILE", "").strip() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return
+    if not _SETTINGS_FILE.exists():
+        return
+    try:
+        with open(_SETTINGS_FILE) as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.debug("Telemetry reconcile: could not read settings file: %s", e)
+        return
+
+    file_backend = (data.get("TELEMETRY_BACKEND") or "").strip().lower()
+    if file_backend != "serial":
+        return
+
+    env_backend = (os.environ.get("TELEMETRY_BACKEND") or "mock").strip().lower()
+    if env_backend == "serial":
+        return
+
+    port = str(data.get("SERIAL_PORT") or "").strip()
+    if not port:
+        port = "/dev/ttyUSB0"
+    baud = str(data.get("SERIAL_BAUD") or "").strip()
+    if not baud:
+        baud = "921600"
+
+    valid, err = validate_serial_config("serial", port)
+    if not valid:
+        logger.info(
+            "Telemetry reconcile skipped: settings file requests serial on %s (%s)",
+            port,
+            err or "validation failed",
+        )
+        return
+
+    logger.info(
+        "Telemetry: applying serial from %s (TELEMETRY_BACKEND was %r in environment)",
+        _SETTINGS_FILE,
+        os.environ.get("TELEMETRY_BACKEND", ""),
+    )
+    os.environ["TELEMETRY_BACKEND"] = "serial"
+    os.environ["SERIAL_PORT"] = port
+    os.environ["SERIAL_BAUD"] = baud
 
 
 def get_raw_settings() -> dict:
