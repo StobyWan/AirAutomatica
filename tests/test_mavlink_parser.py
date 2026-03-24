@@ -22,6 +22,22 @@ def make_msg(msg_type: str, **kwargs: object) -> SimpleNamespace:
     return m
 
 
+def test_heartbeat_filter_ignores_foreign_system_armed() -> None:
+    """HEARTBEAT from non-vehicle sysid must not set armed (session auto false positives)."""
+    n = MavlinkNormalizer(heartbeat_timeout_sec=10.0)
+    n.set_target_system(1)
+    n.apply(make_msg("HEARTBEAT", custom_mode=0, base_mode=0, get_srcSystem=lambda: 1))
+    assert n.build_state().armed is False
+    n.apply(
+        make_msg("HEARTBEAT", custom_mode=0, base_mode=128, get_srcSystem=lambda: 255)
+    )
+    assert n.build_state().armed is False
+    n.apply(
+        make_msg("HEARTBEAT", custom_mode=0, base_mode=128, get_srcSystem=lambda: 1)
+    )
+    assert n.build_state().armed is True
+
+
 def test_heartbeat_mode_auto() -> None:
     """HEARTBEAT custom_mode=10 -> mode=AUTO."""
     n = MavlinkNormalizer(heartbeat_timeout_sec=10.0)

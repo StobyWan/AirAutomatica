@@ -64,7 +64,6 @@ class VehicleConnectionManager:
         last_disconnect_reason: str | None = None,
     ) -> AsyncIterator[tuple[AircraftState, CapabilityInfo | None]]:
         """Connect, wait heartbeat, select adapter, run reader loop. Yields (state, info)."""
-        normalizer = MavlinkNormalizer(heartbeat_timeout_sec=self._heartbeat_timeout)
         loop = asyncio.get_running_loop()
 
         self._transport.connect()
@@ -92,6 +91,18 @@ class VehicleConnectionManager:
                 conn.target_component,
             )
 
+        normalizer = MavlinkNormalizer(heartbeat_timeout_sec=self._heartbeat_timeout)
+        ts = int(getattr(conn, "target_system", 0) or 0) if conn is not None else 0
+        if ts > 0:
+            normalizer.set_target_system(ts)
+        else:
+            try:
+                sy = heartbeat_msg.get_srcSystem()
+                if int(sy) > 0:
+                    normalizer.set_target_system(int(sy))
+            except (TypeError, ValueError, AttributeError):
+                pass
+
         # Select adapter (first match; generic is fallback)
         autopilot_type = detect_autopilot_from_heartbeat(heartbeat_msg)
         adapter = None
@@ -109,7 +120,7 @@ class VehicleConnectionManager:
         profile = adapter.get_capabilities()
         logger.info("Selected adapter: %s", self._selected_adapter)
 
-        # Apply first heartbeat to normalizer so mode is set
+        # Apply first heartbeat to normalizer so mode/armed reflect the vehicle only
         adapter.handle_message(heartbeat_msg, normalizer)
 
         # Request initial state (e.g. message rates) only if capability allows
