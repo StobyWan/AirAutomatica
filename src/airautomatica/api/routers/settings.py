@@ -12,6 +12,8 @@ from airautomatica.config import (
     get_local_llm_base_url,
     get_local_llm_model,
     get_local_llm_provider,
+    get_mock_telemetry_type,
+    get_serial_baud,
     get_serial_port,
     get_telemetry_backend,
     validate_serial_config,
@@ -87,6 +89,15 @@ def create_settings_router(
 
         changed_keys = [k for k in updates if k in CANONICAL_SETTINGS_KEYS]
         provider_before = get_local_llm_provider()
+        telemetry_subsystem_changed = TELEMETRY_SUBSYSTEM_KEYS & set(changed_keys)
+        telemetry_before: tuple[str, str, str, str] | None = None
+        if telemetry_subsystem_changed:
+            telemetry_before = (
+                get_telemetry_backend(),
+                get_serial_port(),
+                str(get_serial_baud()),
+                get_mock_telemetry_type(),
+            )
         save_settings(updates)
 
         reconfigured_keys: list[str] = []
@@ -122,7 +133,6 @@ def create_settings_router(
 
         telemetry_reloaded_keys: list[str] = []
         telemetry_reload_error: Optional[str] = None
-        telemetry_subsystem_changed = TELEMETRY_SUBSYSTEM_KEYS & set(changed_keys)
         if reload_telemetry_fn is not None and telemetry_subsystem_changed:
             backend = get_telemetry_backend()
             port = get_serial_port()
@@ -130,14 +140,23 @@ def create_settings_router(
             if not valid:
                 telemetry_reload_error = validation_err
             else:
-                tel_result = await reload_telemetry_fn()
-                if isinstance(tel_result, TelemetryReconnectResult):
-                    if tel_result.success:
-                        telemetry_reloaded_keys = [
-                            k for k in changed_keys if k in TELEMETRY_SUBSYSTEM_KEYS
-                        ]
-                    else:
-                        telemetry_reload_error = tel_result.error
+                telemetry_after = (
+                    get_telemetry_backend(),
+                    get_serial_port(),
+                    str(get_serial_baud()),
+                    get_mock_telemetry_type(),
+                )
+                if telemetry_before is not None and telemetry_before == telemetry_after:
+                    pass
+                else:
+                    tel_result = await reload_telemetry_fn()
+                    if isinstance(tel_result, TelemetryReconnectResult):
+                        if tel_result.success:
+                            telemetry_reloaded_keys = [
+                                k for k in changed_keys if k in TELEMETRY_SUBSYSTEM_KEYS
+                            ]
+                        else:
+                            telemetry_reload_error = tel_result.error
 
         live_keys = [k for k in changed_keys if SETTING_APPLY_MODES.get(k) == "live"]
         live_keys.extend(reconfigured_keys)

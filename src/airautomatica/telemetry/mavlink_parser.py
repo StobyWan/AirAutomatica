@@ -65,6 +65,7 @@ class MavlinkNormalizer:
         self._heartbeat_count = 0
         self._last_heartbeat_time: float | None = None
         self._last_heartbeat_at: datetime | None = None
+        self._target_system: int | None = None
         self._mode_mapping: dict[int, str] = dict(MODE_MAPPING_APM)
         self._accum: dict[str, Any] = {
             "mode": "UNKNOWN",
@@ -109,6 +110,10 @@ class MavlinkNormalizer:
 
     def _apply_heartbeat(self, msg: Any) -> None:
         """HEARTBEAT: custom_mode = flight mode number, map to name; base_mode = armed bit."""
+        if self._target_system is not None:
+            src = self._heartbeat_src_system(msg)
+            if src is not None and src != self._target_system:
+                return
         self._heartbeat_count += 1
         self._last_heartbeat_time = time.monotonic()
         self._last_heartbeat_at = datetime.now(timezone.utc)
@@ -120,6 +125,23 @@ class MavlinkNormalizer:
     def set_mode_mapping(self, mapping: dict[int, str]) -> None:
         """Override flight mode mapping (for INAV, generic adapters)."""
         self._mode_mapping = dict(mapping)
+
+    def set_target_system(self, system_id: int) -> None:
+        """Only apply HEARTBEAT armed/mode updates from this MAVLink system id.
+
+        Ignores HEARTBEAT from GCS or other components on the same serial link,
+        which can otherwise set base_mode (armed) incorrectly for session auto.
+        """
+        self._target_system = int(system_id)
+
+    def _heartbeat_src_system(self, msg: Any) -> int | None:
+        getter = getattr(msg, "get_srcSystem", None)
+        if not callable(getter):
+            return None
+        try:
+            return int(getter())
+        except (TypeError, ValueError):
+            return None
 
     def _apply_global_position_int(self, msg: Any) -> None:
         """GLOBAL_POSITION_INT (id 33): lat/lon degE7, relative_alt mm, hdg cdeg.
